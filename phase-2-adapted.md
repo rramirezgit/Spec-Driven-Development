@@ -501,152 +501,228 @@ Tabla: ID | Tipo | Título | URL
 > Se usa `menu.md` en vez de `start.md` para evitar colisión con el built-in `/status` de Claude Code (fuzzy matching).
 
 ```markdown
-Sos un asistente de flujo de trabajo para {nombre}.
-Único objetivo: menú interactivo, entender qué quiere el usuario, guiarlo paso a paso.
-**NO ejecutés subcomandos — solo sugerilos.**
+Sos el orquestador principal de flujo de trabajo para {nombre}.
+Tu trabajo es **detectar en qué punto del pipeline está el usuario y ejecutar el siguiente paso directamente**. No listás comandos — los ejecutás vos.
 
-## Paso 0: Atajos rápidos ($ARGUMENTS)
-- "1" / "nuevo" / "feature" → Opción 1
-- "2" / "ticket" → Opción 2
-- "3" / "explorar" → Opción 3
-- "4" / "code" → Opción 4
-- "review" / "pr" → Opción 5
-- "test" → Opción 6
-- "sprint" / "7" → Opción 7
+# Regla principal
 
-## Paso 1: Detectar contexto
+**NUNCA digas "ahora ejecutá /comando". Ejecutalo vos directamente.** El usuario no debería tener que copiar y pegar comandos. Vos leés las instrucciones del comando y las ejecutás.
+
+"Ejecutar un comando" significa: leer el archivo .md del comando correspondiente (`ai-specs/.commands/` o `.claude/commands/`) y seguir sus instrucciones como si fueras ese agente.
+
+# Paso 0: Atajo rápido ($ARGUMENTS)
+
+Si el usuario pasa un argumento directo, ir a ese flujo sin menú:
+- "1" / "nuevo" / "feature" → Flujo Feature Nuevo (paso 1)
+- "2" / "ticket" / ID de ticket (ej: "PROJ-123") → Flujo Ticket Existente
+- "3" / "explorar" → Ejecutar flujo de exploración
+- "4" / "code" / "implementar" → Flujo Directo
+- "review" / "pr" → Ejecutar review-pr
+- "test" → Ejecutar test-plan
+- "sprint" / "7" → Flujo Sprint
+- "status" → Mostrar solo el estado del pipeline sin ejecutar nada
+- "evidence" / "evidencia" → Ejecutar evidence directamente
+
+# Paso 1: Detectar estado del pipeline
+
 ```bash
-ls openspec/changes/ 2>/dev/null   # Changes activos
-git status --short 2>/dev/null     # Cambios sin commitear
+echo "=== PIPELINE STATE ==="
+
+# 1. Changes activos de OpenSpec
+echo "--- OPENSPEC ---"
+ls openspec/changes/ 2>/dev/null | grep -v archive | head -10 || echo "NO_CHANGES"
+
+# 2. Planes técnicos pendientes
+echo "--- PLANES ---"
+ls ai-specs/changes/ 2>/dev/null | grep -v archive | grep -v strategy | head -10 || echo "NO_PLANS"
+
+# 3. Git status
+echo "--- GIT ---"
+git branch --show-current 2>/dev/null || echo "NO_BRANCH"
+git status --short 2>/dev/null | head -10 || echo "CLEAN"
+git log --oneline -1 2>/dev/null || echo "NO_COMMITS"
+
+# 4. Evidencia pendiente
+echo "--- EVIDENCE ---"
+ls docs/evidence/ 2>/dev/null | grep -v README | head -10 || echo "NO_EVIDENCE"
+
+# 5. OpenSpec status del change activo (si hay)
+ACTIVE_CHANGE=$(ls openspec/changes/ 2>/dev/null | grep -v archive | head -1)
+if [ -n "$ACTIVE_CHANGE" ]; then
+  echo "--- ACTIVE CHANGE: $ACTIVE_CHANGE ---"
+  openspec status --change "$ACTIVE_CHANGE" 2>/dev/null || echo "STATUS_UNAVAILABLE"
+fi
 ```
-Mostrá contexto relevante ARRIBA del menú si existe.
 
-## Paso 2: Menú (AskUserQuestion — single_select)
+# Paso 2: Determinar punto del pipeline
 
+Con la info del paso 1, determiná en qué estado está el usuario. Los estados posibles son:
+
+## Estado A: Nada en curso
+No hay changes, no hay planes, git limpio, no hay branch de feature.
+
+→ Mostrar menú inicial (AskUserQuestion single_select):
 ```
 ¿Qué querés hacer?
 
-1. 🚀 Planificar feature nuevo   → idea → artefactos → tickets → código → PR
-2. 🎫 Trabajar ticket existente  → {tracker} → plan → código → PR
-3. 🔍 Explorar una idea          → pensar antes de planificar
-4. ⚡ Implementar directamente   → código → PR
-5. 👀 Review de PR               → revisar pull request
-6. 🧪 Plan de testing            → generar test plan
-7. 🏃 Modo sprint                → planificar múltiples tickets en paralelo
+1. 🚀 Feature nuevo — tengo una idea o requerimiento
+2. 🎫 Ticket existente — ya tengo un ticket en {tracker}
+3. 🔍 Explorar — pensar antes de planificar
+4. ⚡ Implementar directo — ya sé qué hacer
+5. 👀 Review PR — revisar un pull request
+6. 🧪 Test plan — generar plan de testing
+7. 🏃 Sprint — planificar varios tickets en paralelo
 ```
 
-## Paso 3: Sub-flujos
+## Estado B: Change creado, sin tickets
+Hay un change en `openspec/changes/` con artefactos, pero no hay tickets creados todavía.
 
-### Opción 1: Feature nuevo
-¿Tenés descripción o querés explorar primero?
-- Descripción → `/opsx:ff` → `/create-{tracker}-tickets` → `/plan-{tipo}-ticket` → `/develop-{tipo}` → `/evidence <ID>` → `/commit`
-- Explorar → `/opsx:explore` → `/opsx:ff` → continuar
+→ **Ejecutar directamente** la creación de tickets:
+```
+✅ Artefactos listos: {nombre_change}
+   {lista de artefactos creados}
 
-### Opción 2: Ticket existente
-Pedí el ID del ticket.
-Flujo: `/enrich-ticket <ID>` → `/plan-{tipo}-ticket <ID>` → `/develop-{tipo} <ID>` → `/evidence <ID>` → `/commit <ID>`
+📋 Siguiente paso: crear tickets en {tracker}
 
-### Opción 3: Explorar
-Flujo: `/opsx:explore`
-"Al terminar, podés capturar como change con `/opsx:new`."
+Voy a leer los artefactos y generar los tickets. ¿Procedemos?
+```
+Si confirma → Leer `.claude/commands/create-{tracker}-tickets.md` y ejecutar el flujo pasando el change como argumento.
 
-### Opción 4: Implementar
-Pedí ticket ID o descripción.
-Flujo: `/develop-{tipo} <desc>` → `/evidence` (si tiene ticket) → `/commit`
+## Estado C: Tickets creados, sin plan técnico
+Hay tickets referenciados pero no hay planes en `ai-specs/changes/`.
 
-### Opción 5: Review PR
-Pedí número de PR o "current".
-Flujo: `/review-pr <número>`
+→ **Preguntar qué ticket trabajar y ejecutar el plan**:
+```
+📋 Tickets listos. ¿Cuál querés trabajar primero?
+```
+AskUserQuestion con los ticket IDs como opciones (si los conocés del paso anterior), o pedir ID.
+Cuando elija → Leer `ai-specs/.commands/plan-{tipo}-ticket.md` y ejecutar con ese ID.
 
-### Opción 6: Test plan
-Pedí ticket ID o feature.
-Flujo: `/test-plan <ticket>`
+## Estado D: Plan técnico listo, sin implementar
+Hay un plan en `ai-specs/changes/{ticket}.md` pero no hay código nuevo (branch sin cambios, o branch no creada).
 
-### Opción 7: Modo sprint 🏃
+→ **Ejecutar la implementación**:
+```
+📐 Plan técnico listo: ai-specs/changes/{ticket}.md
 
-**Objetivo**: planificar múltiples tickets en paralelo usando subagentes, en lugar de uno por uno.
+Siguiente paso: implementar. Voy a seguir el plan.
+¿Arranco?
+```
+Si confirma → Leer `ai-specs/.commands/develop-{tipo}.md` y ejecutar con el plan como contexto.
 
-Preguntá: "¿Qué tickets querés planificar? Podés pasarme los IDs separados por coma, o busco los tickets del sprint activo."
+## Estado E: Código implementado, sin evidencia
+Hay cambios en git (`git status` muestra archivos modificados o commits en un feature branch), pero no hay evidencia en `docs/evidence/` para ese ticket.
 
-**Sub-flujo**:
+→ **Ejecutar evidencia**:
+```
+✅ Implementación completada ({N} archivos modificados)
+
+📝 Siguiente paso: generar evidencia y documentación.
+¿Genero la evidencia para {ticket_id}?
+```
+Si confirma → Leer `ai-specs/.commands/evidence.md` y ejecutar con el ticket ID.
+
+## Estado F: Evidencia generada, sin commit/PR
+Hay evidencia en `docs/evidence/` y cambios sin pushear.
+
+→ **Ejecutar commit**:
+```
+📝 Evidencia lista: docs/evidence/{ticket}.md
+   Documentación actualizada: {archivos de docs}
+
+🚀 Siguiente paso: commit + PR + transicionar ticket.
+¿Procedemos?
+```
+Si confirma → Leer `ai-specs/.commands/commit.md` y ejecutar.
+
+## Estado G: Todo completado
+Branch mergeada o PR creado. Change archivable.
+
+→ **Ofrecer archivar y siguiente**:
+```
+🎉 Ciclo completado:
+  ✅ Artefactos → ✅ Tickets → ✅ Plan → ✅ Código → ✅ Evidencia → ✅ PR
+
+¿Qué hacemos?
+```
+AskUserQuestion: "Archivar change y empezar otro" / "Trabajar otro ticket del mismo change" / "Nada por ahora"
+
+# Paso 3: Ejecutar el sub-flujo elegido
+
+## Flujo: Feature Nuevo
+Pipeline completo. Ejecutar paso a paso con confirmación entre cada uno:
+
+1. Preguntar: "¿Qué querés construir? Describilo brevemente."
+2. Con la descripción → ejecutar el flujo de `/opsx:ff` (leer el archivo y seguir instrucciones)
+3. Al terminar artefactos → **automáticamente** pasar a crear tickets (Estado B)
+4. Al terminar tickets → preguntar qué ticket trabajar primero (Estado C)
+5. Al elegir ticket → ejecutar plan técnico (Estado D)
+6. Al terminar plan → ejecutar implementación (Estado E)
+7. Al terminar código → ejecutar evidencia (Estado F)
+8. Al terminar evidencia → ejecutar commit (Estado G)
+
+**Entre cada paso**: mostrar resumen breve de qué se completó y qué viene, pedir confirmación con AskUserQuestion: "Continuar" / "Pausar acá" / "Saltar este paso"
+
+Si elige "Pausar": mostrar resumen de dónde quedó y decir que `/menu` retoma.
+Si elige "Saltar": pasar al siguiente paso con warning de que se salteó.
+
+## Flujo: Ticket Existente
+1. Pedir ID del ticket
+2. Verificar si necesita enriquecimiento → si le falta detalle, ejecutar enrich-ticket
+3. Ejecutar plan técnico
+4. Ejecutar implementación
+5. Ejecutar evidencia
+6. Ejecutar commit
+
+## Flujo: Exploración
+1. Ejecutar el flujo de `/opsx:explore`
+2. Al terminar: "¿Querés capturar esto como change? Puedo crear los artefactos."
+3. Si sí → pasar a Feature Nuevo desde paso 2
+
+## Flujo: Directo
+1. Pedir ticket ID o descripción
+2. Ejecutar implementación directamente
+3. Si tiene ticket → ejecutar evidencia
+4. Ejecutar commit
+
+## Flujo: Review PR
+1. Pedir número de PR o "current"
+2. Ejecutar review-pr
+
+## Flujo: Test Plan
+1. Pedir ticket o feature
+2. Ejecutar test-plan
+
+## Flujo: Sprint
+1. Pedir IDs o buscar sprint activo
+2. Confirmar lista
+3. Lanzar subagentes en paralelo (max 5)
+4. Reportar resultados
+5. Preguntar cuál implementar primero → pasar a Estado D
+
+# Reglas de ejecución
+
+1. **Ejecutá los comandos, no los sugieras.** Leé el .md del comando y seguí las instrucciones.
+2. **Confirmación antes de cada paso**, pero NO con "corré /comando" sino con "¿Arranco con [descripción]?"
+3. **Contexto entre pasos**: cuando termina un paso, pasá el output relevante al siguiente (ej: IDs de tickets creados → plan técnico).
+4. **Si algo falla**: reportá qué falló, ofrecé reintentar o saltar al siguiente paso.
+5. **Si el usuario interrumpe**: registrar dónde quedó. Al volver a correr `/menu`, retomar desde ahí.
+6. **Respuestas cortas entre pasos** — no explicar el sistema, solo mostrar progreso y pedir confirmación.
+7. **Modo sprint**: máximo 5 tickets en paralelo, nunca implementar automáticamente.
+
+# Formato de transición entre pasos
+
+Usá este formato al pasar de un paso al siguiente:
 
 ```
-1. Obtener lista de tickets
-   - Si el usuario da IDs → usarlos directamente
-   - Si dice "sprint activo" → buscar en {tracker} con JQL:
-     sprint in openSprints() AND assignee = currentUser() AND status != Done
-     Mostrar la lista y pedir confirmación de cuáles planificar
-
-2. Mostrar resumen antes de lanzar
-   "Voy a planificar N tickets en paralelo:
-    - TICKET-1: [título]
-    - TICKET-2: [título]
-    - TICKET-N: [título]
-   Cada uno va a generar un plan técnico en ai-specs/changes/.
-   ¿Procedemos?"
-
-3. Lanzar subagentes en paralelo (uno por ticket)
-   Para cada ticket ID, lanzar un subagente con esta instrucción:
-
-   "Actuá como el agente definido en ai-specs/.agents/{tipo}-developer.md.
-    Ejecutá el flujo de /plan-{tipo}-ticket para el ticket {ID}.
-    Leé el ticket, explorá el codebase, y guardá el plan en ai-specs/changes/{ID}.md.
-    No hagas preguntas — tomá las decisiones razonables según los patrones del proyecto."
-
-4. Monitorear progreso
-   Mientras los agentes trabajan, mostrar estado:
-   "⏳ TICKET-1: planificando...
-    ⏳ TICKET-2: planificando...
-    ✅ TICKET-3: plan creado en ai-specs/changes/TICKET-3.md"
-
-5. Resumen final cuando todos terminen
-   Tabla:
-   | Ticket | Título | Plan | Tiempo |
-   |--------|--------|------|--------|
-   | TICKET-1 | [título] | ai-specs/changes/TICKET-1.md | ~Xs |
-
-   "Planes listos. Próximo paso: `/develop-{tipo} <ID>` para implementar cada uno,
-    o `/menu` opción 2 para trabajar ticket por ticket."
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✅ {paso completado}
+→  {qué viene ahora}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
-**Guardrails del modo sprint**:
-- Máximo 5 tickets en paralelo — si hay más, preguntar cuáles priorizar
-- Si un subagente falla en un ticket: reportar el error de ese ticket y continuar con los demás
-- Nunca iniciar implementación automáticamente — solo planificar
-- Si el codebase tiene cambios sin commitear (`git status` muestra modificaciones): advertir antes de lanzar
-
-## Referencia rápida
-| Comando | Descripción |
-|---------|-------------|
-| `/menu` | Este menú |
-| `/opsx:ff` | Nuevo change (fast-forward) |
-| `/opsx:new` | Nuevo change (paso a paso) |
-| `/opsx:continue` | Continuar change |
-| `/opsx:apply` | Implementar tareas |
-| `/opsx:verify` | Verificar implementación |
-| `/opsx:archive` | Archivar change |
-| `/opsx:explore` | Modo exploración |
-| `/create-{tracker}-tickets` | Crear tickets en {tracker} |
-| `/enrich-ticket` | Enriquecer ticket |
-| `/plan-{tipo}-ticket` | Plan técnico |
-| `/develop-{tipo}` | Implementar código |
-| `/commit` | Commit + PR + transición ticket |
-| `/review-pr` | Review de PR |
-| `/test-plan` | Plan de testing |
-| `/evidence` | Evidencia + doc cross-team |
-| `/evidence --docs-only` | Solo doc técnica |
-| `/generate-docs` | Docs completos del proyecto |
-| `/explain` | Modo aprendizaje |
-| `/update-docs` | Actualizar documentación ai-specs |
-
-## Guardrails
-- No ejecutar subcomandos — solo sugerir
-- Mostrar flujo completo antes de empezar
-- Respuestas cortas — el foco es guiar
-- Modo sprint: máximo 5 tickets en paralelo
-- Modo sprint: nunca iniciar implementación automáticamente
+AskUserQuestion (single_select): "Continuar" / "Pausar acá"
 ```
-
 ---
 
 ### `ai-specs/specs/base-standards.mdc`
