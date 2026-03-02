@@ -2,44 +2,43 @@
 set -e
 
 # =============================================================
-# AI Workflow Bootstrap — Installer
-# Descarga las fases del repo privado y configura el comando
+# Spec-Driven Development — Bootstrap Installer
+# Repo: github.com/rramirezgit/Spec-Driven-Development (privado)
 # =============================================================
 
-# ⚙️ CONFIGURACIÓN — editá estos valores
-REPO="tu-org/ai-bootstrap"          # ← tu repo privado en GitHub
+REPO="rramirezgit/Spec-Driven-Development"
 BRANCH="main"
-# =============================================================
 
+# Formato: "ruta_en_repo|ruta_destino_local"
 FILES=(
-  "phases/phase-0-detect.md"
-  "phases/phase-1-reusables.md"
-  "phases/phase-2-adapted.md"
-  "phases/phase-3-finalize.md"
-  "bootstrap.md"
+  "phase-0-detect.md|.ai-internal/phases/phase-0-detect.md"
+  "phase-1-reusables.md|.ai-internal/phases/phase-1-reusables.md"
+  "phase-2-adapted.md|.ai-internal/phases/phase-2-adapted.md"
+  "phase-3-finalize.md|.ai-internal/phases/phase-3-finalize.md"
+  "bootstrap.md|.claude/commands/bootstrap.md"
 )
 
 echo ""
-echo "🔧 AI Workflow Bootstrap V4.1 — Installer"
-echo "==========================================="
+echo "🔧 Spec-Driven Development — Bootstrap V4.1"
+echo "============================================="
 echo ""
 
-# Verificar prereqs
+# ── Prereqs ──────────────────────────────────────
 ERRORS=0
 
 if ! command -v openspec >/dev/null 2>&1; then
-  echo "❌ openspec-cli no instalado → npm install -g openspec-cli"
+  echo "❌ openspec-cli no instalado"
+  echo "   → npm install -g openspec-cli"
   ERRORS=$((ERRORS + 1))
 else
   echo "✅ openspec $(openspec --version 2>/dev/null)"
 fi
 
-# Verificar que estamos en un proyecto
-if [ ! -f package.json ] && [ ! -f go.mod ] && [ ! -f requirements.txt ] && [ ! -f Cargo.toml ] && [ ! -f pom.xml ]; then
+if [ ! -f package.json ] && [ ! -f go.mod ] && [ ! -f requirements.txt ] && [ ! -f Cargo.toml ] && [ ! -f pom.xml ] && [ ! -f build.gradle ]; then
   echo "❌ No parece un proyecto. Ejecutá desde la raíz."
   ERRORS=$((ERRORS + 1))
 else
-  echo "✅ Proyecto: $(basename $(pwd))"
+  echo "✅ Proyecto: $(basename "$(pwd)")"
 fi
 
 if [ "$ERRORS" -gt 0 ]; then
@@ -48,18 +47,16 @@ if [ "$ERRORS" -gt 0 ]; then
   exit 1
 fi
 
+# ── Auth ─────────────────────────────────────────
 echo ""
-
-# Determinar método de descarga
 DOWNLOAD_METHOD=""
 
 if command -v gh >/dev/null 2>&1; then
-  # Verificar que gh está autenticado
   if gh auth status >/dev/null 2>&1; then
     DOWNLOAD_METHOD="gh"
-    echo "✅ Usando GitHub CLI (autenticado)"
+    echo "✅ GitHub CLI autenticado"
   else
-    echo "⚠️  gh CLI instalado pero no autenticado. Corré: gh auth login"
+    echo "⚠️  gh CLI instalado pero no autenticado"
   fi
 fi
 
@@ -69,64 +66,64 @@ if [ -z "$DOWNLOAD_METHOD" ] && [ -n "$GITHUB_TOKEN" ]; then
 fi
 
 if [ -z "$DOWNLOAD_METHOD" ]; then
-  echo "❌ Necesitás una de estas opciones para descargar:"
+  echo "❌ Necesitás autenticación con GitHub:"
   echo ""
-  echo "   Opción 1 (recomendada): GitHub CLI"
+  echo "   Opción 1 (recomendada):"
   echo "     brew install gh"
   echo "     gh auth login"
   echo ""
-  echo "   Opción 2: Token de GitHub"
+  echo "   Opción 2:"
   echo "     export GITHUB_TOKEN=ghp_xxxxx"
   echo ""
   exit 1
 fi
 
-# Crear directorios
+# ── Crear directorios ────────────────────────────
 mkdir -p .ai-internal/phases
 mkdir -p .claude/commands
 
-# Agregar a .gitignore si no está
+# Agregar .ai-internal/ a .gitignore
 if [ -f .gitignore ]; then
-  grep -q ".ai-internal/" .gitignore || echo ".ai-internal/" >> .gitignore
+  grep -q "^\.ai-internal/" .gitignore 2>/dev/null || echo ".ai-internal/" >> .gitignore
 else
   echo ".ai-internal/" > .gitignore
 fi
 
+# ── Descargar ────────────────────────────────────
 echo ""
 echo "📥 Descargando archivos..."
 echo ""
 
-# Descargar cada archivo
 DOWNLOADED=0
 FAILED=0
 
-for FILE_PATH in "${FILES[@]}"; do
-  FILENAME=$(basename "$FILE_PATH")
+for ENTRY in "${FILES[@]}"; do
+  REPO_PATH="${ENTRY%%|*}"
+  DEST="${ENTRY##*|}"
+  FILENAME=$(basename "$REPO_PATH")
 
-  # Determinar destino
-  if [ "$FILENAME" = "bootstrap.md" ]; then
-    DEST=".claude/commands/bootstrap.md"
-  else
-    DEST=".ai-internal/$FILE_PATH"
-    mkdir -p "$(dirname "$DEST")"
-  fi
+  mkdir -p "$(dirname "$DEST")"
 
-  # Descargar
+  printf "  ⏳ %s..." "$FILENAME"
+
+  CONTENT=""
+
   if [ "$DOWNLOAD_METHOD" = "gh" ]; then
-    CONTENT=$(gh api "repos/${REPO}/contents/${FILE_PATH}?ref=${BRANCH}" \
-      --jq '.content' 2>/dev/null | base64 -d 2>/dev/null)
+    CONTENT=$(gh api "repos/${REPO}/contents/${REPO_PATH}" \
+      -H "Accept: application/vnd.github.raw+json" \
+      --method GET 2>/dev/null) || true
   else
     CONTENT=$(curl -sf -H "Authorization: token $GITHUB_TOKEN" \
-      "https://raw.githubusercontent.com/${REPO}/${BRANCH}/${FILE_PATH}" 2>/dev/null)
+      "https://raw.githubusercontent.com/${REPO}/${BRANCH}/${REPO_PATH}" 2>/dev/null) || true
   fi
 
-  if [ -n "$CONTENT" ] && [ "$(echo "$CONTENT" | wc -l)" -gt 5 ]; then
-    echo "$CONTENT" > "$DEST"
-    LINES=$(echo "$CONTENT" | wc -l | tr -d ' ')
-    echo "  ✅ $FILENAME → $DEST ($LINES líneas)"
+  if [ -n "$CONTENT" ] && [ "$(printf '%s' "$CONTENT" | wc -l)" -gt 3 ]; then
+    printf '%s' "$CONTENT" > "$DEST"
+    LINES=$(wc -l < "$DEST" | tr -d ' ')
+    printf "\r  ✅ %-28s → %s (%s líneas)\n" "$FILENAME" "$DEST" "$LINES"
     DOWNLOADED=$((DOWNLOADED + 1))
   else
-    echo "  ❌ $FILENAME — no se pudo descargar"
+    printf "\r  ❌ %-28s — falló\n" "$FILENAME"
     FAILED=$((FAILED + 1))
   fi
 done
@@ -134,25 +131,27 @@ done
 echo ""
 
 if [ "$FAILED" -gt 0 ]; then
-  echo "⚠️  $FAILED archivos fallaron. Verificá acceso al repo: $REPO"
-  echo "   Podés copiar manualmente los archivos a .ai-internal/phases/"
+  echo "⚠️  $FAILED archivos fallaron."
+  echo ""
+  echo "   Debug: gh api repos/${REPO}/contents --jq '.[].path'"
+  echo ""
   exit 1
 fi
 
-echo "✅ $DOWNLOADED archivos instalados"
+# ── Resultado ────────────────────────────────────
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "  ✅ Instalación completa ($DOWNLOADED archivos)"
 echo ""
-echo "  Instalación completa!"
+echo "  Ahora abrí Claude Code y escribí:"
 echo ""
-echo "  Ahora:"
-echo "    1. Abrí Claude Code en este proyecto"
-echo "    2. Escribí: /bootstrap"
-echo "    3. Seguí las instrucciones (4 fases)"
+echo "    /bootstrap"
 echo ""
-echo "  Estructura creada:"
-echo "    .ai-internal/phases/  ← archivos de fase (gitignored)"
-echo "    .claude/commands/bootstrap.md ← comando /bootstrap"
+echo "  Se ejecutan 4 fases (una por cada /bootstrap):"
+echo "    Fase 0-2 → Detecta el proyecto"
+echo "    Fase 3-4 → Crea comandos reusables"
+echo "    Fase 5   → Crea archivos adaptados"
+echo "    Fase 6-7 → Docs base + verificación"
 echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
