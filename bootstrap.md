@@ -112,6 +112,16 @@ test -f ai-specs/specs/base-standards.mdc && echo "BASE_STANDARDS=EXISTS" || ech
 # Pipeline tracker legacy (pre-MCP: estado en markdown)
 test -f .ai-internal/pipeline-tracker.md && echo "PIPELINE_TRACKER_LEGACY=EXISTS" || echo "PIPELINE_TRACKER_LEGACY=NOT_FOUND"
 test -f .ai-internal/pipeline-state.json && echo "PIPELINE_STATE_JSON=EXISTS" || echo "PIPELINE_STATE_JSON=MISSING"
+
+# Jira identity (V4.3+)
+echo ""
+echo "=== JIRA IDENTITY ==="
+if [ -f .claude/settings.local.json ] && grep -q "mcp.atlassian.com" .claude/settings.local.json 2>/dev/null; then
+  echo "JIRA_IDENTITY=CONFIGURED"
+else
+  echo "JIRA_IDENTITY=NOT_CONFIGURED"
+fi
+grep -i "Jira User Email" .ai-internal/project-profile.md 2>/dev/null | grep -v "^#.*:$" | grep -v ": *$" && echo "JIRA_EMAIL_IN_PROFILE=true" || echo "JIRA_EMAIL_IN_PROFILE=false"
 ```
 
 Construir dos listas:
@@ -130,6 +140,7 @@ Construir dos listas:
 | `DOC_STANDARDS` | `ai-specs/specs/documentation-standards.mdc` no existe | V4.1 |
 | `BASE_STANDARDS` | `ai-specs/specs/base-standards.mdc` no existe | V4 |
 | `PIPELINE_MIGRATE` | `pipeline-tracker.md` existe (legacy) y `pipeline-state.json` no | pre-V4.3 |
+| `JIRA_IDENTITY` | `.claude/settings.local.json` no tiene config Atlassian (identidad Jira local) | V4.3 |
 
 ### 0b.4 — Pedir confirmacion al usuario
 
@@ -163,6 +174,7 @@ Componentes nuevos que se crean (no existían en V{from_version}):
   {si DOC_STANDARDS:} 🆕 ai-specs/specs/documentation-standards.mdc
   {si BASE_STANDARDS:} 🆕 ai-specs/specs/base-standards.mdc
   {si PIPELINE_MIGRATE:} 🔄 pipeline-tracker.md → pipeline-state.json (migración de estado)
+  {si JIRA_IDENTITY:}   🔑 Identidad Jira por proyecto (se preguntará email + API token)
 
 Archivos que NO se tocan:
   🔒 .ai-internal/project-profile.md
@@ -346,6 +358,20 @@ Si no existe `pipeline-tracker.md` ni `pipeline-state.json`: crear estado IDLE:
   "log": []
 }
 ```
+
+##### D.7 — Gap `JIRA_IDENTITY`: Configurar identidad Jira por proyecto
+
+Si `JIRA_IDENTITY=NOT_CONFIGURED`:
+
+Ejecutar las instrucciones del **paso 0.0d** de `.ai-internal/phases/phase-0-detect.md`.
+
+Esto es un paso **interactivo** — pregunta al usuario:
+1. ¿Querés configurar identidad Jira local? (Sí / No)
+2. Si sí: email + API token → valida → crea `.claude/settings.local.json` → gitignore
+
+Si el usuario elige "No": marcar como resuelto y continuar.
+
+> **Nota**: A diferencia de otros gaps que son auto-creados, este requiere input del usuario. Si el usuario cancela, el upgrade continúa normalmente.
 
 #### Paso E: Actualizar metadata
 
