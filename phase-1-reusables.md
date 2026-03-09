@@ -902,7 +902,23 @@ git diff main...HEAD --stat
 
 # Tests relevantes (si existen)
 # Detectar archivos de test que corresponden a los archivos modificados
+
+# GitHub repo URL y branch (para links en evidencia)
+gh repo view --json url -q .url 2>/dev/null || git remote get-url origin 2>/dev/null | sed 's/\.git$//' | sed 's|git@github.com:|https://github.com/|'
+git branch --show-current
+
+# PR del branch actual (si existe)
+gh pr view --json url -q .url 2>/dev/null || echo "NO_PR"
 ```
+
+Construir internamente:
+```
+GH_REPO_URL: https://github.com/{owner}/{repo}
+GH_BRANCH: {branch actual}
+GH_PR_URL: {url del PR o "NO_PR"}
+```
+
+> Si no se puede obtener el repo URL: usar paths relativos como fallback. No bloquear.
 
 Leer cada archivo modificado para entender qué se hizo.
 
@@ -927,6 +943,11 @@ Crear `docs/evidence/{TICKET_ID}.md` usando el **evidence template** de `ai-spec
 
 Contenido:
 - Resumen de qué se hizo y por qué
+- **Links** (sección al inicio, después del resumen):
+  - PR: `[PR #{number}]({GH_PR_URL})` (si existe, si no: "PR pendiente")
+  - Evidencia: `[Evidencia]({GH_REPO_URL}/blob/{GH_BRANCH}/docs/evidence/{TICKET_ID}.md)`
+  - Doc técnica: `[Documentación]({GH_REPO_URL}/blob/{GH_BRANCH}/docs/{api|components}/{modulo}.md)`
+  - Screenshot: `[Screenshot]({GH_REPO_URL}/blob/{GH_BRANCH}/docs/evidence/screenshots/{TICKET_ID}.png)` (si aplica)
 - Tabla de archivos modificados (ruta, tipo de cambio, descripción)
 - Tests: cuáles corren y resultado, o "[Sin tests — verificación manual requerida]"
 - Pasos de verificación manual para QA (prerrequisito, acción, resultado esperado)
@@ -970,10 +991,11 @@ Agregar sección al final de `docs/evidence/{TICKET_ID}.md`:
 ```markdown
 ## Screenshot
 
-![Screenshot {TICKET_ID}](./screenshots/{TICKET_ID}.png)
+![Screenshot {TICKET_ID}]({GH_REPO_URL}/blob/{GH_BRANCH}/docs/evidence/screenshots/{TICKET_ID}.png?raw=true)
 ```
 
-> QA ve el screenshot directamente en GitHub al abrir el archivo de evidencia.
+> Usa la URL absoluta de GitHub con `?raw=true` para que la imagen se renderice tanto en GitHub como en Jira/Confluence cuando se comparte el link.
+> Fallback si no hay GH_REPO_URL: usar path relativo `./screenshots/{TICKET_ID}.png`.
 
 ## 4. Generar/actualizar documentación cross-team (siempre)
 
@@ -1002,15 +1024,22 @@ Agregar entrada en `docs/README.md` sección Changelog si hay archivos nuevos.
 
 ## 6. Comentar en ticket (si MCP disponible, skip si `--docs-only`)
 
-Agregar comentario en el ticket:
+Agregar comentario en el ticket con links a GitHub:
 ```
-✅ Evidencia generada: docs/evidence/{TICKET_ID}.md
+✅ Evidencia generada
+
+📋 [Evidencia QA]({GH_REPO_URL}/blob/{GH_BRANCH}/docs/evidence/{TICKET_ID}.md)
+🔀 [Pull Request #{number}]({GH_PR_URL}) (si existe, si no: "PR pendiente")
+📖 [Doc técnica]({GH_REPO_URL}/blob/{GH_BRANCH}/docs/{api|components}/{modulo}.md)
+📸 [Screenshot]({GH_REPO_URL}/blob/{GH_BRANCH}/docs/evidence/screenshots/{TICKET_ID}.png) (solo si se capturó/proporcionó)
+
 Archivos modificados: {N}
 Tests: {pasaron/no hay}
-Doc técnica: docs/{api|components}/{modulo}.md
-📸 Screenshot incluido en la evidencia (solo si se capturó/proporcionó screenshot)
 Listo para QA.
 ```
+
+> Los links usan la URL completa de GitHub para que QA pueda hacer click directo desde Jira.
+> Si GH_REPO_URL no disponible: usar paths relativos como fallback.
 
 Si MCP no disponible: mostrar el comentario para copiar manualmente.
 
