@@ -1,5 +1,14 @@
-# Bootstrap Prompt V4.1 — AI Workflow Setup
+# Bootstrap Prompt V4.2 — AI Workflow Setup
 
+> **Changelog V4.1 → V4.2**:
+> - Fase 0: Auto-detección de cloudId y project key via MCP Atlassian (paso 0.0c)
+> - Fase 0: MCP Atlassian es ahora **obligatorio** — sin él no se puede continuar el bootstrap
+> - Menú: Eliminada opción "Implementar directo" — todo pasa por artefactos/tickets primero
+> - Menú: Exploración profunda del codebase obligatoria antes de crear artefactos o enriquecer tickets
+> - Pipeline: Transición IDLE → PLAN eliminada del state machine (enforced en código)
+> - MCP Server: `projectKey` agregado al perfil del proyecto
+> - Preguntas de Fase 1 reducidas: ya no se pregunta por cloudId ni sistema de tickets
+>
 > **Changelog V4 → V4.1**:
 > - Nuevo comando `/evidence` — evidencia de completitud + documentación cross-team en `/docs`
 > - Nuevo comando `/generate-docs` — documentación completa del proyecto (standalone, iterativo)
@@ -8,7 +17,7 @@
 > - Cross-references docs/ ↔ ai-specs/ para evitar duplicación de contenido
 > - Fase 3 crea estructura `/docs` + Fase 5b genera contenido base
 > - `/doc-ticket` eliminado — absorbido como `/evidence --docs-only`
-> - Opción 8 del menú eliminada — evidencia integrada en flujos 1/2/4
+> - Opción 8 del menú eliminada — evidencia integrada en flujos 1/2
 > - Fase 7 verifica estructura `/docs` y comandos de evidencia
 >
 > **Changelog V3 → V4**:
@@ -127,6 +136,63 @@ MCPS_DISPONIBLES:
 ```
 
 > **Nota**: Si `claude mcp list` no está disponible, no fallar. Marcar todos como "unknown" y preguntar en Fase 1.
+
+---
+
+### 0.0c — Obtener cloudId y proyecto de Jira via MCP
+
+**Si MCP_ATLASSIAN=not_found → BLOQUEAR inmediatamente** y mostrar:
+
+```
+❌ MCP de Atlassian no está configurado.
+
+Configuralo en Claude Code antes de ejecutar el bootstrap.
+Sin Atlassian MCP no se pueden crear ni gestionar tickets.
+
+Instrucciones:
+  1. Configurá el MCP de Atlassian en Claude Code (Settings → MCP Servers)
+  2. Verificá que esté autenticado correctamente
+  3. Volvé a correr este prompt
+```
+
+**No continúes ningún paso siguiente hasta que el MCP de Atlassian esté disponible.**
+
+**Si MCP_ATLASSIAN=available**, ejecutar la detección automática:
+
+1. **Obtener cloudId** — Llamar `getAccessibleAtlassianResources` (usando el `atlassian_prefix` detectado en 0.0b):
+   → Retorna lista de sites Atlassian, cada uno con `id` (cloudId), `name`, `url`
+
+   - **Si 1 site** → usar ese `id` como cloudId, guardar el `name` como workspace_name
+   - **Si N sites** → Usá **AskUserQuestion** (single_select): "¿Cuál workspace de Atlassian?" con opciones mostrando `name (url)` de cada site
+   - **Si 0 sites o error** → BLOQUEAR:
+     ```
+     ❌ No se encontraron workspaces en Atlassian.
+     Verificá la configuración y autenticación del MCP de Atlassian.
+     ```
+
+2. **Obtener project key** — Llamar `getVisibleJiraProjects` con el cloudId obtenido:
+   → Retorna lista de proyectos con `key`, `name`
+
+   - **Si 1 proyecto** → usar ese `key` como project_key
+   - **Si N proyectos** → Usá **AskUserQuestion** (single_select): "¿Cuál proyecto de Jira?" con opciones mostrando `name (key)` de cada proyecto
+   - **Si 0 proyectos** → BLOQUEAR:
+     ```
+     ❌ No hay proyectos visibles en Jira para este workspace.
+     Creá el proyecto en Jira antes de continuar.
+     ```
+
+3. **Guardar en PROYECTO_PERFIL**:
+   - `tracker`: "jira"
+   - `cloud_id`: {el cloudId obtenido}
+   - `workspace_name`: {el name del site}
+   - `project_key`: {el key del proyecto}
+
+Mostrar confirmación:
+```
+✅ Jira detectado automáticamente:
+   Workspace: {workspace_name} (cloudId: {cloud_id})
+   Proyecto: {project_key}
+```
 
 ---
 
@@ -274,7 +340,10 @@ PROYECTO_PERFIL:
   validation_lib: [Zod | Yup | Joi | class-validator | etc]
   testing_framework: [Playwright | Cypress | Jest | Vitest | pytest | ninguno | etc]
   tiene_figma: [probable si hay MUI/Tailwind y es frontend]
-  tiene_jira: [desconocido — preguntar]
+  tracker: [jira — detectado en 0.0c]
+  cloud_id: [del paso 0.0c]
+  workspace_name: [del paso 0.0c]
+  project_key: [del paso 0.0c]
   estructura_carpetas: [descripcion breve]
   patron_componentes: [inferido de archivos existentes]
   patron_hooks: [inferido de archivos existentes]
@@ -309,7 +378,6 @@ Evaluá cada item:
 | Auth method | No hay archivos de auth store claros |
 | State management | No hay dependencias claras |
 | Testing framework | No hay archivos de test ni devDependencies claras |
-| **Jira cloudId** | **SIEMPRE — no se puede inferir del código** |
 | **Idioma tickets** | **SIEMPRE — no se puede inferir del código** |
 | **Figma** | Si es frontend y no hay evidencia clara |
 | Estructura de carpetas | Si ls src/ fue ambiguo |
@@ -348,7 +416,8 @@ Usá **AskUserQuestion** con TODAS las preguntas pendientes en UNA SOLA llamada.
 ✅ Framework: [lo que detectaste]
 ✅ Stack: [lo que detectaste]
 ✅ Estructura: [lo que detectaste]
-✅ MCPs detectados: [Atlassian: ✅/❌, GitHub: ✅/❌, Figma: ✅/❌]
+✅ Jira: {workspace_name} (cloudId: {cloud_id}) — Proyecto: {project_key}
+✅ MCPs detectados: [Atlassian: ✅, GitHub: ✅/❌, Figma: ✅/❌]
 ✅ openspec: v[versión detectada]
 [si re-ejecución: "🔄 Re-ejecución de bootstrap (V{version_previa} → V4)"]
 [...]
@@ -359,20 +428,18 @@ Usá **AskUserQuestion** con TODAS las preguntas pendientes en UNA SOLA llamada.
 Las preguntas SIEMPRE incluidas (estas no se pueden inferir):
 
 ```
-1. Sistema de tickets: ¿Usás Jira, Linear, GitHub Issues u otro?
-   - Si es Jira: ¿Cuál es el cloudId del workspace Atlassian?
-   - (Lo encontrás en: Jira Settings → Products → Jira Software configuration)
+1. Idioma de tickets: ¿Los tickets van en español o inglés?
 
-2. Idioma de tickets: ¿Los tickets van en español o inglés?
-
-3. Diseño: ¿El equipo usa Figma? (Sí / No / Otro)
+2. Diseño: ¿El equipo usa Figma? (Sí / No / Otro)
 ```
+
+> **Nota**: La pregunta sobre sistema de tickets y cloudId ya no se hace aquí — se resolvió automáticamente en el paso 0.0c via MCP.
 
 Preguntas opcionales (solo si no se pudo inferir del codebase):
 ```
-4. [Solo si framework ambiguo]: ¿Confirmás que el framework principal es [X]?
-5. [Solo si estructura ambigua]: ¿Cuál es la carpeta principal de código fuente?
-6. [Solo si MCPs unknown]: ¿Tenés configurado el MCP de [Atlassian/GitHub/Figma]?
+3. [Solo si framework ambiguo]: ¿Confirmás que el framework principal es [X]?
+4. [Solo si estructura ambigua]: ¿Cuál es la carpeta principal de código fuente?
+5. [Solo si MCPs unknown]: ¿Tenés configurado el MCP de [GitHub/Figma]?
 ```
 
 ### 1.3 — Consolidar perfil final
@@ -488,6 +555,7 @@ Crear `.ai-internal/project-profile.md` con TODOS los datos reales del PROYECTO_
 # Testing: {testing_framework}
 # Tracker: {tracker}
 # Tracker CloudId: {cloud_id}
+# Tracker Project Key: {project_key}
 # Idioma técnico: {idioma_tecnico}
 # Idioma tickets: {idioma_tickets}
 # Idioma UI: {idioma_ui}

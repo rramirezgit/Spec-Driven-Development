@@ -23,7 +23,7 @@ Usando el `PROYECTO_PERFIL`, generar archivos base con contenido real (no dirs v
 # {nombre} — Documentación técnica
 
 > Última actualización: {FECHA_HOY}
-> Generado con Bootstrap V4.1
+> Generado con Bootstrap V4.2
 
 ## Índice
 
@@ -370,7 +370,7 @@ Usado por `/commit` para crear PRs.
 Ver BOOTSTRAP-PROMPT-V4.md
 
 ### Checklist
-- [ ] `/menu` muestra menú con 7 opciones
+- [ ] `/menu` muestra menú con 6 opciones
 - [ ] `/opsx:onboard` inicia tutorial
 - [ ] `/explain test` da explicación estructurada
 - [ ] CLAUDE.md sin placeholders `{}`
@@ -406,8 +406,8 @@ Ver BOOTSTRAP-PROMPT-V4.md
 ---
 
 ## 10. Bootstrap prompt
-**Archivo**: `ai-specs/BOOTSTRAP-PROMPT-V4.1.md`
-**Versión**: V4.1
+**Archivo**: `ai-specs/BOOTSTRAP-PROMPT-V4.2.md`
+**Versión**: V4.2
 **Uso**: Correr `/init` en Claude Code, luego pegar el prompt.
 El prompt lee el codebase automáticamente y solo pregunta lo que no puede inferir.
 Soporta re-ejecución segura con backups y protección de archivos editados.
@@ -483,7 +483,7 @@ Agregar al checklist de verificación de Fase 7: "sdd_check_config responde OK".
 ```bash
 cat > .bootstrap-meta.json << 'EOF'
 {
-  "bootstrap_version": "4.1",
+  "bootstrap_version": "4.2",
   "created_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
   "openspec_version": "$(openspec --version 2>/dev/null)",
   "project_name": "{nombre}",
@@ -587,13 +587,13 @@ echo "Si todo está ✅: el sistema está listo."
 **Checklist final** (confirmá cada uno):
 - [ ] `ls .claude/commands/opsx/` muestra 10 archivos
 - [ ] `ls .claude/skills/` muestra 10 directorios (generados por openspec init)
-- [ ] `/menu` muestra el menú interactivo con 7 opciones
+- [ ] `/menu` muestra el menú interactivo con 6 opciones
 - [ ] `/opsx:onboard` inicia el tutorial
 - [ ] `CLAUDE.md` refleja el stack real (sin `{word_word}` sin reemplazar)
 - [ ] `openspec/config.yaml` tiene contexto completo (sin `{word_word}`)
 - [ ] `ai-specs/specs/{tipo}-standards.mdc` documenta patrones reales del codebase
 - [ ] El nombre del agente (`{tipo}-developer.md`) coincide con el tipo del proyecto
-- [ ] `.bootstrap-meta.json` existe con versión `4.1`
+- [ ] `.bootstrap-meta.json` existe con versión `4.2`
 - [ ] No hay MCP tools hardcoded con prefijos obsoletos
 - [ ] `.mcp.json` existe con `sdd-pipeline` configurado
 - [ ] `.ai-internal/mcp-server/dist/index.js` existe (MCP server compilado)
@@ -668,7 +668,7 @@ echo "Si todo está ✅: el sistema está listo."
 Al terminar la verificación:
 
 ```
-✅ Bootstrap V4.1 completado!
+✅ Bootstrap V4.2 completado!
 
 Resumen:
   Fase 0-2: Detección y perfil

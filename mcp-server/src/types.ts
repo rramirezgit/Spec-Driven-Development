@@ -38,6 +38,7 @@ export interface ProjectConfig {
   tipo: string;
   tracker: string;
   cloudId: string;
+  projectKey: string;
   idioma: string;
 }
 
@@ -45,7 +46,6 @@ export const VALID_TRANSITIONS: Record<PipelineState, PipelineState[]> = {
   [PipelineState.IDLE]: [
     PipelineState.ARTEFACTOS,
     PipelineState.TICKETS,
-    PipelineState.PLAN,
   ],
   [PipelineState.ARTEFACTOS]: [PipelineState.TICKETS],
   [PipelineState.TICKETS]: [PipelineState.PLAN],

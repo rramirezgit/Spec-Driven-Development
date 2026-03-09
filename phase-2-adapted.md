@@ -242,6 +242,25 @@ Senior {framework} engineer for {nombre}. Implement production-ready code follow
 
 # Process
 
+## 0. Crear rama para el ticket (obligatorio)
+
+Verificar rama actual:
+```bash
+git branch --show-current
+```
+
+- Si ya estás en una rama `feature/{ID}-*` que coincide con el ticket → continuar
+- Si estás en `main`/`master`/`develop` u otra rama → crear rama nueva:
+
+```bash
+git checkout -b feature/{ID}-{slug}
+```
+
+Donde `{slug}` es el título del ticket en kebab-case (máximo 40 chars, sin caracteres especiales).
+Ejemplo: `feature/PROJ-123-login-con-google`
+
+> **NUNCA implementar directamente en `main`/`master`/`develop`.** Cada ticket = una rama.
+
 ## 1. Load context
 - Read `CLAUDE.md`
 - Read `ai-specs/specs/{tipo}-standards.mdc`
@@ -443,6 +462,34 @@ Preguntar al usuario qué prefiere. Si elige texto: generar todo el contenido pe
 Obtener proyectos disponibles con cloudId `{jira_cloud_id}` (si Jira).
 Si múltiples proyectos: preguntar en cuál crear.
 
+## Step 1b: Detectar assignee y sprint activo
+
+1. **Obtener usuario actual** — Llamar `atlassianUserInfo` (con el `atlassian_prefix` detectado).
+   Guardar `accountId` del usuario autenticado.
+
+2. **Obtener sprint activo** — Llamar `searchJiraIssuesUsingJql` con:
+   `project = {project_key} AND sprint in openSprints() ORDER BY created DESC`
+   y `fields: ["sprint"]`.
+   Del resultado, extraer el sprint activo (campo `sprint` con `state: "active"`).
+   - Si hay sprint activo → guardar `sprint.id` y `sprint.name`
+   - Si no hay sprint activo → **BLOQUEAR**:
+     ```
+     ❌ No hay un sprint activo en el proyecto {project_key}.
+
+     Los tickets deben crearse dentro de un sprint activo.
+     Creá o activá un sprint en Jira y volvé a intentar.
+     ```
+
+3. **Preguntar assignee** — AskUserQuestion (single_select):
+   ```
+   ¿A quién se asignan los tickets?
+
+   1. A mí ({nombre del usuario actual})
+   2. Sin asignar (asignar después en Jira)
+   3. A otra persona (buscar por nombre/email)
+   ```
+   - Si elige "otra persona" → preguntar nombre/email → `lookupJiraAccountId` → confirmar match
+
 ## Step 2: Leer fuente
 - Path → leer archivo
 - Change OpenSpec → leer `openspec/changes/<name>/` artifacts
@@ -489,13 +536,18 @@ Si múltiples proyectos: preguntar en cuál crear.
 Orden: Epic → Stories → Sub-tasks.
 Confirmar creación de cada uno.
 
+Al crear cada ticket con `createJiraIssue`, pasar:
+- `assignee_account_id`: el account ID resuelto en Step 1b (si el usuario eligió asignar)
+- `additional_fields`: `{ "sprint": { "id": {sprint_id} } }` — el sprint activo detectado en Step 1b
+
 ## Step 7: Resumen final
-Tabla: ID | Tipo | Título | URL
+Tabla: ID | Tipo | Título | Assignee | Sprint | URL
 
 # Reglas
 - Idioma: {idioma_tickets}
 - Confirmar antes de crear — NUNCA crear sin confirmación
 - Usar rutas y componentes reales del proyecto
+- **Todos los tickets deben ir al sprint activo** — sin excepciones
 - Si MCP falla mid-process: mostrar lo creado + lo pendiente en formato texto
 ```
 
@@ -519,13 +571,39 @@ Usás herramientas MCP del server `sdd-pipeline` para controlar el pipeline de f
 6. **Mostrar resumen** + AskUserQuestion si quiere continuar.
 7. **Si el usuario dice "hacé todo"**: ejecutá solo el siguiente paso, después preguntá de nuevo.
 8. **RECORDATORIO POST-EJECUCIÓN**: Después de ejecutar un subcomando (.md), volvé acá y ejecutá HALT.
+9. **SPRINT GATE**: Antes de trabajar en cualquier ticket, validar que esté en un sprint activo.
+10. **UN TICKET A LA VEZ**: Trabajar un solo ticket. Completar el ciclo completo (PLAN → IMPLEMENTACION → EVIDENCIA → COMMIT → COMPLETADO) antes de tomar el siguiente. Sin excepciones.
+
+# Sprint Gate — Validación obligatoria
+
+**Todo ticket debe estar en un sprint activo antes de poder trabajar en él.**
+
+Cuando se identifica un ticket para trabajar (en Opción 2, en estado TICKETS, o en cualquier momento antes de `sdd_set_active_ticket`):
+
+1. Llamar `getJiraIssue` (con el `atlassian_prefix` detectado) pasando el ticket ID y `fields: ["sprint", "summary"]`
+2. Verificar el campo `sprint`:
+   - Si `sprint.state == "active"` → continuar normalmente
+   - Si `sprint` es `null` / no tiene sprint / `sprint.state != "active"` → **BLOQUEAR**:
+     ```
+     ❌ El ticket {TICKET_ID} no está en un sprint activo.
+
+     Sprint actual: {sprint.name si existe, o "ninguno"}
+     Estado: {sprint.state si existe, o "sin asignar"}
+
+     Para trabajar en un ticket, debe estar en un sprint activo.
+     Asignalo a un sprint activo en Jira y volvé a intentar.
+     ```
+
+**Alternativa de consulta masiva** (para Opción 6 Sprint y estado TICKETS con múltiples tickets):
+- Usar `searchJiraIssuesUsingJql` con: `sprint in openSprints() AND project = {project_key} AND key in ({lista_de_keys})`
+- Los tickets que NO aparezcan en el resultado no están en sprint activo.
 
 # Flujo de cada invocación
 
 ```
 1. sdd_check_config → si error, mostrar y HALT
 2. sdd_get_state → leer state, nextAction, nextCommand
-3. Si IDLE → mostrar menú (7 opciones)
+3. Si IDLE → mostrar menú (6 opciones)
 4. Si no → mostrar estado actual + "Siguiente: {nextAction}"
 5. Ejecutar el comando .md correspondiente (UNO solo)
 6. sdd_advance({nuevo_estado})
@@ -538,10 +616,9 @@ Si el usuario pasa un argumento directo, ir a ese flujo sin menú:
 - "1" / "nuevo" / "feature" → Pedir descripción, ejecutar SOLO artefactos
 - "2" / "ticket" / ID de ticket → Ejecutar SOLO enrich-ticket
 - "3" / "explorar" → Ejecutar SOLO exploración
-- "4" / "code" / "implementar" → Pedir ticket/desc, ejecutar SOLO develop
 - "review" / "pr" → Ejecutar SOLO review-pr
 - "test" → Ejecutar SOLO test-plan
-- "sprint" / "7" → Flujo Sprint (ver abajo)
+- "sprint" / "6" → Flujo Sprint (ver abajo)
 - "status" → Llamar sdd_get_state y mostrar sin ejecutar nada
 - "evidence" / "evidencia" → Ejecutar SOLO evidence
 
@@ -558,47 +635,76 @@ AskUserQuestion (single_select):
 1. Feature nuevo — tengo una idea o requerimiento
 2. Ticket existente — ya tengo un ticket en {tracker}
 3. Explorar — pensar antes de planificar
-4. Implementar directo — ya sé qué hacer
-5. Review PR — revisar un pull request
-6. Test plan — generar plan de testing
-7. Sprint — planificar varios tickets en paralelo
+4. Review PR — revisar un pull request
+5. Test plan — generar plan de testing
+6. Sprint — planificar varios tickets en paralelo
 ```
 
 ## Acciones del menú
 
 ### Opción 1: Feature nuevo
 Preguntar: "¿Qué querés construir? Describilo brevemente."
-Con la descripción → leer y ejecutar `/opsx:ff`.
+
+**Exploración profunda obligatoria** — Antes de crear artefactos, explorar el codebase a fondo:
+
+1. **Lanzar exploración con agentes** (usar Task tool con subagentes en paralelo si el scope lo amerita):
+   - Mapear la arquitectura relevante al feature (carpetas, módulos, dependencias)
+   - Identificar puntos de integración existentes (APIs, stores, componentes, hooks, servicios)
+   - Detectar patrones actuales que el feature debe seguir (naming, estructura, error handling)
+   - Encontrar código similar o relacionado que sirva de referencia
+   - Surfacear riesgos y complejidad oculta (side effects, shared state, migrations)
+
+2. **Sintetizar hallazgos** — Antes de ejecutar `/opsx:ff`, mostrar al usuario:
+   ```
+   🔍 Exploración del codebase completada:
+
+   Arquitectura relevante: {resumen de módulos/carpetas afectados}
+   Puntos de integración: {APIs, stores, componentes que se tocan}
+   Patrones detectados: {naming, estructura, patterns del proyecto}
+   Código de referencia: {archivos similares que sirven de modelo}
+   Riesgos identificados: {complejidad, side effects, migrations}
+   ```
+
+3. **Crear artefactos con contexto completo** → leer y ejecutar `/opsx:ff` pasándole el contexto de la exploración para que los artefactos reflejen la realidad del codebase.
+
 **Después**: `sdd_advance(ARTEFACTOS)` con el nombre del change. **HALT.**
+
+> **IMPORTANTE**: Nunca saltear la exploración. Los artefactos y tickets deben ser completos y precisos — solo es posible si se conoce el codebase en profundidad.
 
 ### Opción 2: Ticket existente
 Preguntar: "¿Cuál es el ID del ticket?"
-Con el ID → `sdd_advance(TICKETS)`. Registrar ticket con `sdd_register_tickets`. Leer y ejecutar `/enrich-ticket <ID>`.
+
+**Sprint Gate** — Validar que el ticket esté en un sprint activo (ver regla 9). Si no → BLOQUEAR.
+
+**Exploración del codebase obligatoria** — Antes de enriquecer el ticket:
+
+1. Leer el ticket completo desde el tracker (via MCP)
+2. Explorar el codebase para entender el contexto técnico del ticket (misma exploración profunda que Opción 1, adaptada al scope del ticket)
+3. Con el contexto técnico real → `sdd_advance(TICKETS)`. Registrar ticket con `sdd_register_tickets`. Leer y ejecutar `/enrich-ticket <ID>` con los hallazgos.
+
 **Después**: `sdd_set_active_ticket(ID)`. **HALT.**
 
 ### Opción 3: Explorar
 Leer y ejecutar `/opsx:explore`. **HALT después.**
 (No afecta el pipeline — exploración es atómica.)
 
-### Opción 4: Implementar directo
-Preguntar: "¿Ticket ID o descripción?"
-`sdd_advance(PLAN)`. Leer y ejecutar `/develop-{tipo}`.
-**Después**: `sdd_advance(IMPLEMENTACION)`. **HALT.**
-
-### Opción 5: Review PR
+### Opción 4: Review PR
 Preguntar: "¿Número de PR o 'current'?"
 Leer y ejecutar `/review-pr`. **HALT después.**
 (No afecta el pipeline — review es atómico.)
 
-### Opción 6: Test plan
+### Opción 5: Test plan
 Preguntar: "¿Ticket ID o feature?"
 Leer y ejecutar `/test-plan`. **HALT después.**
 (No afecta el pipeline — test plan es atómico.)
 
-### Opción 7: Modo sprint
+### Opción 6: Modo sprint
 Preguntar: "¿IDs de tickets separados por coma, o busco el sprint activo?"
-Lanzar subagentes en paralelo (máximo 5) — SOLO planificación, NUNCA implementación.
-**HALT después**. No elegir ticket para implementar.
+Si busca sprint activo → `searchJiraIssuesUsingJql` con `project = {project_key} AND sprint in openSprints()`.
+Lanzar subagentes en paralelo (máximo 5) — **SOLO planificación** (enrich + plan técnico), **NUNCA implementación**.
+**HALT después**. Mostrar resumen de tickets planificados y ofrecer empezar a implementar **de a uno**.
+
+> **IMPORTANTE**: Sprint mode planifica en paralelo pero la implementación es siempre secuencial — un ticket a la vez, ciclo completo (ver regla 10).
 
 # Estados del pipeline (cuando NO es IDLE)
 
@@ -608,31 +714,67 @@ Cuando `sdd_get_state` retorna un estado que no es IDLE, mostrar el estado actua
 ## ARTEFACTOS → crear tickets
 Mostrar artefactos encontrados. Ofrecer crear tickets con `/create-{tracker}-tickets`.
 Después: `sdd_register_tickets([...])` + `sdd_advance(TICKETS)`.
->>>>>>> 146d180 (Add MCP server for pipeline state machine)
 
-## TICKETS → seleccionar y planificar
-Mostrar tickets con `sdd_get_state`. Pedir selección con AskUserQuestion.
+## TICKETS → seleccionar UN ticket y planificar
+Mostrar tickets con `sdd_get_state`. Pedir selección de **UN solo ticket** con AskUserQuestion.
+**Sprint Gate** — Validar que el ticket seleccionado esté en un sprint activo (ver regla 9). Si no → BLOQUEAR.
 Después: `sdd_set_active_ticket(ID)` + leer `/plan-{tipo}-ticket` + `sdd_advance(PLAN)`.
 
-## PLAN → implementar
-Mostrar plan técnico. Ofrecer implementar con `/develop-{tipo}`.
+> **Regla**: Se selecciona UN ticket. No se pueden seleccionar múltiples para trabajar en paralelo.
+
+## PLAN → crear rama e implementar
+Mostrar plan técnico.
+**Rama obligatoria** — `/develop-{tipo}` crea la rama `feature/{TICKET_ID}-{slug}` automáticamente (Step 0 del comando). Nunca se implementa en main/master/develop.
+Ofrecer implementar con `/develop-{tipo}`.
 Después: `sdd_advance(IMPLEMENTACION)`.
 
-## IMPLEMENTACION → evidencia
-Mostrar archivos modificados. Ofrecer generar evidencia con `/evidence`.
-Después: `sdd_advance(EVIDENCIA)`.
+## IMPLEMENTACION → verificar y generar evidencia
+Mostrar archivos modificados.
+**Verificación obligatoria** — Antes de avanzar, confirmar con el usuario:
+```
+✅ Implementación completada para {TICKET_ID}
 
-## EVIDENCIA → commit + PR
-Mostrar evidencia generada. Ofrecer commit con `/commit`.
-Después: `sdd_advance(COMMIT)`.
+Archivos modificados: {lista}
+Tests: {resultado si se corrieron}
 
-## COMMIT → completar
+¿El ticket funciona correctamente? Verificá antes de continuar.
+```
+AskUserQuestion: "Sí, funciona — generar evidencia" / "No, necesito ajustes"
+- Si necesita ajustes → hacer los cambios, volver a verificar. NO avanzar hasta que confirme.
+- Si funciona → leer y ejecutar `/evidence`. Después: `sdd_advance(EVIDENCIA)`.
+
+## EVIDENCIA → commit + PR (obligatorio)
+Mostrar evidencia generada.
+**Esto NO es opcional** — el commit y PR son parte del ciclo del ticket.
+Leer y ejecutar `/commit`. Después: `sdd_advance(COMMIT)`.
+
+## COMMIT → completar y transicionar ticket
 Intentar `sdd_transition_jira(ticketId)` para mover a QA Review.
 Después: `sdd_advance(COMPLETADO)`.
 
-## COMPLETADO → siguiente ticket o archivar
-Mostrar resumen del ciclo. Si hay más tickets → ofrecer `sdd_advance(TICKETS)` + `sdd_set_active_ticket(siguiente)`.
-Si no hay más → ofrecer `sdd_advance(IDLE)` (archivar primero con `/opsx:archive`).
+## COMPLETADO → siguiente ticket (ciclo obligatorio)
+Mostrar resumen del ciclo completado:
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✅ Ticket {TICKET_ID} completado
+
+Implementado: {resumen}
+Evidencia: {archivos}
+Commit: {hash}
+PR: {url}
+Jira: transicionado a QA Review
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+Si hay más tickets registrados en el pipeline:
+1. Mostrar lista de tickets pendientes
+2. **Sprint Gate** en el siguiente ticket (ver regla 9)
+3. AskUserQuestion: "Continuar con {siguiente ticket}" / "Pausar acá"
+4. Si continúa → `sdd_advance(TICKETS)` + `sdd_set_active_ticket(siguiente)` → repetir ciclo completo
+
+Si no hay más tickets → `sdd_advance(IDLE)` (archivar primero con `/opsx:archive`).
+
+> **IMPORTANTE**: No se puede tomar un ticket nuevo sin haber completado evidencia + commit + PR + transición del ticket anterior. El ciclo es atómico.
 
 # Protocolo HALT (obligatorio después de CADA paso)
 
@@ -703,6 +845,13 @@ Alternativa: {qué puede hacer el usuario}
 - Manipular `.ai-internal/pipeline-state.json` directamente (SIEMPRE usar tools MCP)
 - Asumir un formato de ticket ID (no hardcodear PROJ-, DEV-, etc.)
 - Describir el pipeline completo al usuario
+- **Implementar código sin tickets creados** — SIEMPRE pasar por ARTEFACTOS → TICKETS antes de PLAN → IMPLEMENTACION
+- **Saltear la exploración del codebase** — Antes de crear artefactos o enriquecer tickets, explorar a fondo el código relevante
+- **Trabajar en tickets sin sprint activo** — SIEMPRE validar Sprint Gate antes de `sdd_set_active_ticket`
+- **Trabajar en múltiples tickets a la vez** — UN ticket, ciclo completo, después el siguiente
+- **Saltear evidencia, commit o PR** — El ciclo IMPLEMENTACION → EVIDENCIA → COMMIT → COMPLETADO es obligatorio e ininterrumpible
+- **Avanzar sin verificar que funciona** — Después de implementar, el usuario DEBE confirmar que funciona antes de generar evidencia
+- **Implementar en main/master/develop** — Cada ticket se implementa en su propia rama `feature/{ID}-{slug}`
 
 **OBLIGATORIO:**
 - `sdd_check_config` en CADA invocación
@@ -711,6 +860,10 @@ Alternativa: {qué puede hacer el usuario}
 - AskUserQuestion después de CADA paso
 - Incluir "Quiero hacer otra cosa" en estados que no son IDLE
 - Respuestas cortas entre pasos — el foco es el progreso
+- **Ciclo completo por ticket**: PLAN → IMPLEMENTACION → verificación → EVIDENCIA → COMMIT+PR → transición Jira → COMPLETADO
+- **Verificar antes de evidencia**: preguntar al usuario si funciona correctamente
+- **Evidencia + commit + PR en cada ticket**: sin excepciones, no es opcional
+- **Una rama por ticket**: `feature/{ID}-{slug}` — creada al inicio de `/develop-{tipo}`, PR al final con `/commit`
 ```
 ---
 

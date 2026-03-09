@@ -1,4 +1,4 @@
-# Spec-Driven Development — Bootstrap V4.1
+# Spec-Driven Development — Bootstrap V4.2
 
 Sistema de flujos de trabajo asistidos por IA para Claude Code.
 Incluye un MCP server que controla el pipeline de forma programatica (state machine en codigo, no en prompts).
@@ -15,6 +15,7 @@ Incluye un MCP server que controla el pipeline de forma programatica (state mach
 | **Claude Code** | `npm i -g @anthropic-ai/claude-code` | IDE con IA |
 | **openspec-cli** | `npm i -g openspec-cli` | Gestion de specs y changes |
 | **gh CLI** | `brew install gh && gh auth login` | Descargar desde este repo privado |
+| **MCP Atlassian** | Configurar en Claude Code (Settings → MCP Servers) | **Obligatorio** — auto-detecta cloudId y project key |
 
 ### Variables de entorno (para integracion Jira)
 
@@ -88,6 +89,56 @@ El script va a decir que `menu.md` necesita actualizarse. Dos opciones:
 
 ---
 
+## Actualizar proyecto existente (upgrade a V4.2)
+
+Para proyectos que **ya hicieron bootstrap con V4.1 o anterior**:
+
+```bash
+# 1. Ir a la raiz del proyecto
+cd tu-proyecto
+
+# 2. Ejecutar el installer (sobreescribe fases + recompila MCP server)
+bash install-bootstrap.sh
+# Si no tenes el script: descargalo de nuevo con gh api (ver seccion "Instalacion desde cero")
+
+# 3. Abrir Claude Code y re-ejecutar bootstrap
+/bootstrap
+```
+
+El bootstrap detecta la config previa y:
+- **Archivos reusables** (opsx commands, skills): se sobreescriben siempre
+- **Archivos adaptados** (menu.md, develop-{tipo}.md, CLAUDE.md): si fueron editados manualmente te pregunta si sobreescribir o proteger
+- **MCP server**: se recompila con los cambios nuevos (projectKey, transiciones actualizadas)
+- **project-profile.md**: se preserva — no se pierde nada
+
+### Que cambia en V4.2
+
+| Cambio | Impacto |
+|--------|---------|
+| MCP Atlassian obligatorio | Si no esta configurado, el bootstrap bloquea |
+| Auto-deteccion cloudId + projectKey | Ya no pregunta manualmente, lo obtiene del MCP |
+| Eliminada opcion "Implementar directo" | Transicion IDLE→PLAN removida del state machine |
+| Exploracion profunda obligatoria | Antes de artefactos o enrich-ticket |
+| Sprint Gate | Tickets deben estar en sprint activo para trabajar |
+| Asignacion de tickets al crear | Assignee + sprint activo automatico |
+| Un ticket a la vez | Ciclo completo obligatorio: implementar → evidencia → commit → PR → transicion |
+| Rama por ticket | `feature/{ID}-{slug}` obligatoria, nunca en main |
+
+### Archivos que se regeneran
+
+Estos archivos se **sobreescriben** al re-ejecutar `/bootstrap`:
+
+```
+.claude/commands/menu.md              ← nuevo: 6 opciones, Sprint Gate, ciclo obligatorio
+ai-specs/.commands/develop-{tipo}.md  ← nuevo: Step 0 crea rama
+.claude/commands/create-*-tickets.md  ← nuevo: asigna sprint + assignee
+.ai-internal/mcp-server/              ← nuevo: sin transicion IDLE→PLAN, projectKey
+.claude/commands/bootstrap.md         ← nuevo: V4.2
+.bootstrap-meta.json                  ← actualizado: version 4.2
+```
+
+---
+
 ## Como funciona el MCP server
 
 ```
@@ -109,7 +160,7 @@ El MCP server expone 6 herramientas que Claude llama como cualquier otro MCP too
 ### Transiciones validas (enforced en codigo)
 
 ```
-IDLE -> ARTEFACTOS | TICKETS | PLAN
+IDLE -> ARTEFACTOS | TICKETS
 ARTEFACTOS -> TICKETS
 TICKETS -> PLAN
 PLAN -> IMPLEMENTACION
@@ -120,6 +171,8 @@ COMPLETADO -> TICKETS | IDLE
 ```
 
 Cualquier otra transicion es rechazada con error descriptivo.
+
+> **Nota V4.2**: La transicion `IDLE -> PLAN` fue eliminada. Ya no se puede implementar directamente sin pasar por artefactos/tickets primero.
 
 ### Que controla el MCP vs que controla Claude
 
@@ -195,7 +248,11 @@ proyecto/
 # 1. Editar archivos en este repo y pushear
 # 2. En cada proyecto:
 bash install-bootstrap.sh    # sobreescribe fases + recompila MCP server
+# 3. Re-ejecutar bootstrap en Claude Code:
+/bootstrap                   # detecta re-ejecucion, regenera archivos adaptados
 ```
+
+Ver seccion "Actualizar proyecto existente" para detalles de que cambia en cada version.
 
 ---
 

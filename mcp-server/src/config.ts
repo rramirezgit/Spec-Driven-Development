@@ -37,6 +37,7 @@ function parseProfile(content: string): ProjectConfig {
     tipo: get("Tipo|tipo|Type|type|Project Type"),
     tracker: get("Tracker|tracker"),
     cloudId: get("CloudId|cloudId|cloud_id|Tracker CloudId"),
+    projectKey: get("Tracker Project Key|project_key|Project Key"),
     idioma: get("Idioma|idioma|Language|language"),
   };
 }
@@ -81,6 +82,12 @@ export async function validateConfig(): Promise<ConfigValidation> {
   if (!config.cloudId || config.cloudId.toLowerCase().includes("pendiente") || config.cloudId.toLowerCase().includes("todo") || config.cloudId === "N/A") {
     errors.push(
       "CloudId del tracker no configurado. Sin cloudId no se puede interactuar con el tracker. Configuralo en .ai-internal/project-profile.md.",
+    );
+  }
+
+  if (!config.projectKey) {
+    warnings.push(
+      "Project Key del tracker no configurado en el perfil. Algunos comandos pueden no funcionar correctamente.",
     );
   }
 

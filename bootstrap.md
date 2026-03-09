@@ -1,11 +1,11 @@
 ---
 name: "Bootstrap: Setup AI Workflow"
-description: Configura el sistema completo de flujos AI en este proyecto (V4.1)
+description: Configura el sistema completo de flujos AI en este proyecto (V4.2)
 category: Setup
 tags: [bootstrap, setup, workflow]
 ---
 
-# Bootstrap AI Workflow V4.1
+# Bootstrap AI Workflow V4.2
 
 Sos el orquestador del bootstrap. Tu trabajo es ejecutar las fases en orden, una a la vez, cargando el archivo correspondiente.
 
@@ -50,7 +50,7 @@ Basándote en el estado:
 Mostrá:
 
 ```
-🔧 AI Workflow Bootstrap V4.1
+🔧 AI Workflow Bootstrap V4.2
 ==============================
 
 Estado:
