@@ -53,45 +53,9 @@ El installer descarga todo, compila el MCP server, y `/bootstrap` genera el `.mc
 
 ---
 
-## Migracion (proyecto con bootstrap anterior)
+## Actualizar proyecto existente (cualquier version → V4.2)
 
-Para proyectos que **ya hicieron bootstrap con la version prompt** (pipeline-tracker.md):
-
-```bash
-# 1. Ir a la raiz del proyecto
-cd tu-proyecto
-
-# 2. Descargar el script de migracion
-gh api repos/rramirezgit/Spec-Driven-Development/contents/migrate-to-mcp.sh \
-  -H "Accept: application/vnd.github.raw+json" > migrate-to-mcp.sh
-
-# 3. Ejecutar
-chmod +x migrate-to-mcp.sh
-bash migrate-to-mcp.sh
-```
-
-El script hace 5 pasos:
-
-1. Descarga el MCP server a `.ai-internal/mcp-server/`
-2. Ejecuta `npm install && npm run build`
-3. Genera `.mcp.json` con el server configurado
-4. Migra `pipeline-tracker.md` a `pipeline-state.json` (con backup)
-5. Detecta si `menu.md` es viejo y avisa que hay que regenerarlo
-
-### Regenerar menu.md despues de migrar
-
-El script va a decir que `menu.md` necesita actualizarse. Dos opciones:
-
-**Opcion A** (recomendada): Abrir Claude Code y ejecutar `/bootstrap` — regenera todo.
-
-**Opcion B** (rapida): Decirle a Claude:
-> Lee `.ai-internal/phases/phase-2-adapted.md`, busca la seccion de `menu.md` y regenera `.claude/commands/menu.md` con el template nuevo.
-
----
-
-## Actualizar proyecto existente (upgrade a V4.2)
-
-Para proyectos que **ya hicieron bootstrap con V4.1 o anterior**:
+Para proyectos que **ya hicieron bootstrap con cualquier version anterior** (incluyendo versiones pre-MCP que usaban `pipeline-tracker.md`):
 
 ```bash
 # 1. Ir a la raiz del proyecto
@@ -105,11 +69,16 @@ bash install-bootstrap.sh
 /bootstrap
 ```
 
-El bootstrap detecta la config previa y:
-- **Archivos reusables** (opsx commands, skills): se sobreescriben siempre
-- **Archivos adaptados** (menu.md, develop-{tipo}.md, CLAUDE.md): si fueron editados manualmente te pregunta si sobreescribir o proteger
-- **MCP server**: se recompila con los cambios nuevos (projectKey, transiciones actualizadas)
+El bootstrap detecta automaticamente el upgrade y entra en **Modo Upgrade**:
+- **Archivos reusables** (opsx commands, AI commands): se sobreescriben siempre
+- **Archivos adaptados** (menu.md, develop-{tipo}.md, etc.): se regeneran con el profile existente
+- **MCP server**: se compila si no existia, se recompila si ya existia
 - **project-profile.md**: se preserva — no se pierde nada
+- **Gaps de infraestructura**: detecta y crea lo que falta (`.mcp.json`, `docs/`, playbook, etc.)
+- **Pipeline legacy**: si tenia `pipeline-tracker.md`, lo migra a `pipeline-state.json`
+- **Archivos editados manualmente**: backup antes de sobreescribir
+
+> **Nota**: `migrate-to-mcp.sh` esta **deprecado** — el upgrade automatico de `/bootstrap` ahora cubre todo lo que hacia ese script (y mas). Usa `install-bootstrap.sh` + `/bootstrap` en su lugar.
 
 ### Que cambia en V4.2
 
@@ -208,7 +177,7 @@ Spec-Driven-Development/
 ├── phase-3-finalize.md        # Docs + OpenSpec + MCP config + verificacion
 ├── bootstrap.md               # Comando orquestador (/bootstrap)
 ├── install-bootstrap.sh       # Installer para proyectos nuevos
-├── migrate-to-mcp.sh          # Migracion para proyectos existentes
+├── migrate-to-mcp.sh          # DEPRECADO — usar install-bootstrap.sh + /bootstrap
 └── mcp-server/                # MCP server del pipeline
     ├── package.json
     ├── tsconfig.json

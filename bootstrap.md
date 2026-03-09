@@ -106,6 +106,10 @@ test -f openspec/config.yaml && echo "OPENSPEC_CONFIG=EXISTS" || echo "OPENSPEC_
 # Specs
 test -f ai-specs/specs/documentation-standards.mdc && echo "DOC_STANDARDS=EXISTS" || echo "DOC_STANDARDS=MISSING"
 test -f ai-specs/specs/base-standards.mdc && echo "BASE_STANDARDS=EXISTS" || echo "BASE_STANDARDS=MISSING"
+
+# Pipeline tracker legacy (pre-MCP: estado en markdown)
+test -f .ai-internal/pipeline-tracker.md && echo "PIPELINE_TRACKER_LEGACY=EXISTS" || echo "PIPELINE_TRACKER_LEGACY=NOT_FOUND"
+test -f .ai-internal/pipeline-state.json && echo "PIPELINE_STATE_JSON=EXISTS" || echo "PIPELINE_STATE_JSON=MISSING"
 ```
 
 Construir dos listas:
@@ -123,6 +127,7 @@ Construir dos listas:
 | `OPENSPEC_SKILLS` | `.claude/skills/openspec-*/` no existen | V4 |
 | `DOC_STANDARDS` | `ai-specs/specs/documentation-standards.mdc` no existe | V4.1 |
 | `BASE_STANDARDS` | `ai-specs/specs/base-standards.mdc` no existe | V4 |
+| `PIPELINE_MIGRATE` | `pipeline-tracker.md` existe (legacy) y `pipeline-state.json` no | pre-V4.2 |
 
 ### 0b.4 — Pedir confirmacion al usuario
 
@@ -155,6 +160,7 @@ Componentes nuevos que se crean (no existían en V{from_version}):
   {si OPENSPEC_SKILLS:} 🆕 .claude/skills/openspec-*/ (via openspec init)
   {si DOC_STANDARDS:} 🆕 ai-specs/specs/documentation-standards.mdc
   {si BASE_STANDARDS:} 🆕 ai-specs/specs/base-standards.mdc
+  {si PIPELINE_MIGRATE:} 🔄 pipeline-tracker.md → pipeline-state.json (migración de estado)
 
 Archivos que NO se tocan:
   🔒 .ai-internal/project-profile.md
@@ -288,6 +294,59 @@ Si no disponible: mostrar aviso pero no detener:
 ⚠️ openspec-cli no encontrado. Las skills de OpenSpec no se crearon.
    Instalá con: npm install -g openspec-cli
    Luego ejecutá: openspec init
+```
+
+##### D.6 — Gap `PIPELINE_MIGRATE`: Migrar pipeline-tracker.md → pipeline-state.json
+
+Si `.ai-internal/pipeline-tracker.md` existe (formato legacy pre-MCP) y `.ai-internal/pipeline-state.json` NO existe:
+
+1. Leer `.ai-internal/pipeline-tracker.md`
+2. Parsear el contenido markdown para extraer:
+   - **Estado** actual del pipeline (buscar `**Estado**:` o `Estado:` → uno de: IDLE, ARTEFACTOS, TICKETS, PLAN, IMPLEMENTACION, EVIDENCIA, COMMIT, COMPLETADO)
+   - **Change** activo (buscar `**Change**:` o `Change:`)
+   - **Ticket activo** (buscar `**Ticket activo**:`)
+   - **Tickets** de la tabla (filas que matchean `| PROJ-123 | título | ...`)
+3. Si el estado parseado no es válido → usar `IDLE`
+4. Generar `.ai-internal/pipeline-state.json`:
+
+```json
+{
+  "state": "{estado_parseado}",
+  "change": "{change_o_null}",
+  "activeTicket": "{ticket_activo_o_null}",
+  "tickets": [
+    {"id": "{ticket_id}", "title": "{titulo}", "qaTransition": null}
+  ],
+  "mcpAvailable": true,
+  "log": [
+    {
+      "timestamp": "{fecha_ISO}",
+      "action": "MIGRATED_FROM_TRACKER_MD",
+      "detail": "Estado migrado desde pipeline-tracker.md por upgrade V{from} → V{to}"
+    }
+  ]
+}
+```
+
+5. Hacer backup del tracker viejo:
+```bash
+mv .ai-internal/pipeline-tracker.md .ai-internal/pipeline-tracker.md.bak
+```
+
+6. Mostrar: "Migrado pipeline: {estado} (change: {change}, tickets: {N})"
+
+Si `.ai-internal/pipeline-state.json` ya existe: no hacer nada (ya fue migrado o creado por el MCP server).
+
+Si no existe `pipeline-tracker.md` ni `pipeline-state.json`: crear estado IDLE:
+```json
+{
+  "state": "IDLE",
+  "change": null,
+  "activeTicket": null,
+  "tickets": [],
+  "mcpAvailable": true,
+  "log": []
+}
 ```
 
 #### Paso E: Actualizar metadata
