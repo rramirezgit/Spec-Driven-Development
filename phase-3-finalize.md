@@ -477,12 +477,13 @@ Agregar al checklist de verificación de Fase 7: "sdd_check_config responde OK".
 
 ### 7.1 — Crear metadata de bootstrap
 
-```bash
-cat > .bootstrap-meta.json << 'EOF'
+Crear `.bootstrap-meta.json` con estos valores (reemplazar TODOS los placeholders con valores reales):
+
+```json
 {
   "bootstrap_version": "4.2",
-  "created_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-  "openspec_version": "$(openspec --version 2>/dev/null)",
+  "created_at": "{fecha_actual_ISO8601}",
+  "openspec_version": "{version_openspec}",
   "project_name": "{nombre}",
   "project_type": "{tipo}",
   "framework": "{framework}",
@@ -495,8 +496,11 @@ cat > .bootstrap-meta.json << 'EOF'
   "protected_files": [],
   "previous_version": "{version_previa_o_null}"
 }
-EOF
 ```
+
+Para obtener los valores dinámicos:
+- `{fecha_actual_ISO8601}`: usar `new Date().toISOString()` o equivalente (formato: `2024-01-15T12:00:00.000Z`)
+- `{version_openspec}`: ejecutar `openspec --version` y capturar la salida
 
 > Reemplazá los valores con los datos reales del perfil antes de escribir el archivo.
 
