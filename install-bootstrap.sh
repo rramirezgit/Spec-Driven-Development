@@ -167,21 +167,78 @@ else
   echo "  ⚠️  MCP server no descargado — se compilará en /bootstrap"
 fi
 
+# ── Detectar upgrade pendiente ─────────────────
+# Extraer versión del bootstrap.md recién descargado (ej: "V4.2" → "4.2")
+NEW_VERSION=""
+if [ -f .claude/commands/bootstrap.md ]; then
+  NEW_VERSION=$(grep -o 'V[0-9][0-9]*\.[0-9][0-9]*' .claude/commands/bootstrap.md | head -1 | sed 's/^V//')
+fi
+
+# Leer versión actual del proyecto (si existe .bootstrap-meta.json)
+CURRENT_VERSION=""
+if [ -f .bootstrap-meta.json ]; then
+  CURRENT_VERSION=$(grep -o '"bootstrap_version"[[:space:]]*:[[:space:]]*"[^"]*"' .bootstrap-meta.json | head -1 | cut -d'"' -f4)
+fi
+
+UPGRADE_PENDING=false
+
+if [ -n "$CURRENT_VERSION" ] && [ -n "$NEW_VERSION" ] && [ "$CURRENT_VERSION" != "$NEW_VERSION" ]; then
+  UPGRADE_PENDING=true
+fi
+
+if [ "$UPGRADE_PENDING" = true ]; then
+  FROM_VERSION="${CURRENT_VERSION:-unknown}"
+  TO_VERSION="${NEW_VERSION:-unknown}"
+
+  # Construir lista de archivos actualizados
+  FILES_UPDATED="["
+  for ENTRY in "${FILES[@]}"; do
+    DEST="${ENTRY##*|}"
+    FILES_UPDATED="${FILES_UPDATED}\"${DEST}\","
+  done
+  FILES_UPDATED="${FILES_UPDATED%,}]"
+
+  cat > .ai-internal/.upgrade-pending << UPGEOF
+{
+  "from_version": "${FROM_VERSION}",
+  "to_version": "${TO_VERSION}",
+  "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+  "files_updated": ${FILES_UPDATED}
+}
+UPGEOF
+
+  echo ""
+  echo "🔄 Upgrade detectado: V${FROM_VERSION} → V${TO_VERSION}"
+  echo "   Archivo: .ai-internal/.upgrade-pending"
+fi
+
 # ── Resultado ────────────────────────────────────
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 echo "  ✅ Instalación completa ($DOWNLOADED archivos)"
 echo ""
-echo "  Ahora abrí Claude Code y escribí:"
-echo ""
-echo "    /bootstrap"
-echo ""
-echo "  Se ejecutan 4 fases (una por cada /bootstrap):"
-echo "    Fase 0-2 → Detecta el proyecto"
-echo "    Fase 3-4 → Crea comandos reusables"
-echo "    Fase 5   → Crea archivos adaptados"
-echo "    Fase 6-7 → Docs base + MCP server + verificación"
+
+if [ "$UPGRADE_PENDING" = true ]; then
+  echo "  🔄 Upgrade pendiente: V${FROM_VERSION} → V${TO_VERSION}"
+  echo ""
+  echo "  Abrí Claude Code y escribí:"
+  echo ""
+  echo "    /bootstrap"
+  echo ""
+  echo "  El bootstrap detectará el upgrade y regenerará"
+  echo "  los archivos adaptados a tu proyecto."
+else
+  echo "  Ahora abrí Claude Code y escribí:"
+  echo ""
+  echo "    /bootstrap"
+  echo ""
+  echo "  Se ejecutan 4 fases (una por cada /bootstrap):"
+  echo "    Fase 0-2 → Detecta el proyecto"
+  echo "    Fase 3-4 → Crea comandos reusables"
+  echo "    Fase 5   → Crea archivos adaptados"
+  echo "    Fase 6-7 → Docs base + MCP server + verificación"
+fi
 echo ""
 echo "  Estructura creada:"
 echo "    .ai-internal/phases/      ← archivos de fase (gitignored)"
