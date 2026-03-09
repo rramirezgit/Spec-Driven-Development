@@ -595,10 +595,11 @@ test -f "docs/evidence/${TICKET_ID}.md" && echo "EVIDENCE_EXISTS" || echo "NO_EV
 - No matching changes → report and stop.
 - **Include docs/ changes**: Si hay archivos nuevos/modificados en `docs/`, incluirlos en el commit.
 
-## 4. Commit message (in English)
-- Subject: short imperative. Optional prefix: `TICKET-123: Add candidate filters`
-- Body: bullet points — what changed and why. Reference ticket IDs.
-- **If docs were updated**: include "Docs: updated {files}" in body
+## 4. Commit message
+**Idioma**: Usar el idioma definido en `AGENTS.md` § Language para commits/docs. Si no hay AGENTS.md, usar español.
+- Subject: short imperative. Optional prefix: `TICKET-ID: Agregar filtros de candidatos`
+- Body: bullet points — qué cambió y por qué. Referenciar ticket IDs.
+- **If docs were updated**: include "Docs: actualizado {files}" in body
 - Never commit: secrets, .env, generated artifacts
 
 ## 5. Commit and push
@@ -612,33 +613,88 @@ gh --version 2>/dev/null || echo "GH_NOT_FOUND"
 ```
 If `gh` not found: show commit summary, suggest manual PR creation, skip to step 7.
 
+- **Idioma del PR**: título y descripción en el mismo idioma que el commit (ver `AGENTS.md` § Language). Si no hay AGENTS.md, usar español.
 - Title: aligned with commit, include ticket ID if applicable
-- Description: summary, ticket link, testing notes
+- Description: resumen, link al ticket, notas de testing
 - **If evidence exists**: add link to evidence file in PR description:
   ```
   ## Evidencia
   Ver: `docs/evidence/{TICKET_ID}.md`
   ```
 
-## 7. Transition ticket
-- If ticket ID identified (from args, branch `feature/<ID>-*`, or commit prefix):
-  1. Get available transitions via ticket tracker MCP
-  2. Find "In Review" / "Ready for QA" (or equivalent)
-  3. Execute transition
-  4. **If evidence exists**: add comment summarizing evidence
-  5. If MCP unavailable: report and skip gracefully
-  6. If transition unavailable: report current status + available transitions
-- No ticket ID → skip silently
+## 7. Transicionar ticket a QA Review (OBLIGATORIO si hay ticket ID)
+
+Si hay ticket ID (de args, branch `feature/<ID>-*`, o prefijo del commit):
+
+### 7.1. Obtener transiciones disponibles
+Usar `getTransitionsForJiraIssue` (o equivalente del tracker MCP) para el ticket.
+
+### 7.2. Buscar la transición a QA
+Buscar (case-insensitive) en las transiciones disponibles alguno de estos nombres:
+- "QA Review", "Ready for QA", "QA"
+- "In Review", "Code Review", "Review"
+- "En Revisión", "Revisión QA", "Revisión de código"
+- "Ready for Review"
+
+Usar la PRIMERA coincidencia encontrada.
+
+### 7.3. Ejecutar transición
+Usar `transitionJiraIssue` (o equivalente) con el ID de la transición encontrada.
+
+### 7.4. Verificar éxito
+Después de ejecutar, verificar que el ticket cambió de estado.
+
+### 7.5. Agregar comentario con evidencia
+Si existe `docs/evidence/{TICKET_ID}.md`:
+```
+✅ Implementación completada — PR #{número}
+
+📝 Evidencia: docs/evidence/{TICKET_ID}.md
+📁 Archivos modificados: {N}
+🧪 Tests: {estado}
+
+Listo para QA.
+```
+
+### 7.6. Si la transición falla
+
+**Si no se encuentra transición compatible**:
+```
+⚠️ TRANSICIÓN PENDIENTE: {TICKET_ID}
+   Estado actual: {estado_actual}
+   Transiciones disponibles: {lista de nombres}
+   Ninguna coincide con QA Review.
+
+   ❗ Acción requerida: mover manualmente a QA Review en el tracker.
+```
+
+**Si el MCP no está disponible**:
+```
+⚠️ TRANSICIÓN PENDIENTE: {TICKET_ID}
+   MCP de tracker no disponible.
+
+   ❗ Acción requerida: mover manualmente a QA Review en el tracker.
+```
+
+**IMPORTANTE**: La falla en la transición NO bloquea el commit/PR (el código ya está subido). Pero SIEMPRE se reporta como acción pendiente.
+
+- No ticket ID → reportar: "Sin ticket ID — no se transicionó ningún ticket"
 - No-git mode → skip entirely
 
-## 8. Summary
-Files committed, scope, PR URL, ticket transition status, evidence status.
+## 8. Resumen
+Archivos commiteados, scope, PR URL, estado de transición del ticket, estado de evidencia.
+
+**El resumen SIEMPRE incluye el estado de la transición**:
+- ✅ Ticket {ID} transicionado a QA Review
+- ⚠️ Ticket {ID} NO transicionado — requiere acción manual
+- ℹ️ Sin ticket ID asociado
 
 # Rules
 - Never `git push --force` without explicit request
 - If push rejected: suggest pull/rebase, never force-push
-- If any external tool (gh, MCP) is unavailable: degrade gracefully, never fail
+- La transición a QA Review es obligatoria — si falla, reportar como acción pendiente
 - Evidence is recommended but not blocking — dev decides
+- Idioma del commit, PR y comentarios: según `AGENTS.md` § Language
 ```
 
 ---
@@ -832,16 +888,16 @@ Senior engineer + QA liaison. Genera evidencia de completitud de un ticket y doc
 técnica cross-team en /docs.
 
 # Arguments
-`$ARGUMENTS` — Ticket ID (ej: PROJ-123), "current" para inferir del branch, o flag `--docs-only`.
-- `PROJ-123` → evidencia completa + doc cross-team
-- `PROJ-123 --docs-only` → solo doc técnica (sin reporte QA)
+`$ARGUMENTS` — Ticket ID (ej: AUTH-123, BACK-45 — el formato depende del proyecto en el tracker), "current" para inferir del branch, o flag `--docs-only`.
+- `TICKET-ID` → evidencia completa + doc cross-team
+- `TICKET-ID --docs-only` → solo doc técnica (sin reporte QA)
 - `--docs-only` (sin ID) → documenta cambios del branch actual
 
 # Process
 
 ## 0. Resolver ticket
 - ID explícito → usar directamente
-- "current" o vacío → inferir de branch name (`feature/PROJ-123-*` → PROJ-123)
+- "current" o vacío → inferir de branch name (`feature/{TICKET-ID}-*` → extraer el ID)
 - Si no se puede inferir y no es `--docs-only` → preguntar
 
 ## 1. Recopilar contexto
@@ -937,6 +993,7 @@ Mostrar al dev:
 - Comentario en ticket (si MCP disponible y no es --docs-only)
 
 # Rules
+- **Idioma**: TODA la evidencia y documentación cross-team se escribe en el idioma definido en `AGENTS.md` § Language para docs. Si no hay AGENTS.md, usar español. Esto incluye: títulos, descripciones, resúmenes, notas para QA, comentarios en tickets.
 - NUNCA inventar endpoints, DTOs o comportamientos que no estén en el código
 - Si algo no se puede inferir: `[POR COMPLETAR — preguntar a {equipo}]`
 - Ejemplos de request/response basados en schemas/tipos REALES del código
@@ -944,6 +1001,7 @@ Mostrar al dev:
 - Usar templates de `documentation-standards.mdc` — no inline templates
 - Si actualiza un archivo existente: solo modificar secciones afectadas, marcar con `> 🆕 Actualizado por {TICKET_ID} ({FECHA})`
 - Degradar graciosamente si MCP no disponible
+- No asumir formato de ticket ID — usar el ID exacto que provee el tracker del proyecto
 ```
 
 ---
