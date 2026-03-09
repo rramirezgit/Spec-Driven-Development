@@ -1,80 +1,219 @@
-# AI Workflow Bootstrap V4.1
+# Spec-Driven Development — Bootstrap V4.1
 
 Sistema de flujos de trabajo asistidos por IA para Claude Code.
+Incluye un MCP server que controla el pipeline de forma programatica (state machine en codigo, no en prompts).
 
-> ⚠️ **Repo privado** — No compartir el contenido de las fases.
+> **Repo privado** — No compartir el contenido de las fases.
 
-## Setup rápido
-
-En cada proyecto nuevo:
-
-```bash
-# Desde la raíz del proyecto
-curl -sO https://raw.githubusercontent.com/TU-ORG/ai-bootstrap/main/install-bootstrap.sh
-chmod +x install-bootstrap.sh
-./install-bootstrap.sh
-```
-
-Luego en Claude Code:
-
-```
-/bootstrap
-```
-
-El sistema ejecuta 4 fases automáticamente (una por invocación de `/bootstrap`).
+---
 
 ## Prerequisitos
 
-- **Claude Code** instalado
-- **openspec-cli** ≥ 0.5.0: `npm install -g openspec-cli`
-- **gh CLI** autenticado: `brew install gh && gh auth login`
-- Acceso de lectura a este repo
+| Herramienta | Instalacion | Para que |
+|---|---|---|
+| **Node.js + npm** | [nodejs.org](https://nodejs.org) | Compilar el MCP server |
+| **Claude Code** | `npm i -g @anthropic-ai/claude-code` | IDE con IA |
+| **openspec-cli** | `npm i -g openspec-cli` | Gestion de specs y changes |
+| **gh CLI** | `brew install gh && gh auth login` | Descargar desde este repo privado |
 
-## Fases
+### Variables de entorno (para integracion Jira)
 
-| Fase | Duración | Qué hace |
-|------|----------|----------|
-| 0-2 | ~3 min | Detecta stack, pregunta lo mínimo, confirma |
-| 3-4 | ~5 min | Crea 10 OPSX commands + 9 AI commands + 1 agente |
-| 5 | ~5 min | Genera archivos adaptados al proyecto (CLAUDE.md, specs, etc.) |
-| 5b-7 | ~3 min | Docs base, OpenSpec init, verificación final |
+```bash
+# Agregar a tu .zshrc o .bashrc
+export JIRA_API_TOKEN=tu_api_token
+export JIRA_EMAIL=tu_email@empresa.com
+```
+
+Sin estas variables el pipeline funciona, pero `sdd_transition_jira` no podra mover tickets a QA Review.
+
+---
+
+## Instalacion desde cero
+
+Para proyectos que **nunca tuvieron bootstrap**:
+
+```bash
+# 1. Ir a la raiz del proyecto
+cd tu-proyecto
+
+# 2. Descargar el installer
+gh api repos/rramirezgit/Spec-Driven-Development/contents/install-bootstrap.sh \
+  -H "Accept: application/vnd.github.raw+json" > install-bootstrap.sh
+
+# 3. Ejecutar (descarga fases + MCP server + compila)
+chmod +x install-bootstrap.sh
+bash install-bootstrap.sh
+
+# 4. Abrir Claude Code y ejecutar bootstrap (4 veces, una por fase)
+/bootstrap
+```
+
+El installer descarga todo, compila el MCP server, y `/bootstrap` genera el `.mcp.json` en la fase final.
+
+---
+
+## Migracion (proyecto con bootstrap anterior)
+
+Para proyectos que **ya hicieron bootstrap con la version prompt** (pipeline-tracker.md):
+
+```bash
+# 1. Ir a la raiz del proyecto
+cd tu-proyecto
+
+# 2. Descargar el script de migracion
+gh api repos/rramirezgit/Spec-Driven-Development/contents/migrate-to-mcp.sh \
+  -H "Accept: application/vnd.github.raw+json" > migrate-to-mcp.sh
+
+# 3. Ejecutar
+chmod +x migrate-to-mcp.sh
+bash migrate-to-mcp.sh
+```
+
+El script hace 5 pasos:
+
+1. Descarga el MCP server a `.ai-internal/mcp-server/`
+2. Ejecuta `npm install && npm run build`
+3. Genera `.mcp.json` con el server configurado
+4. Migra `pipeline-tracker.md` a `pipeline-state.json` (con backup)
+5. Detecta si `menu.md` es viejo y avisa que hay que regenerarlo
+
+### Regenerar menu.md despues de migrar
+
+El script va a decir que `menu.md` necesita actualizarse. Dos opciones:
+
+**Opcion A** (recomendada): Abrir Claude Code y ejecutar `/bootstrap` — regenera todo.
+
+**Opcion B** (rapida): Decirle a Claude:
+> Lee `.ai-internal/phases/phase-2-adapted.md`, busca la seccion de `menu.md` y regenera `.claude/commands/menu.md` con el template nuevo.
+
+---
+
+## Como funciona el MCP server
+
+```
+Claude <-> MCP Server (stdio) <-> pipeline-state.json (local)
+                               <-> Jira REST API (para QA transition)
+```
+
+El MCP server expone 6 herramientas que Claude llama como cualquier otro MCP tool:
+
+| Tool | Que hace |
+|------|----------|
+| `sdd_check_config` | Valida project-profile, cloudId, tracker. Gate obligatorio. |
+| `sdd_get_state` | Lee estado actual + que accion sigue + que comando ejecutar. |
+| `sdd_advance` | Transiciona estado. Rechaza transiciones ilegales con error. |
+| `sdd_register_tickets` | Registra tickets creados en el pipeline. |
+| `sdd_set_active_ticket` | Marca ticket activo (valida que existe en la lista). |
+| `sdd_transition_jira` | Mueve ticket a QA Review via Jira REST API. |
+
+### Transiciones validas (enforced en codigo)
+
+```
+IDLE -> ARTEFACTOS | TICKETS | PLAN
+ARTEFACTOS -> TICKETS
+TICKETS -> PLAN
+PLAN -> IMPLEMENTACION
+IMPLEMENTACION -> EVIDENCIA
+EVIDENCIA -> COMMIT
+COMMIT -> COMPLETADO
+COMPLETADO -> TICKETS | IDLE
+```
+
+Cualquier otra transicion es rechazada con error descriptivo.
+
+### Que controla el MCP vs que controla Claude
+
+| MCP Server (deterministic) | Claude (LLM) |
+|---|---|
+| Estado del pipeline | Ejecutar comandos .md |
+| Validar transiciones | Interactuar con el usuario |
+| Config gate | Crear artefactos (codigo, planes, evidencia) |
+| Registro de tickets | Operaciones git |
+| Persistencia JSON | Decidir que comando ejecutar (segun nextCommand) |
+| Jira REST API | HALT protocol y Skip Audit |
+
+---
+
+## Fases del bootstrap
+
+| Fase | Que hace |
+|------|----------|
+| 0-2 | Detecta stack, pregunta lo minimo, confirma perfil |
+| 3-4 | Crea 10 OPSX commands + 9 AI commands + 1 agente |
+| 5 | Genera archivos adaptados (CLAUDE.md, specs, menu.md) |
+| 6-7 | Docs base, OpenSpec init, MCP config, verificacion |
+
+---
 
 ## Estructura del repo
 
 ```
-ai-bootstrap/
-├── phases/
-│   ├── phase-0-detect.md        # Detección + preguntas + confirmación
-│   ├── phase-1-reusables.md     # Dirs + archivos reusables
-│   ├── phase-2-adapted.md       # Archivos adaptados al proyecto
-│   └── phase-3-finalize.md      # Docs base + OpenSpec + verificación
-├── bootstrap.md                 # Comando orquestador (se copia a .claude/commands/)
-├── install-bootstrap.sh         # Script de instalación
-└── README.md
+Spec-Driven-Development/
+├── phase-0-detect.md          # Deteccion + preguntas + confirmacion
+├── phase-1-reusables.md       # Dirs + archivos reusables
+├── phase-2-adapted.md         # Archivos adaptados (incluye menu.md template)
+├── phase-3-finalize.md        # Docs + OpenSpec + MCP config + verificacion
+├── bootstrap.md               # Comando orquestador (/bootstrap)
+├── install-bootstrap.sh       # Installer para proyectos nuevos
+├── migrate-to-mcp.sh          # Migracion para proyectos existentes
+└── mcp-server/                # MCP server del pipeline
+    ├── package.json
+    ├── tsconfig.json
+    └── src/
+        ├── types.ts           # Enums, interfaces, transiciones validas
+        ├── config.ts          # Carga y validacion de project-profile
+        ├── pipeline.ts        # State machine (load, save, advance)
+        ├── jira.ts            # Jira REST API (transition, comment)
+        └── index.ts           # Server MCP con 6 tools
 ```
 
-## Qué se instala en el proyecto
+## Que se instala en el proyecto
 
 ```
 proyecto/
-├── .ai-internal/           ← gitignored, archivos de bootstrap
-│   ├── phases/             ← las 4 fases (no se comparten)
-│   └── project-profile.md  ← perfil generado (estado entre fases)
+├── .ai-internal/                  <- gitignored
+│   ├── phases/                    <- las 4 fases de bootstrap
+│   ├── project-profile.md         <- perfil detectado
+│   ├── pipeline-state.json        <- estado del pipeline (MCP)
+│   └── mcp-server/                <- MCP server compilado
+│       ├── src/
+│       ├── dist/                  <- JS compilado
+│       ├── package.json
+│       └── node_modules/
+├── .mcp.json                      <- config MCP para Claude Code
 ├── .claude/commands/
-│   └── bootstrap.md        ← el comando /bootstrap
+│   ├── bootstrap.md
+│   └── menu.md                    <- orquestador (usa MCP tools)
 └── ... (lo que genera el bootstrap)
 ```
 
-## Actualizar versión
+---
 
-1. Editar los archivos de fase en este repo
-2. Push a main
-3. En cada proyecto: `./install-bootstrap.sh` de nuevo (sobreescribe)
+## Actualizar version
+
+```bash
+# 1. Editar archivos en este repo y pushear
+# 2. En cada proyecto:
+bash install-bootstrap.sh    # sobreescribe fases + recompila MCP server
+```
+
+---
 
 ## Troubleshooting
 
-**"PHASES_NOT_INSTALLED"** → Correr `./install-bootstrap.sh` primero
+**"PHASES_NOT_INSTALLED"** — Ejecutar `install-bootstrap.sh`
 
-**Fase X falló a mitad** → Correr `/bootstrap` de nuevo, detecta automáticamente dónde quedó
+**Fase X fallo a mitad** — Ejecutar `/bootstrap` de nuevo, detecta donde quedo
 
-**Quiero empezar de cero** → `/bootstrap` → elegir "Empezar de cero"
+**MCP server no responde** — Verificar que esta compilado:
+```bash
+ls .ai-internal/mcp-server/dist/index.js
+# Si no existe:
+cd .ai-internal/mcp-server && npm install && npm run build
+```
+
+**sdd_check_config falla** — Verificar que existe `.ai-internal/project-profile.md` con cloudId y tracker
+
+**sdd_transition_jira falla** — Verificar `JIRA_API_TOKEN` y `JIRA_EMAIL` en env vars
+
+**Quiero empezar de cero** — `/bootstrap` y elegir "Empezar de cero"
