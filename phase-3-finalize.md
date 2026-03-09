@@ -585,13 +585,8 @@ test -f .ai-internal/mcp-server/dist/index.js && echo "✅ sdd-pipeline MCP serv
 test -f .mcp.json && echo "✅ .mcp.json configurado" || echo "❌ .mcp.json faltante"
 
 echo ""
-echo "=== JIRA IDENTITY ==="
-if [ -f .claude/settings.local.json ] && grep -q "mcp.atlassian.com" .claude/settings.local.json 2>/dev/null; then
-  echo "✅ .claude/settings.local.json — identidad Jira local configurada"
-  grep -q '.claude/settings.local.json' .gitignore 2>/dev/null && echo "✅ .gitignore protege settings.local.json" || echo "⚠️  .claude/settings.local.json NO está en .gitignore — agregar para proteger credenciales"
-else
-  echo "ℹ️  Sin identidad Jira local — usando MCP cloud de Atlassian"
-fi
+echo "=== JIRA MCP ==="
+(claude mcp list 2>/dev/null || echo "") | grep -i "atlassian\|jira" && echo "✅ MCP Atlassian conectado" || echo "⚠️  MCP Atlassian no detectado — verificar configuración en Claude Code Settings → MCP Servers"
 
 echo ""
 echo "=== RESUMEN ==="
@@ -615,7 +610,7 @@ echo "Si todo está ✅: el sistema está listo."
 - [ ] `.ai-internal/mcp-server/dist/index.js` existe (MCP server compilado)
 - [ ] `sdd_check_config` responde OK (llamar la herramienta MCP para verificar)
 - [ ] Si re-ejecución: backups creados en `.bootstrap-backup/`
-- [ ] Si identidad Jira local: `.claude/settings.local.json` existe con auth y `.gitignore` lo protege
+- [ ] MCP Atlassian conectado y autenticado
 - [ ] `docs/` estructura creada (api/, evidence/, assets/)
 - [ ] `docs/README.md` tiene contenido base (no vacío)
 - [ ] `docs/evidence/README.md` tiene convenciones

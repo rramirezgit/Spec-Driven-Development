@@ -78,11 +78,10 @@ El bootstrap detecta automaticamente el upgrade y entra en **Modo Upgrade**:
 
 | Cambio | Impacto |
 |--------|---------|
-| Identidad Jira por proyecto | Paso 0.0d: email + API token → `.claude/settings.local.json` (gitignored) |
-| Validacion de credenciales | curl test antes de guardar, retry si falla |
+| Verificacion MCP Atlassian | Paso 0.0d: confirma que el MCP esta autenticado (ya no pide email/token manual) |
 | Screenshot en `/evidence` | Paso 3b: Chrome DevTools o screenshot manual para cambios frontend |
 | Screenshot inline en evidencia | QA ve el screenshot directo en GitHub |
-| Verificacion Jira identity | Fase 7 chequea `.claude/settings.local.json` y `.gitignore` |
+| Verificacion Jira MCP | Fase 7 chequea que el MCP Atlassian este conectado |
 
 ### Que cambio en V4.2
 

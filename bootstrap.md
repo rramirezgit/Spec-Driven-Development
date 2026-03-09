@@ -113,15 +113,11 @@ test -f ai-specs/specs/base-standards.mdc && echo "BASE_STANDARDS=EXISTS" || ech
 test -f .ai-internal/pipeline-tracker.md && echo "PIPELINE_TRACKER_LEGACY=EXISTS" || echo "PIPELINE_TRACKER_LEGACY=NOT_FOUND"
 test -f .ai-internal/pipeline-state.json && echo "PIPELINE_STATE_JSON=EXISTS" || echo "PIPELINE_STATE_JSON=MISSING"
 
-# Jira identity (V4.3+)
+# Jira MCP (V4.3+)
 echo ""
-echo "=== JIRA IDENTITY ==="
-if [ -f .claude/settings.local.json ] && grep -q "mcp.atlassian.com" .claude/settings.local.json 2>/dev/null; then
-  echo "JIRA_IDENTITY=CONFIGURED"
-else
-  echo "JIRA_IDENTITY=NOT_CONFIGURED"
-fi
-grep -i "Jira User Email" .ai-internal/project-profile.md 2>/dev/null | grep -v "^#.*:$" | grep -v ": *$" && echo "JIRA_EMAIL_IN_PROFILE=true" || echo "JIRA_EMAIL_IN_PROFILE=false"
+echo "=== JIRA MCP ==="
+# El MCP de Atlassian se valida en el paso 0.0c/0.0d — aquí solo verificamos que siga funcional
+(claude mcp list 2>/dev/null || echo "") | grep -i "atlassian\|jira" && echo "JIRA_MCP=CONNECTED" || echo "JIRA_MCP=NOT_CONNECTED"
 ```
 
 Construir dos listas:
@@ -140,7 +136,7 @@ Construir dos listas:
 | `DOC_STANDARDS` | `ai-specs/specs/documentation-standards.mdc` no existe | V4.1 |
 | `BASE_STANDARDS` | `ai-specs/specs/base-standards.mdc` no existe | V4 |
 | `PIPELINE_MIGRATE` | `pipeline-tracker.md` existe (legacy) y `pipeline-state.json` no | pre-V4.3 |
-| `JIRA_IDENTITY` | `.claude/settings.local.json` no tiene config Atlassian (identidad Jira local) | V4.3 |
+| `JIRA_MCP` | MCP de Atlassian no conectado (verificar config) | V4.3 |
 
 ### 0b.4 — Pedir confirmacion al usuario
 
@@ -174,7 +170,7 @@ Componentes nuevos que se crean (no existían en V{from_version}):
   {si DOC_STANDARDS:} 🆕 ai-specs/specs/documentation-standards.mdc
   {si BASE_STANDARDS:} 🆕 ai-specs/specs/base-standards.mdc
   {si PIPELINE_MIGRATE:} 🔄 pipeline-tracker.md → pipeline-state.json (migración de estado)
-  {si JIRA_IDENTITY:}   🔑 Identidad Jira por proyecto (se preguntará email + API token)
+  {si JIRA_MCP:}         ⚠️ MCP Atlassian no conectado (verificar configuración)
 
 Archivos que NO se tocan:
   🔒 .ai-internal/project-profile.md
@@ -359,19 +355,25 @@ Si no existe `pipeline-tracker.md` ni `pipeline-state.json`: crear estado IDLE:
 }
 ```
 
-##### D.7 — Gap `JIRA_IDENTITY`: Configurar identidad Jira por proyecto
+##### D.7 — Gap `JIRA_MCP`: Verificar MCP Atlassian conectado
 
-Si `JIRA_IDENTITY=NOT_CONFIGURED`:
+Si `JIRA_MCP=NOT_CONNECTED`:
 
-Ejecutar las instrucciones del **paso 0.0d** de `.ai-internal/phases/phase-0-detect.md`.
+Mostrar advertencia pero **no bloquear** el upgrade:
 
-Esto es un paso **interactivo** — pregunta al usuario:
-1. ¿Querés configurar identidad Jira local? (Sí / No)
-2. Si sí: email + API token → valida → crea `.claude/settings.local.json` → gitignore
+```
+⚠️ MCP de Atlassian no detectado.
+   Sin el MCP no se pueden crear ni gestionar tickets desde Claude Code.
 
-Si el usuario elige "No": marcar como resuelto y continuar.
+   Para configurarlo:
+   1. Abrí Claude Code Settings → MCP Servers
+   2. Agregá el MCP de Atlassian
+   3. Autenticá con tu cuenta
 
-> **Nota**: A diferencia de otros gaps que son auto-creados, este requiere input del usuario. Si el usuario cancela, el upgrade continúa normalmente.
+   El upgrade continúa normalmente — configurá el MCP cuando puedas.
+```
+
+Si `JIRA_MCP=CONNECTED`: no hacer nada (ya está funcional).
 
 #### Paso E: Actualizar metadata
 
