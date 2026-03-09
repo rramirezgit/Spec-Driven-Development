@@ -7,7 +7,7 @@ set -e
 # =============================================================
 
 # ⚙️ CONFIGURACIÓN — misma que install-bootstrap.sh
-REPO="tu-org/ai-bootstrap"          # ← tu repo privado en GitHub
+REPO="rramirezgit/Spec-Driven-Development"
 BRANCH="main"
 # =============================================================
 
