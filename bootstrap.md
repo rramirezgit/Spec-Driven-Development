@@ -51,7 +51,15 @@ Parsear del `.upgrade-pending`:
 - `files_updated`: lista de archivos descargados
 
 Parsear del `project-profile.md`:
-- Tipo de proyecto, framework, tracker, etc. (todo lo necesario para regenerar archivos adaptados)
+- Tipo de proyecto, framework, tracker, nombre, idiomas, MCPs detectados, etc.
+
+**Si `NO_PROFILE`**: El proyecto no tiene profile (probablemente nunca completó Fase 0). En este caso, DETENER y mostrar:
+```
+❌ No se encontró .ai-internal/project-profile.md
+   El upgrade necesita el perfil del proyecto para regenerar archivos adaptados.
+   Ejecutá /bootstrap sin upgrade para completar la configuración inicial.
+```
+Eliminar `.ai-internal/.upgrade-pending` y DETENER.
 
 ### 0b.2 — Leer changelog
 
@@ -60,9 +68,9 @@ echo "=== CHANGELOG ==="
 head -35 .ai-internal/phases/phase-0-detect.md
 ```
 
-Parsear las líneas que empiezan con `> -` del bloque `Changelog V{from} → V{to}` para extraer los cambios relevantes.
+Parsear las líneas que empiezan con `> -` del bloque `Changelog V{from} → V{to}` para extraer los cambios relevantes. Si hay múltiples bloques de changelog (ej: V3→V4, V4→V4.1, V4.1→V4.2), incluir TODOS los que apliquen entre `from_version` y `to_version`.
 
-### 0b.3 — Detectar archivos modificados manualmente
+### 0b.3 — Detectar archivos modificados manualmente + gaps de infraestructura
 
 ```bash
 echo "=== MANUAL MODIFICATIONS ==="
@@ -71,12 +79,52 @@ if [ -f .bootstrap-meta.json ]; then
   find .claude/commands/ -name "menu.md" -newer .bootstrap-meta.json 2>/dev/null && echo "menu.md (modified)" || true
   find ai-specs/.commands/ -name "*.md" -newer .bootstrap-meta.json 2>/dev/null | while read f; do echo "$(basename "$f") (modified)"; done
   test -f CLAUDE.md && [ CLAUDE.md -nt .bootstrap-meta.json ] && echo "CLAUDE.md (modified)" || true
+  test -f ai-specs/AI-WORKFLOW-PLAYBOOK.md && [ ai-specs/AI-WORKFLOW-PLAYBOOK.md -nt .bootstrap-meta.json ] && echo "AI-WORKFLOW-PLAYBOOK.md (modified)" || true
 fi
+
+echo ""
+echo "=== INFRASTRUCTURE GAP DETECTION ==="
+# MCP Server pipeline
+test -f .mcp.json && echo "MCP_JSON=EXISTS" || echo "MCP_JSON=MISSING"
+test -f .mcp.json && grep -q "sdd-pipeline" .mcp.json 2>/dev/null && echo "SDD_PIPELINE_CONFIGURED=true" || echo "SDD_PIPELINE_CONFIGURED=false"
+test -f .ai-internal/mcp-server/dist/index.js && echo "MCP_SERVER_COMPILED=true" || echo "MCP_SERVER_COMPILED=false"
+
+# Docs structure
+test -d docs && echo "DOCS_DIR=EXISTS" || echo "DOCS_DIR=MISSING"
+test -f docs/README.md && echo "DOCS_README=EXISTS" || echo "DOCS_README=MISSING"
+test -f docs/api/README.md && echo "DOCS_API=EXISTS" || echo "DOCS_API=MISSING"
+test -f docs/evidence/README.md && echo "DOCS_EVIDENCE=EXISTS" || echo "DOCS_EVIDENCE=MISSING"
+test -f docs/assets/README.md && echo "DOCS_ASSETS=EXISTS" || echo "DOCS_ASSETS=MISSING"
+
+# AI Workflow Playbook
+test -f ai-specs/AI-WORKFLOW-PLAYBOOK.md && echo "PLAYBOOK=EXISTS" || echo "PLAYBOOK=MISSING"
+
+# OpenSpec
+test -d .claude/skills && ls .claude/skills/ 2>/dev/null | grep -q "openspec" && echo "OPENSPEC_SKILLS=EXISTS" || echo "OPENSPEC_SKILLS=MISSING"
+test -f openspec/config.yaml && echo "OPENSPEC_CONFIG=EXISTS" || echo "OPENSPEC_CONFIG=MISSING"
+
+# Specs
+test -f ai-specs/specs/documentation-standards.mdc && echo "DOC_STANDARDS=EXISTS" || echo "DOC_STANDARDS=MISSING"
+test -f ai-specs/specs/base-standards.mdc && echo "BASE_STANDARDS=EXISTS" || echo "BASE_STANDARDS=MISSING"
 ```
 
-Construir lista `ARCHIVOS_MODIFICADOS_MANUALMENTE`.
+Construir dos listas:
 
-### 0b.4 — Pedir confirmación al usuario
+**`ARCHIVOS_MODIFICADOS_MANUALMENTE`**: archivos que el usuario editó después del último bootstrap.
+
+**`GAPS_INFRAESTRUCTURA`**: componentes que NO existen y deben crearse. Cada gap tiene un tipo:
+
+| Gap | Condición | Desde versión |
+|-----|-----------|---------------|
+| `MCP_JSON` | `.mcp.json` no existe o no tiene `sdd-pipeline` | V4.2 |
+| `MCP_SERVER` | `.ai-internal/mcp-server/dist/index.js` no existe | V4.2 |
+| `DOCS_STRUCTURE` | `docs/` no existe o le faltan archivos base | V4.1 |
+| `PLAYBOOK` | `ai-specs/AI-WORKFLOW-PLAYBOOK.md` no existe | V4 |
+| `OPENSPEC_SKILLS` | `.claude/skills/openspec-*/` no existen | V4 |
+| `DOC_STANDARDS` | `ai-specs/specs/documentation-standards.mdc` no existe | V4.1 |
+| `BASE_STANDARDS` | `ai-specs/specs/base-standards.mdc` no existe | V4 |
+
+### 0b.4 — Pedir confirmacion al usuario
 
 Usá AskUserQuestion (single_select) con este formato:
 
@@ -89,18 +137,31 @@ Cambios en esta versión:
   ...
 
 Archivos que se regeneran:
+  ✏️  .claude/commands/opsx/ (10 comandos)
+  ✏️  ai-specs/.commands/ (9 comandos + 1 agente)
   ✏️  .claude/commands/menu.md
   ✏️  ai-specs/.commands/develop-{tipo}.md
   ✏️  ai-specs/.commands/plan-{tipo}-ticket.md
   ✏️  ai-specs/.commands/enrich-ticket.md
   ✏️  .claude/commands/create-{tracker}-tickets.md
-  🔧 .ai-internal/mcp-server/ (recompilado si cambió)
   📝 .bootstrap-meta.json (versión actualizada)
+
+{si hay GAPS_INFRAESTRUCTURA, mostrar esta sección:}
+Componentes nuevos que se crean (no existían en V{from_version}):
+  {si MCP_JSON:}      🆕 .mcp.json (configuración sdd-pipeline)
+  {si MCP_SERVER:}    🆕 MCP server compilado (.ai-internal/mcp-server/dist/)
+  {si DOCS_STRUCTURE:} 🆕 docs/ (estructura base con contenido)
+  {si PLAYBOOK:}      🆕 ai-specs/AI-WORKFLOW-PLAYBOOK.md (guía completa)
+  {si OPENSPEC_SKILLS:} 🆕 .claude/skills/openspec-*/ (via openspec init)
+  {si DOC_STANDARDS:} 🆕 ai-specs/specs/documentation-standards.mdc
+  {si BASE_STANDARDS:} 🆕 ai-specs/specs/base-standards.mdc
 
 Archivos que NO se tocan:
   🔒 .ai-internal/project-profile.md
   🔒 CLAUDE.md (si fue editado manualmente)
-  🔒 ai-specs/specs/*.mdc (si fueron editados)
+  🔒 ai-specs/specs/{tipo}-standards.mdc (si fue editado)
+  🔒 openspec/config.yaml (si existe)
+
 {si hay archivos modificados manualmente:}
   ⚠️  Archivos modificados manualmente detectados:
       {lista} → se hará backup antes de sobreescribir
@@ -147,29 +208,105 @@ Leer `.ai-internal/phases/phase-2-adapted.md` y usar los datos del `project-prof
 - `ai-specs/.commands/plan-{tipo}-ticket.md`
 - `ai-specs/.commands/enrich-ticket.md`
 - `.claude/commands/create-{tracker}-tickets.md`
+- `ai-specs/specs/base-standards.mdc` (si gap `BASE_STANDARDS`)
+- `ai-specs/specs/documentation-standards.mdc` (si gap `DOC_STANDARDS`)
 
 **NO re-preguntar datos del proyecto** — usar el profile existente.
 
-#### Paso D: Actualizar metadata
+#### Paso D: Rellenar gaps de infraestructura
+
+Este paso detecta componentes que no existían en la versión anterior del proyecto y los crea. **Solo se ejecutan los gaps detectados en 0b.3** — si el componente ya existe, se salta.
+
+##### D.1 — Gap `DOCS_STRUCTURE`: Crear estructura /docs
+
+Si `docs/` no existe o le faltan archivos base:
+
+Leer las instrucciones del paso 5b de `.ai-internal/phases/phase-3-finalize.md` y ejecutarlas usando los datos del `project-profile.md`. Esto crea:
+- `docs/README.md` — índice con estructura del proyecto
+- `docs/api/README.md` — convenciones API
+- `docs/evidence/README.md` — estándares de evidencia
+- `docs/assets/README.md` — convenciones de diagramas
+- `docs/components/README.md` (solo si frontend)
+
+**Solo crear archivos que no existan** — si `docs/README.md` ya existe, no sobreescribirlo.
+
+##### D.2 — Gap `PLAYBOOK`: Crear AI-WORKFLOW-PLAYBOOK.md
+
+Si `ai-specs/AI-WORKFLOW-PLAYBOOK.md` no existe:
+
+Leer las instrucciones del `AI-WORKFLOW-PLAYBOOK.md` template en `.ai-internal/phases/phase-3-finalize.md` y generarlo con los datos del `project-profile.md`. Incluye las 10 secciones: Vista general, Estructura, Flujos, Comandos, Agentes, Integraciones, Standards, Replicar, Ampliar, Bootstrap.
+
+Si ya existe pero la versión es antigua (no menciona `sdd-pipeline` ni `/evidence`): regenerarlo con backup del anterior.
+
+##### D.3 — Gap `MCP_SERVER`: Compilar MCP server
+
+Si `.ai-internal/mcp-server/dist/index.js` no existe pero `.ai-internal/mcp-server/package.json` sí:
 
 ```bash
-# Leer .bootstrap-meta.json actual, actualizar la versión
+cd .ai-internal/mcp-server && npm install --silent 2>/dev/null && npm run build --silent 2>/dev/null
+cd - >/dev/null
+test -f .ai-internal/mcp-server/dist/index.js && echo "MCP_COMPILED=OK" || echo "MCP_COMPILED=FAIL"
 ```
 
+Si la compilación falla, mostrar instrucciones manuales pero **no detener** el upgrade.
+
+##### D.4 — Gap `MCP_JSON`: Configurar .mcp.json
+
+Si `.mcp.json` no existe:
+```json
+{
+  "mcpServers": {
+    "sdd-pipeline": {
+      "command": "node",
+      "args": [".ai-internal/mcp-server/dist/index.js"],
+      "env": {
+        "JIRA_API_TOKEN": "${JIRA_API_TOKEN}",
+        "JIRA_EMAIL": "${JIRA_EMAIL}"
+      }
+    }
+  }
+}
+```
+
+Si `.mcp.json` existe pero no tiene `sdd-pipeline`: leer el archivo, parsear el JSON, agregar `sdd-pipeline` al objeto `mcpServers` sin modificar los servers existentes, y escribir el archivo actualizado.
+
+##### D.5 — Gap `OPENSPEC_SKILLS`: Inicializar OpenSpec skills
+
+Si `.claude/skills/openspec-*/` no existen y `openspec` está disponible:
+
+```bash
+command -v openspec >/dev/null 2>&1 && echo "OPENSPEC_AVAILABLE" || echo "OPENSPEC_NOT_FOUND"
+```
+
+Si disponible:
+```bash
+openspec init
+```
+
+Si no disponible: mostrar aviso pero no detener:
+```
+⚠️ openspec-cli no encontrado. Las skills de OpenSpec no se crearon.
+   Instalá con: npm install -g openspec-cli
+   Luego ejecutá: openspec init
+```
+
+#### Paso E: Actualizar metadata
+
 Actualizar `.bootstrap-meta.json`:
-- `bootstrap_version` → nueva versión (V4.2)
+- `bootstrap_version` → nueva versión (4.2)
 - `previous_version` → versión anterior
-- Mantener todos los demás campos intactos (project_name, project_type, etc.)
+- Mantener todos los demás campos intactos (`project_name`, `project_type`, `framework`, `tracker`, `mcps_detected`, etc.)
+- Si faltan campos nuevos (ej: `mcps_detected` no existía en versiones anteriores), agregarlos con los valores del `project-profile.md`
 
-#### Paso E: Recompilar MCP server (si es necesario)
+#### Paso F: Recompilar MCP server (si fue actualizado y ya estaba compilado)
 
-Si `.ai-internal/mcp-server/` fue actualizado:
+Si el MCP server ya estaba compilado antes del upgrade (no era un gap) y los archivos fuente fueron actualizados:
 ```bash
 cd .ai-internal/mcp-server && npm install --silent 2>/dev/null && npm run build --silent 2>/dev/null
 cd - >/dev/null
 ```
 
-#### Paso F: Limpiar y mostrar resumen
+#### Paso G: Limpiar y mostrar resumen
 
 ```bash
 rm -f .ai-internal/.upgrade-pending
@@ -189,12 +326,24 @@ Archivos regenerados:
   ✅ ai-specs/.commands/enrich-ticket.md
   ✅ .claude/commands/create-{tracker}-tickets.md
   ✅ .bootstrap-meta.json (V{to_version})
-  {si MCP recompilado:} ✅ MCP server recompilado
+
+{si hubo gaps rellenados:}
+Componentes nuevos creados:
+  {por cada gap rellenado:}
+  🆕 {descripción del componente}
+
+{si MCP recompilado:}
+  ✅ MCP server recompilado
 
 Preservados:
   🔒 .ai-internal/project-profile.md
   🔒 CLAUDE.md
+  🔒 openspec/config.yaml
   {si hubo backups:} 📦 Backups en: {BACKUP_DIR}
+
+{si hubo warnings (ej: openspec no disponible, MCP no compiló):}
+Pendientes (resolver manualmente):
+  ⚠️  {lista de warnings}
 
 El sistema está actualizado. Podés seguir trabajando normalmente.
 ```
@@ -286,4 +435,5 @@ Al terminar la fase, mostrá el mensaje de completitud que indica el archivo y r
 - Si una fase falla a mitad: reportar qué se completó y qué falta
 - Nunca saltear fases
 - Si el usuario pide ejecutar una fase específica: verificar que las anteriores estén completas
-- El Modo Upgrade es una excepción al guardrail de "una sola fase": ejecuta fases 1+2+metadata en una sola invocación porque reutiliza el profile existente
+- El Modo Upgrade es una excepción al guardrail de "una sola fase": ejecuta fases 1+2+gaps+metadata en una sola invocación porque reutiliza el profile existente
+- Los gaps de infraestructura (Paso D) solo crean lo que falta — nunca sobreescriben componentes existentes
