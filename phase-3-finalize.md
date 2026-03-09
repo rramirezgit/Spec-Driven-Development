@@ -432,6 +432,50 @@ openspec init
 
 ---
 
+## FASE 6b: Configurar MCP Server del pipeline
+
+El MCP server `sdd-pipeline` controla la máquina de estados del pipeline de forma programática (reemplaza el pipeline-tracker.md con validaciones en código).
+
+### 6b.1 — Generar `.mcp.json` en la raíz del proyecto
+
+```json
+{
+  "mcpServers": {
+    "sdd-pipeline": {
+      "command": "node",
+      "args": [".ai-internal/mcp-server/dist/index.js"],
+      "env": {
+        "JIRA_API_TOKEN": "${JIRA_API_TOKEN}",
+        "JIRA_EMAIL": "${JIRA_EMAIL}"
+      }
+    }
+  }
+}
+```
+
+> Si ya existe `.mcp.json` con otros servers, **agregar** `sdd-pipeline` al objeto `mcpServers` sin modificar los existentes.
+
+### 6b.2 — Verificar que el MCP server está disponible
+
+Después de generar el `.mcp.json`, verificar:
+
+```bash
+test -f .ai-internal/mcp-server/dist/index.js && echo "MCP_SERVER_OK" || echo "MCP_SERVER_MISSING"
+```
+
+Si `MCP_SERVER_MISSING`: el installer no descargó/compiló el MCP server. Mostrar:
+```
+⚠️ MCP server no encontrado en .ai-internal/mcp-server/dist/index.js
+   Ejecutá: cd .ai-internal/mcp-server && npm install && npm run build
+   O re-ejecutá install-bootstrap.sh para descargar los archivos.
+```
+
+### 6b.3 — Verificar que sdd_check_config responde
+
+Agregar al checklist de verificación de Fase 7: "sdd_check_config responde OK".
+
+---
+
 ## FASE 7: Verificación y metadata
 
 ### 7.1 — Crear metadata de bootstrap
@@ -529,6 +573,11 @@ else
 fi
 
 echo ""
+echo "=== MCP SERVER ==="
+test -f .ai-internal/mcp-server/dist/index.js && echo "✅ sdd-pipeline MCP server compilado" || echo "❌ MCP server no compilado — ejecutar: cd .ai-internal/mcp-server && npm install && npm run build"
+test -f .mcp.json && echo "✅ .mcp.json configurado" || echo "❌ .mcp.json faltante"
+
+echo ""
 echo "=== RESUMEN ==="
 echo "Bootstrap version: $(cat .bootstrap-meta.json | grep -o '"bootstrap_version":"[^"]*"' | cut -d'"' -f4)"
 echo "Si hay placeholders pendientes arriba: corregirlos antes de usar el sistema."
@@ -546,6 +595,9 @@ echo "Si todo está ✅: el sistema está listo."
 - [ ] El nombre del agente (`{tipo}-developer.md`) coincide con el tipo del proyecto
 - [ ] `.bootstrap-meta.json` existe con versión `4.1`
 - [ ] No hay MCP tools hardcoded con prefijos obsoletos
+- [ ] `.mcp.json` existe con `sdd-pipeline` configurado
+- [ ] `.ai-internal/mcp-server/dist/index.js` existe (MCP server compilado)
+- [ ] `sdd_check_config` responde OK (llamar la herramienta MCP para verificar)
 - [ ] Si re-ejecución: backups creados en `.bootstrap-backup/`
 - [ ] `docs/` estructura creada (api/, evidence/, assets/)
 - [ ] `docs/README.md` tiene contenido base (no vacío)

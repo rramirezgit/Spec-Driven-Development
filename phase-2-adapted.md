@@ -101,9 +101,14 @@ Generá este archivo con los valores reales del proyecto detectado:
 - Pattern detection — check existing code first
 
 ## Language
-- Code, comments, commits, docs: **{idioma_tecnico}**
+- Code, comments: **{idioma_tecnico}**
 - UI text, error messages: **{idioma_ui}**
-- Tickets: **{idioma_tickets}**
+- Tickets ({tracker}): **{idioma_tickets}**
+- Commits, PRs (título + descripción): **{idioma_tickets}**
+- Evidencia (`docs/evidence/`): **{idioma_tickets}**
+- Documentación técnica (`docs/`): **{idioma_tickets}**
+
+**Regla**: Evidencia, documentación y PRs van SIEMPRE en el idioma de tickets. Sin excepciones.
 
 ## Naming Conventions
 {tabla_naming_del_proyecto}
@@ -394,7 +399,7 @@ git checkout -b feature/{ID}-{slug}
 {external services, APIs, other tickets}
 
 ## Next Steps
-After implementing: run `/commit` to create PR and transition ticket.
+After implementing this plan, return to `/menu` to continue the pipeline.
 ---
 
 # Rules
@@ -502,226 +507,210 @@ Tabla: ID | Tipo | Título | URL
 
 ```markdown
 Sos el orquestador principal de flujo de trabajo para {nombre}.
-Tu trabajo es **detectar en qué punto del pipeline está el usuario y ejecutar el siguiente paso directamente**. No listás comandos — los ejecutás vos.
+Usás herramientas MCP del server `sdd-pipeline` para controlar el pipeline de forma determinística.
 
-# Regla principal
+# REGLAS (leer antes de CUALQUIER acción)
 
-**NUNCA digas "ahora ejecutá /comando". Ejecutalo vos directamente.** El usuario no debería tener que copiar y pegar comandos. Vos leés las instrucciones del comando y las ejecutás.
+1. **UN paso por invocación.** Después HALT — mostrar resumen y esperar input.
+2. **SIEMPRE empezar llamando `sdd_check_config`.** Si falla → HALT con el error.
+3. **Llamar `sdd_get_state`** para saber en qué estado está el pipeline y qué sigue.
+4. **Ejecutar SOLO el comando que indica `nextCommand`.** No encadenar pasos.
+5. **Al terminar un paso**, llamar `sdd_advance` con el nuevo estado.
+6. **Mostrar resumen** + AskUserQuestion si quiere continuar.
+7. **Si el usuario dice "hacé todo"**: ejecutá solo el siguiente paso, después preguntá de nuevo.
+8. **RECORDATORIO POST-EJECUCIÓN**: Después de ejecutar un subcomando (.md), volvé acá y ejecutá HALT.
 
-"Ejecutar un comando" significa: leer el archivo .md del comando correspondiente (`ai-specs/.commands/` o `.claude/commands/`) y seguir sus instrucciones como si fueras ese agente.
+# Flujo de cada invocación
 
-# Paso 0: Atajo rápido ($ARGUMENTS)
-
-Si el usuario pasa un argumento directo, ir a ese flujo sin menú:
-- "1" / "nuevo" / "feature" → Flujo Feature Nuevo (paso 1)
-- "2" / "ticket" / ID de ticket (ej: "PROJ-123") → Flujo Ticket Existente
-- "3" / "explorar" → Ejecutar flujo de exploración
-- "4" / "code" / "implementar" → Flujo Directo
-- "review" / "pr" → Ejecutar review-pr
-- "test" → Ejecutar test-plan
-- "sprint" / "7" → Flujo Sprint
-- "status" → Mostrar solo el estado del pipeline sin ejecutar nada
-- "evidence" / "evidencia" → Ejecutar evidence directamente
-
-# Paso 1: Detectar estado del pipeline
-
-```bash
-echo "=== PIPELINE STATE ==="
-
-# 1. Changes activos de OpenSpec
-echo "--- OPENSPEC ---"
-ls openspec/changes/ 2>/dev/null | grep -v archive | head -10 || echo "NO_CHANGES"
-
-# 2. Planes técnicos pendientes
-echo "--- PLANES ---"
-ls ai-specs/changes/ 2>/dev/null | grep -v archive | grep -v strategy | head -10 || echo "NO_PLANS"
-
-# 3. Git status
-echo "--- GIT ---"
-git branch --show-current 2>/dev/null || echo "NO_BRANCH"
-git status --short 2>/dev/null | head -10 || echo "CLEAN"
-git log --oneline -1 2>/dev/null || echo "NO_COMMITS"
-
-# 4. Evidencia pendiente
-echo "--- EVIDENCE ---"
-ls docs/evidence/ 2>/dev/null | grep -v README | head -10 || echo "NO_EVIDENCE"
-
-# 5. OpenSpec status del change activo (si hay)
-ACTIVE_CHANGE=$(ls openspec/changes/ 2>/dev/null | grep -v archive | head -1)
-if [ -n "$ACTIVE_CHANGE" ]; then
-  echo "--- ACTIVE CHANGE: $ACTIVE_CHANGE ---"
-  openspec status --change "$ACTIVE_CHANGE" 2>/dev/null || echo "STATUS_UNAVAILABLE"
-fi
+```
+1. sdd_check_config → si error, mostrar y HALT
+2. sdd_get_state → leer state, nextAction, nextCommand
+3. Si IDLE → mostrar menú (7 opciones)
+4. Si no → mostrar estado actual + "Siguiente: {nextAction}"
+5. Ejecutar el comando .md correspondiente (UNO solo)
+6. sdd_advance({nuevo_estado})
+7. HALT con resumen
 ```
 
-# Paso 2: Determinar punto del pipeline
+# Atajo rápido ($ARGUMENTS)
 
-Con la info del paso 1, determiná en qué estado está el usuario. Los estados posibles son:
+Si el usuario pasa un argumento directo, ir a ese flujo sin menú:
+- "1" / "nuevo" / "feature" → Pedir descripción, ejecutar SOLO artefactos
+- "2" / "ticket" / ID de ticket → Ejecutar SOLO enrich-ticket
+- "3" / "explorar" → Ejecutar SOLO exploración
+- "4" / "code" / "implementar" → Pedir ticket/desc, ejecutar SOLO develop
+- "review" / "pr" → Ejecutar SOLO review-pr
+- "test" → Ejecutar SOLO test-plan
+- "sprint" / "7" → Flujo Sprint (ver abajo)
+- "status" → Llamar sdd_get_state y mostrar sin ejecutar nada
+- "evidence" / "evidencia" → Ejecutar SOLO evidence
 
-## Estado A: Nada en curso
-No hay changes, no hay planes, git limpio, no hay branch de feature.
+Para detectar si el argumento es un ID de ticket: cualquier string que contenga letras + guión + números (ej: `AUTH-123`, `BACK-45`, `FE-7`) se trata como ticket ID.
 
-→ Mostrar menú inicial (AskUserQuestion single_select):
+**IMPORTANTE**: Incluso con atajos, SIEMPRE llamar `sdd_check_config` primero.
+
+# Menú (solo cuando state=IDLE)
+
+AskUserQuestion (single_select):
 ```
 ¿Qué querés hacer?
 
-1. 🚀 Feature nuevo — tengo una idea o requerimiento
-2. 🎫 Ticket existente — ya tengo un ticket en {tracker}
-3. 🔍 Explorar — pensar antes de planificar
-4. ⚡ Implementar directo — ya sé qué hacer
-5. 👀 Review PR — revisar un pull request
-6. 🧪 Test plan — generar plan de testing
-7. 🏃 Sprint — planificar varios tickets en paralelo
+1. Feature nuevo — tengo una idea o requerimiento
+2. Ticket existente — ya tengo un ticket en {tracker}
+3. Explorar — pensar antes de planificar
+4. Implementar directo — ya sé qué hacer
+5. Review PR — revisar un pull request
+6. Test plan — generar plan de testing
+7. Sprint — planificar varios tickets en paralelo
 ```
 
-## Estado B: Change creado, sin tickets
-Hay un change en `openspec/changes/` con artefactos, pero no hay tickets creados todavía.
+## Acciones del menú
 
-→ **Ejecutar directamente** la creación de tickets:
-```
-✅ Artefactos listos: {nombre_change}
-   {lista de artefactos creados}
+### Opción 1: Feature nuevo
+Preguntar: "¿Qué querés construir? Describilo brevemente."
+Con la descripción → leer y ejecutar `/opsx:ff`.
+**Después**: `sdd_advance(ARTEFACTOS)` con el nombre del change. **HALT.**
 
-📋 Siguiente paso: crear tickets en {tracker}
+### Opción 2: Ticket existente
+Preguntar: "¿Cuál es el ID del ticket?"
+Con el ID → `sdd_advance(TICKETS)`. Registrar ticket con `sdd_register_tickets`. Leer y ejecutar `/enrich-ticket <ID>`.
+**Después**: `sdd_set_active_ticket(ID)`. **HALT.**
 
-Voy a leer los artefactos y generar los tickets. ¿Procedemos?
-```
-Si confirma → Leer `.claude/commands/create-{tracker}-tickets.md` y ejecutar el flujo pasando el change como argumento.
+### Opción 3: Explorar
+Leer y ejecutar `/opsx:explore`. **HALT después.**
+(No afecta el pipeline — exploración es atómica.)
 
-## Estado C: Tickets creados, sin plan técnico
-Hay tickets referenciados pero no hay planes en `ai-specs/changes/`.
+### Opción 4: Implementar directo
+Preguntar: "¿Ticket ID o descripción?"
+`sdd_advance(PLAN)`. Leer y ejecutar `/develop-{tipo}`.
+**Después**: `sdd_advance(IMPLEMENTACION)`. **HALT.**
 
-→ **Preguntar qué ticket trabajar y ejecutar el plan**:
-```
-📋 Tickets listos. ¿Cuál querés trabajar primero?
-```
-AskUserQuestion con los ticket IDs como opciones (si los conocés del paso anterior), o pedir ID.
-Cuando elija → Leer `ai-specs/.commands/plan-{tipo}-ticket.md` y ejecutar con ese ID.
+### Opción 5: Review PR
+Preguntar: "¿Número de PR o 'current'?"
+Leer y ejecutar `/review-pr`. **HALT después.**
+(No afecta el pipeline — review es atómico.)
 
-## Estado D: Plan técnico listo, sin implementar
-Hay un plan en `ai-specs/changes/{ticket}.md` pero no hay código nuevo (branch sin cambios, o branch no creada).
+### Opción 6: Test plan
+Preguntar: "¿Ticket ID o feature?"
+Leer y ejecutar `/test-plan`. **HALT después.**
+(No afecta el pipeline — test plan es atómico.)
 
-→ **Ejecutar la implementación**:
-```
-📐 Plan técnico listo: ai-specs/changes/{ticket}.md
+### Opción 7: Modo sprint
+Preguntar: "¿IDs de tickets separados por coma, o busco el sprint activo?"
+Lanzar subagentes en paralelo (máximo 5) — SOLO planificación, NUNCA implementación.
+**HALT después**. No elegir ticket para implementar.
 
-Siguiente paso: implementar. Voy a seguir el plan.
-¿Arranco?
-```
-Si confirma → Leer `ai-specs/.commands/develop-{tipo}.md` y ejecutar con el plan como contexto.
+# Estados del pipeline (cuando NO es IDLE)
 
-## Estado E: Código implementado, sin evidencia
-Hay cambios en git (`git status` muestra archivos modificados o commits en un feature branch), pero no hay evidencia en `docs/evidence/` para ese ticket.
+Cuando `sdd_get_state` retorna un estado que no es IDLE, mostrar el estado actual y ofrecer el siguiente paso.
+**En todos los estados**, la última opción de AskUserQuestion debe ser **"Quiero hacer otra cosa"**. Si la elige → `sdd_advance(IDLE)` (solo desde COMPLETADO) o mostrar advertencia de que perderá progreso.
 
-→ **Ejecutar evidencia**:
-```
-✅ Implementación completada ({N} archivos modificados)
+## ARTEFACTOS → crear tickets
+Mostrar artefactos encontrados. Ofrecer crear tickets con `/create-{tracker}-tickets`.
+Después: `sdd_register_tickets([...])` + `sdd_advance(TICKETS)`.
+>>>>>>> 146d180 (Add MCP server for pipeline state machine)
 
-📝 Siguiente paso: generar evidencia y documentación.
-¿Genero la evidencia para {ticket_id}?
-```
-Si confirma → Leer `ai-specs/.commands/evidence.md` y ejecutar con el ticket ID.
+## TICKETS → seleccionar y planificar
+Mostrar tickets con `sdd_get_state`. Pedir selección con AskUserQuestion.
+Después: `sdd_set_active_ticket(ID)` + leer `/plan-{tipo}-ticket` + `sdd_advance(PLAN)`.
 
-## Estado F: Evidencia generada, sin commit/PR
-Hay evidencia en `docs/evidence/` y cambios sin pushear.
+## PLAN → implementar
+Mostrar plan técnico. Ofrecer implementar con `/develop-{tipo}`.
+Después: `sdd_advance(IMPLEMENTACION)`.
 
-→ **Ejecutar commit**:
-```
-📝 Evidencia lista: docs/evidence/{ticket}.md
-   Documentación actualizada: {archivos de docs}
+## IMPLEMENTACION → evidencia
+Mostrar archivos modificados. Ofrecer generar evidencia con `/evidence`.
+Después: `sdd_advance(EVIDENCIA)`.
 
-🚀 Siguiente paso: commit + PR + transicionar ticket.
-¿Procedemos?
-```
-Si confirma → Leer `ai-specs/.commands/commit.md` y ejecutar.
+## EVIDENCIA → commit + PR
+Mostrar evidencia generada. Ofrecer commit con `/commit`.
+Después: `sdd_advance(COMMIT)`.
 
-## Estado G: Todo completado
-Branch mergeada o PR creado. Change archivable.
+## COMMIT → completar
+Intentar `sdd_transition_jira(ticketId)` para mover a QA Review.
+Después: `sdd_advance(COMPLETADO)`.
 
-→ **Ofrecer archivar y siguiente**:
-```
-🎉 Ciclo completado:
-  ✅ Artefactos → ✅ Tickets → ✅ Plan → ✅ Código → ✅ Evidencia → ✅ PR
+## COMPLETADO → siguiente ticket o archivar
+Mostrar resumen del ciclo. Si hay más tickets → ofrecer `sdd_advance(TICKETS)` + `sdd_set_active_ticket(siguiente)`.
+Si no hay más → ofrecer `sdd_advance(IDLE)` (archivar primero con `/opsx:archive`).
 
-¿Qué hacemos?
-```
-AskUserQuestion: "Archivar change y empezar otro" / "Trabajar otro ticket del mismo change" / "Nada por ahora"
+# Protocolo HALT (obligatorio después de CADA paso)
 
-# Paso 3: Ejecutar el sub-flujo elegido
+Después de ejecutar cualquier paso:
 
-## Flujo: Feature Nuevo
-Pipeline completo. Ejecutar paso a paso con confirmación entre cada uno:
-
-1. Preguntar: "¿Qué querés construir? Describilo brevemente."
-2. Con la descripción → ejecutar el flujo de `/opsx:ff` (leer el archivo y seguir instrucciones)
-3. Al terminar artefactos → **automáticamente** pasar a crear tickets (Estado B)
-4. Al terminar tickets → preguntar qué ticket trabajar primero (Estado C)
-5. Al elegir ticket → ejecutar plan técnico (Estado D)
-6. Al terminar plan → ejecutar implementación (Estado E)
-7. Al terminar código → ejecutar evidencia (Estado F)
-8. Al terminar evidencia → ejecutar commit (Estado G)
-
-**Entre cada paso**: mostrar resumen breve de qué se completó y qué viene, pedir confirmación con AskUserQuestion: "Continuar" / "Pausar acá" / "Saltar este paso"
-
-Si elige "Pausar": mostrar resumen de dónde quedó y decir que `/menu` retoma.
-Si elige "Saltar": pasar al siguiente paso con warning de que se salteó.
-
-## Flujo: Ticket Existente
-1. Pedir ID del ticket
-2. Verificar si necesita enriquecimiento → si le falta detalle, ejecutar enrich-ticket
-3. Ejecutar plan técnico
-4. Ejecutar implementación
-5. Ejecutar evidencia
-6. Ejecutar commit
-
-## Flujo: Exploración
-1. Ejecutar el flujo de `/opsx:explore`
-2. Al terminar: "¿Querés capturar esto como change? Puedo crear los artefactos."
-3. Si sí → pasar a Feature Nuevo desde paso 2
-
-## Flujo: Directo
-1. Pedir ticket ID o descripción
-2. Ejecutar implementación directamente
-3. Si tiene ticket → ejecutar evidencia
-4. Ejecutar commit
-
-## Flujo: Review PR
-1. Pedir número de PR o "current"
-2. Ejecutar review-pr
-
-## Flujo: Test Plan
-1. Pedir ticket o feature
-2. Ejecutar test-plan
-
-## Flujo: Sprint
-1. Pedir IDs o buscar sprint activo
-2. Confirmar lista
-3. Lanzar subagentes en paralelo (max 5)
-4. Reportar resultados
-5. Preguntar cuál implementar primero → pasar a Estado D
-
-# Reglas de ejecución
-
-1. **Ejecutá los comandos, no los sugieras.** Leé el .md del comando y seguí las instrucciones.
-2. **Confirmación antes de cada paso**, pero NO con "corré /comando" sino con "¿Arranco con [descripción]?"
-3. **Contexto entre pasos**: cuando termina un paso, pasá el output relevante al siguiente (ej: IDs de tickets creados → plan técnico).
-4. **Si algo falla**: reportá qué falló, ofrecé reintentar o saltar al siguiente paso.
-5. **Si el usuario interrumpe**: registrar dónde quedó. Al volver a correr `/menu`, retomar desde ahí.
-6. **Respuestas cortas entre pasos** — no explicar el sistema, solo mostrar progreso y pedir confirmación.
-7. **Modo sprint**: máximo 5 tickets en paralelo, nunca implementar automáticamente.
-
-# Formato de transición entre pasos
-
-Usá este formato al pasar de un paso al siguiente:
-
+1. Ya llamaste `sdd_advance` — el estado está persistido.
+2. **Mostrar resumen**:
 ```
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-✅ {paso completado}
-→  {qué viene ahora}
+Completado: {qué se hizo}
+Artefactos: {archivos creados o modificados}
+Ticket activo: {activeTicket del state}
+Siguiente disponible: {nextAction del state}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
+3. **AskUserQuestion**: "Continuar con {siguiente}" / "Pausar acá"
 
-AskUserQuestion (single_select): "Continuar" / "Pausar acá"
+**IMPORTANTE**: Solo mencionás el paso inmediato siguiente. NUNCA listés los pasos 3, 4, 5 que vendrán después.
+
+# Protocolo Skip Audit
+
+Si `sdd_advance` rechaza una transición, mostrar:
+```
+PASO SALTADO: {nombre del paso}
+Razón: {error de sdd_advance}
+Alternativa: {qué puede hacer el usuario}
+```
+
+**NUNCA saltear silenciosamente.** Si algo no se hace, el usuario debe saber por qué.
+
+# Referencia rápida de comandos
+| Comando | Descripción |
+|---------|-------------|
+| `/menu` | Este menú — detecta estado y ejecuta siguiente paso |
+| `/opsx:ff` | Nuevo change (fast-forward) |
+| `/opsx:new` | Nuevo change (paso a paso) |
+| `/opsx:continue` | Continuar change |
+| `/opsx:apply` | Implementar tareas |
+| `/opsx:verify` | Verificar implementación |
+| `/opsx:archive` | Archivar change |
+| `/opsx:explore` | Modo exploración |
+| `/create-{tracker}-tickets` | Crear tickets en {tracker} |
+| `/enrich-ticket` | Enriquecer ticket |
+| `/plan-{tipo}-ticket` | Plan técnico |
+| `/develop-{tipo}` | Implementar código |
+| `/commit` | Commit + PR + transición ticket |
+| `/review-pr` | Review de PR |
+| `/test-plan` | Plan de testing |
+| `/evidence` | Evidencia + doc cross-team |
+
+# Herramientas MCP del pipeline
+| Tool | Qué hace |
+|------|----------|
+| `sdd_check_config` | Valida project-profile, cloudId, tracker. Gate obligatorio. |
+| `sdd_get_state` | Lee estado actual + nextAction + nextCommand. |
+| `sdd_advance` | Transiciona estado. Rechaza transiciones ilegales. |
+| `sdd_register_tickets` | Registra tickets creados en el pipeline. |
+| `sdd_set_active_ticket` | Marca ticket activo (valida que existe). |
+| `sdd_transition_jira` | Transiciona ticket a QA Review via Jira REST API. |
+
+# Guardrails
+
+**PROHIBIDO:**
+- Ejecutar más de un comando por invocación de `/menu`
+- Pasar de un paso al siguiente sin HALT + confirmación
+- Saltear `sdd_check_config` al inicio
+- Saltear `sdd_advance` al final de un paso
+- Manipular `.ai-internal/pipeline-state.json` directamente (SIEMPRE usar tools MCP)
+- Asumir un formato de ticket ID (no hardcodear PROJ-, DEV-, etc.)
+- Describir el pipeline completo al usuario
+
+**OBLIGATORIO:**
+- `sdd_check_config` en CADA invocación
+- `sdd_get_state` para saber qué sigue
+- `sdd_advance` después de cada paso completado
+- AskUserQuestion después de CADA paso
+- Incluir "Quiero hacer otra cosa" en estados que no son IDLE
+- Respuestas cortas entre pasos — el foco es el progreso
 ```
 ---
 
@@ -740,9 +729,10 @@ AskUserQuestion (single_select): "Continuar" / "Pausar acá"
 - Pattern detection — check existing code before creating new patterns
 
 ## Language
-- Code, comments, commits, docs: **{idioma_tecnico}**
+- Code, comments: **{idioma_tecnico}**
 - UI text, error messages: **{idioma_ui}**
 - Tickets ({tracker}): **{idioma_tickets}**
+- Commits, PRs, evidencia, documentación (`docs/`): **{idioma_tickets}**
 
 ## Naming Conventions
 {tabla_naming_del_proyecto}
@@ -766,7 +756,11 @@ alwaysApply: true
 # Documentation Standards — {nombre}
 
 ## Rule #1: Language
-ALL technical documentation, code comments, function descriptions: **{idioma_tecnico}**.
+- Code comments, function descriptions: **{idioma_tecnico}**.
+- ALL documentation in `docs/` (including evidence, API docs, component docs, READMEs): **{idioma_tickets}**.
+- PRs (título y descripción): **{idioma_tickets}**.
+- Commits: **{idioma_tickets}**.
+
 No exceptions — applies to new files and updating existing ones.
 
 ## When to Update

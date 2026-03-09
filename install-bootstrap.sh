@@ -16,6 +16,13 @@ FILES=(
   "phase-2-adapted.md|.ai-internal/phases/phase-2-adapted.md"
   "phase-3-finalize.md|.ai-internal/phases/phase-3-finalize.md"
   "bootstrap.md|.claude/commands/bootstrap.md"
+  "mcp-server/package.json|.ai-internal/mcp-server/package.json"
+  "mcp-server/tsconfig.json|.ai-internal/mcp-server/tsconfig.json"
+  "mcp-server/src/types.ts|.ai-internal/mcp-server/src/types.ts"
+  "mcp-server/src/config.ts|.ai-internal/mcp-server/src/config.ts"
+  "mcp-server/src/pipeline.ts|.ai-internal/mcp-server/src/pipeline.ts"
+  "mcp-server/src/jira.ts|.ai-internal/mcp-server/src/jira.ts"
+  "mcp-server/src/index.ts|.ai-internal/mcp-server/src/index.ts"
 )
 
 echo ""
@@ -80,6 +87,7 @@ fi
 
 # ── Crear directorios ────────────────────────────
 mkdir -p .ai-internal/phases
+mkdir -p .ai-internal/mcp-server/src
 mkdir -p .claude/commands
 
 # Agregar .ai-internal/ a .gitignore
@@ -138,7 +146,29 @@ if [ "$FAILED" -gt 0 ]; then
   exit 1
 fi
 
+# ── Compilar MCP server ─────────────────────────
+echo "📦 Compilando MCP server del pipeline..."
+if [ -f .ai-internal/mcp-server/package.json ]; then
+  cd .ai-internal/mcp-server
+  if command -v npm >/dev/null 2>&1; then
+    npm install --silent 2>/dev/null && npm run build --silent 2>/dev/null
+    if [ $? -eq 0 ]; then
+      echo "  ✅ MCP server compilado"
+    else
+      echo "  ⚠️  Error compilando MCP server. Ejecutá manualmente:"
+      echo "     cd .ai-internal/mcp-server && npm install && npm run build"
+    fi
+  else
+    echo "  ⚠️  npm no encontrado. Instalá Node.js y ejecutá:"
+    echo "     cd .ai-internal/mcp-server && npm install && npm run build"
+  fi
+  cd - >/dev/null
+else
+  echo "  ⚠️  MCP server no descargado — se compilará en /bootstrap"
+fi
+
 # ── Resultado ────────────────────────────────────
+echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
 echo "  ✅ Instalación completa ($DOWNLOADED archivos)"
@@ -151,7 +181,12 @@ echo "  Se ejecutan 4 fases (una por cada /bootstrap):"
 echo "    Fase 0-2 → Detecta el proyecto"
 echo "    Fase 3-4 → Crea comandos reusables"
 echo "    Fase 5   → Crea archivos adaptados"
-echo "    Fase 6-7 → Docs base + verificación"
+echo "    Fase 6-7 → Docs base + MCP server + verificación"
+echo ""
+echo "  Estructura creada:"
+echo "    .ai-internal/phases/      ← archivos de fase (gitignored)"
+echo "    .ai-internal/mcp-server/  ← pipeline state machine (MCP)"
+echo "    .claude/commands/         ← comando /bootstrap"
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo ""
