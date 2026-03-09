@@ -1,9 +1,15 @@
 import { readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { ProjectConfig } from "./types.js";
 
+// Resolve project root from the compiled JS location:
+// dist/config.js → dist/ → mcp-server/ → .ai-internal/ → PROJECT_ROOT
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const PROJECT_ROOT = join(__dirname, "..", "..", "..");
+
 const PROFILE_PATH = join(
-  process.cwd(),
+  PROJECT_ROOT,
   ".ai-internal",
   "project-profile.md",
 );

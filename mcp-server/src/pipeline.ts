@@ -1,5 +1,6 @@
 import { readFile, writeFile, mkdir, rename } from "node:fs/promises";
 import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   PipelineState,
   VALID_TRANSITIONS,
@@ -13,8 +14,13 @@ import { loadProjectConfig } from "./config.js";
 
 const MAX_LOG_ENTRIES = 100;
 
+// Resolve project root from the compiled JS location:
+// dist/pipeline.js → dist/ → mcp-server/ → .ai-internal/ → PROJECT_ROOT
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const PROJECT_ROOT = join(__dirname, "..", "..", "..");
+
 const STATE_PATH = join(
-  process.cwd(),
+  PROJECT_ROOT,
   ".ai-internal",
   "pipeline-state.json",
 );
