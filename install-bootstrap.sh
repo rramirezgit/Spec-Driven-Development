@@ -126,10 +126,11 @@ for ENTRY in "${FILES[@]}"; do
       "https://raw.githubusercontent.com/${REPO}/${BRANCH}/${REPO_PATH}" 2>&1) || DL_ERROR="$CONTENT"
   fi
 
-  # Validate: non-empty, more than 3 lines, and not a JSON error response
+  # Validate: non-empty, more than 3 lines, and not a GitHub API error response
+  # (API errors contain "message" and "documentation_url" — legit JSON files like package.json don't)
   if [ -z "$DL_ERROR" ] && [ -n "$CONTENT" ] && \
      [ "$(printf '%s' "$CONTENT" | wc -l)" -gt 3 ] && \
-     ! printf '%s' "$CONTENT" | head -1 | grep -q '^{'; then
+     ! printf '%s' "$CONTENT" | grep -q '"documentation_url"'; then
     printf '%s' "$CONTENT" > "$DEST"
     LINES=$(wc -l < "$DEST" | tr -d ' ')
     printf "\r  ✅ %-28s → %s (%s líneas)\n" "$FILENAME" "$DEST" "$LINES"
