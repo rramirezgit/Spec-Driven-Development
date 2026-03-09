@@ -1,153 +1,123 @@
-const JIRA_EMAIL = process.env.JIRA_EMAIL ?? "";
-const JIRA_API_TOKEN = process.env.JIRA_API_TOKEN ?? "";
+import { loadProjectConfig } from "./config.js";
 
-function authHeader(): string {
-  return `Basic ${Buffer.from(`${JIRA_EMAIL}:${JIRA_API_TOKEN}`).toString("base64")}`;
+/**
+ * QA transition names to search for (case-insensitive).
+ * The Atlassian MCP's getTransitionsForJiraIssue returns available transitions.
+ * Claude must match one of these names from the result.
+ */
+const QA_TRANSITION_NAMES = [
+  "qa review",
+  "qa",
+  "in review",
+  "review",
+  "ready for qa",
+];
+
+export interface JiraDelegation {
+  ok: boolean;
+  action: "DELEGATE_TO_ATLASSIAN_MCP";
+  error?: string;
+  cloudId?: string;
+  ticketId?: string;
+  steps: JiraDelegationStep[];
 }
 
-function jiraBaseUrl(cloudId: string): string {
-  return `https://api.atlassian.net/ex/jira/${cloudId}/rest/api/3`;
+export interface JiraDelegationStep {
+  step: number;
+  description: string;
+  tool: string;
+  params: Record<string, string>;
+  matchLogic?: string;
 }
 
-interface JiraTransition {
-  id: string;
-  name: string;
-}
-
-export async function findQATransition(
-  cloudId: string,
+/**
+ * Returns structured instructions for Claude to execute the QA transition
+ * using the Atlassian MCP tools (which are already authenticated).
+ *
+ * This replaces the old direct REST API approach that required
+ * JIRA_API_TOKEN and JIRA_EMAIL environment variables.
+ */
+export async function buildTransitionInstructions(
   ticketId: string,
-): Promise<JiraTransition | null> {
-  const url = `${jiraBaseUrl(cloudId)}/issue/${ticketId}/transitions`;
-  const res = await fetch(url, {
-    headers: {
-      Authorization: authHeader(),
-      Accept: "application/json",
-    },
-  });
+): Promise<JiraDelegation> {
+  const config = await loadProjectConfig();
 
-  if (!res.ok) {
-    throw new Error(
-      `Jira API error ${res.status}: ${await res.text()}`,
-    );
-  }
-
-  const data = (await res.json()) as {
-    transitions: JiraTransition[];
-  };
-  const qaNames = ["qa review", "qa", "in review", "review", "ready for qa"];
-  return (
-    data.transitions.find((t) =>
-      qaNames.includes(t.name.toLowerCase()),
-    ) ?? null
-  );
-}
-
-export async function transitionToQA(
-  cloudId: string,
-  ticketId: string,
-): Promise<{ ok: boolean; transitioned: boolean; status?: string; error?: string }> {
-  if (!JIRA_EMAIL || !JIRA_API_TOKEN) {
+  if (!config || !config.cloudId) {
     return {
       ok: false,
-      transitioned: false,
+      action: "DELEGATE_TO_ATLASSIAN_MCP",
       error:
-        "JIRA_EMAIL y/o JIRA_API_TOKEN no configurados. Configurá las variables de entorno.",
+        "CloudId no configurado en project-profile.md. Sin cloudId no se puede interactuar con Jira.",
+      steps: [],
     };
   }
 
-  try {
-    const transition = await findQATransition(cloudId, ticketId);
-    if (!transition) {
-      return {
-        ok: true,
-        transitioned: false,
-        error: `No se encontró transición a QA Review para ${ticketId}. Transicionar manualmente.`,
-      };
-    }
-
-    const url = `${jiraBaseUrl(cloudId)}/issue/${ticketId}/transitions`;
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        Authorization: authHeader(),
-        Accept: "application/json",
-        "Content-Type": "application/json",
+  return {
+    ok: true,
+    action: "DELEGATE_TO_ATLASSIAN_MCP",
+    cloudId: config.cloudId,
+    ticketId,
+    steps: [
+      {
+        step: 1,
+        description: `Obtener transiciones disponibles para ${ticketId}`,
+        tool: "getTransitionsForJiraIssue",
+        params: {
+          cloudId: config.cloudId,
+          issueIdOrKey: ticketId,
+        },
+        matchLogic: `De las transiciones retornadas, buscar una cuyo nombre (case-insensitive) sea uno de: ${QA_TRANSITION_NAMES.join(", ")}. Si ninguna coincide, informar al usuario que la transición a QA no está disponible y listar las transiciones existentes.`,
       },
-      body: JSON.stringify({ transition: { id: transition.id } }),
-    });
-
-    if (!res.ok) {
-      const body = await res.text();
-      return {
-        ok: false,
-        transitioned: false,
-        error: `Error al transicionar ${ticketId}: ${res.status} — ${body}`,
-      };
-    }
-
-    return {
-      ok: true,
-      transitioned: true,
-      status: transition.name,
-    };
-  } catch (err) {
-    return {
-      ok: false,
-      transitioned: false,
-      error: `Error de conexión con Jira: ${(err as Error).message}`,
-    };
-  }
+      {
+        step: 2,
+        description: `Ejecutar la transición a QA para ${ticketId}`,
+        tool: "transitionJiraIssue",
+        params: {
+          cloudId: config.cloudId,
+          issueIdOrKey: ticketId,
+          transitionId: "<ID de la transición encontrada en step 1>",
+        },
+      },
+    ],
+  };
 }
 
-export async function addComment(
-  cloudId: string,
+/**
+ * Returns structured instructions for Claude to add a comment to a ticket
+ * using the Atlassian MCP tools.
+ */
+export async function buildCommentInstructions(
   ticketId: string,
-  body: string,
-): Promise<{ ok: boolean; error?: string }> {
-  if (!JIRA_EMAIL || !JIRA_API_TOKEN) {
+  commentBody: string,
+): Promise<JiraDelegation> {
+  const config = await loadProjectConfig();
+
+  if (!config || !config.cloudId) {
     return {
       ok: false,
-      error: "JIRA_EMAIL y/o JIRA_API_TOKEN no configurados.",
+      action: "DELEGATE_TO_ATLASSIAN_MCP",
+      error:
+        "CloudId no configurado en project-profile.md. Sin cloudId no se puede interactuar con Jira.",
+      steps: [],
     };
   }
 
-  try {
-    const url = `${jiraBaseUrl(cloudId)}/issue/${ticketId}/comment`;
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        Authorization: authHeader(),
-        Accept: "application/json",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        body: {
-          type: "doc",
-          version: 1,
-          content: [
-            {
-              type: "paragraph",
-              content: [{ type: "text", text: body }],
-            },
-          ],
+  return {
+    ok: true,
+    action: "DELEGATE_TO_ATLASSIAN_MCP",
+    cloudId: config.cloudId,
+    ticketId,
+    steps: [
+      {
+        step: 1,
+        description: `Agregar comentario a ${ticketId}`,
+        tool: "addCommentToJiraIssue",
+        params: {
+          cloudId: config.cloudId,
+          issueIdOrKey: ticketId,
+          body: commentBody,
         },
-      }),
-    });
-
-    if (!res.ok) {
-      const text = await res.text();
-      return {
-        ok: false,
-        error: `Error al comentar en ${ticketId}: ${res.status} — ${text}`,
-      };
-    }
-
-    return { ok: true };
-  } catch (err) {
-    return {
-      ok: false,
-      error: `Error de conexión con Jira: ${(err as Error).message}`,
-    };
-  }
+      },
+    ],
+  };
 }

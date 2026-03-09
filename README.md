@@ -17,15 +17,9 @@ Incluye un MCP server que controla el pipeline de forma programatica (state mach
 | **gh CLI** | `brew install gh && gh auth login` | Descargar desde este repo privado |
 | **MCP Atlassian** | Configurar en Claude Code (Settings → MCP Servers) | **Obligatorio** — auto-detecta cloudId y project key |
 
-### Variables de entorno (para integracion Jira)
+### Nota sobre Jira
 
-```bash
-# Agregar a tu .zshrc o .bashrc
-export JIRA_API_TOKEN=tu_api_token
-export JIRA_EMAIL=tu_email@empresa.com
-```
-
-Sin estas variables el pipeline funciona, pero `sdd_transition_jira` no podra mover tickets a QA Review.
+La interaccion con Jira (transiciones, comentarios) se delega al MCP de Atlassian que ya esta configurado y autenticado en Claude Code. No se necesitan variables de entorno adicionales (`JIRA_API_TOKEN`/`JIRA_EMAIL` ya no son necesarias).
 
 ---
 
@@ -124,7 +118,8 @@ El MCP server expone 6 herramientas que Claude llama como cualquier otro MCP too
 | `sdd_advance` | Transiciona estado. Rechaza transiciones ilegales con error. |
 | `sdd_register_tickets` | Registra tickets creados en el pipeline. |
 | `sdd_set_active_ticket` | Marca ticket activo (valida que existe en la lista). |
-| `sdd_transition_jira` | Mueve ticket a QA Review via Jira REST API. |
+| `sdd_transition_jira` | Genera instrucciones para transicionar ticket a QA Review via MCP Atlassian. |
+| `sdd_comment_jira` | Genera instrucciones para agregar comentario a ticket via MCP Atlassian. |
 
 ### Transiciones validas (enforced en codigo)
 
@@ -152,7 +147,8 @@ Cualquier otra transicion es rechazada con error descriptivo.
 | Config gate | Crear artefactos (codigo, planes, evidencia) |
 | Registro de tickets | Operaciones git |
 | Persistencia JSON | Decidir que comando ejecutar (segun nextCommand) |
-| Jira REST API | HALT protocol y Skip Audit |
+| Delegacion a MCP Atlassian | Ejecutar transiciones/comentarios Jira via MCP Atlassian |
+| — | HALT protocol y Skip Audit |
 
 ---
 
@@ -240,6 +236,6 @@ cd .ai-internal/mcp-server && npm install && npm run build
 
 **sdd_check_config falla** — Verificar que existe `.ai-internal/project-profile.md` con cloudId y tracker
 
-**sdd_transition_jira falla** — Verificar `JIRA_API_TOKEN` y `JIRA_EMAIL` en env vars
+**sdd_transition_jira falla** — Verificar que el MCP de Atlassian esta configurado y autenticado en Claude Code
 
 **Quiero empezar de cero** — `/bootstrap` y elegir "Empezar de cero"

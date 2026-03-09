@@ -749,7 +749,9 @@ Mostrar evidencia generada.
 Leer y ejecutar `/commit`. Después: `sdd_advance(COMMIT)`.
 
 ## COMMIT → completar y transicionar ticket
-Intentar `sdd_transition_jira(ticketId)` para mover a QA Review.
+Llamar `sdd_transition_jira(ticketId)` — retorna instrucciones de delegación.
+Ejecutar los pasos del MCP de Atlassian que indica la respuesta (getTransitionsForJiraIssue → transitionJiraIssue).
+Si el MCP de Atlassian no está disponible: informar al usuario y continuar.
 Después: `sdd_advance(COMPLETADO)`.
 
 ## COMPLETADO → siguiente ticket (ciclo obligatorio)
@@ -833,7 +835,8 @@ Alternativa: {qué puede hacer el usuario}
 | `sdd_advance` | Transiciona estado. Rechaza transiciones ilegales. |
 | `sdd_register_tickets` | Registra tickets creados en el pipeline. |
 | `sdd_set_active_ticket` | Marca ticket activo (valida que existe). |
-| `sdd_transition_jira` | Transiciona ticket a QA Review via Jira REST API. |
+| `sdd_transition_jira` | Genera instrucciones para transicionar ticket a QA Review via MCP Atlassian. Claude ejecuta los pasos. |
+| `sdd_comment_jira` | Genera instrucciones para agregar comentario a ticket via MCP Atlassian. Claude ejecuta los pasos. |
 
 # Guardrails
 

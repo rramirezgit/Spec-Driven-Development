@@ -264,11 +264,7 @@ Si `.mcp.json` no existe:
   "mcpServers": {
     "sdd-pipeline": {
       "command": "node",
-      "args": [".ai-internal/mcp-server/dist/index.js"],
-      "env": {
-        "JIRA_API_TOKEN": "${JIRA_API_TOKEN}",
-        "JIRA_EMAIL": "${JIRA_EMAIL}"
-      }
+      "args": [".ai-internal/mcp-server/dist/index.js"]
     }
   }
 }

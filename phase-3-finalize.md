@@ -443,16 +443,13 @@ El MCP server `sdd-pipeline` controla la máquina de estados del pipeline de for
   "mcpServers": {
     "sdd-pipeline": {
       "command": "node",
-      "args": [".ai-internal/mcp-server/dist/index.js"],
-      "env": {
-        "JIRA_API_TOKEN": "${JIRA_API_TOKEN}",
-        "JIRA_EMAIL": "${JIRA_EMAIL}"
-      }
+      "args": [".ai-internal/mcp-server/dist/index.js"]
     }
   }
 }
 ```
 
+> No necesita variables de entorno — la interacción con Jira se delega al MCP de Atlassian (ya autenticado).
 > Si ya existe `.mcp.json` con otros servers, **agregar** `sdd-pipeline` al objeto `mcpServers` sin modificar los existentes.
 
 ### 6b.2 — Verificar que el MCP server está disponible

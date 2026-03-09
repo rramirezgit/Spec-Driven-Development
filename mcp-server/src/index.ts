@@ -9,7 +9,7 @@ import {
   registerTickets,
   setActiveTicket,
 } from "./pipeline.js";
-import { transitionToQA } from "./jira.js";
+import { buildTransitionInstructions, buildCommentInstructions } from "./jira.js";
 
 const server = new McpServer({
   name: "sdd-pipeline",
@@ -138,29 +138,34 @@ server.tool(
 
 server.tool(
   "sdd_transition_jira",
-  "Busca y ejecuta la transición a QA Review para un ticket via Jira REST API.",
+  "Genera instrucciones para transicionar un ticket a QA Review usando el MCP de Atlassian. NO ejecuta la transición directamente — retorna los pasos que Claude debe ejecutar con las herramientas del MCP de Atlassian.",
   {
     ticketId: z.string().describe("ID del ticket a transicionar (ej: AUTH-45)"),
   },
   async ({ ticketId }) => {
-    const config = await loadProjectConfig();
-    if (!config || !config.cloudId) {
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: JSON.stringify({
-              ok: false,
-              transitioned: false,
-              error:
-                "CloudId no configurado. No se puede interactuar con Jira.",
-            }),
-          },
-        ],
-      };
-    }
+    const result = await buildTransitionInstructions(ticketId);
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify(result, null, 2),
+        },
+      ],
+    };
+  },
+);
 
-    const result = await transitionToQA(config.cloudId, ticketId);
+// ─── Tool 7: sdd_comment_jira ───────────────────────────────────────────────
+
+server.tool(
+  "sdd_comment_jira",
+  "Genera instrucciones para agregar un comentario a un ticket usando el MCP de Atlassian. NO ejecuta directamente — retorna los pasos que Claude debe ejecutar.",
+  {
+    ticketId: z.string().describe("ID del ticket (ej: AUTH-45)"),
+    body: z.string().describe("Contenido del comentario"),
+  },
+  async ({ ticketId, body }) => {
+    const result = await buildCommentInstructions(ticketId, body);
     return {
       content: [
         {
