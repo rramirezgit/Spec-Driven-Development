@@ -23,7 +23,7 @@ Usando el `PROYECTO_PERFIL`, generar archivos base con contenido real (no dirs v
 # {nombre} — Documentación técnica
 
 > Última actualización: {FECHA_HOY}
-> Generado con Bootstrap V4.2
+> Generado con Bootstrap V4.3
 
 ## Índice
 
@@ -406,8 +406,8 @@ Ver BOOTSTRAP-PROMPT-V4.md
 ---
 
 ## 10. Bootstrap prompt
-**Archivo**: `ai-specs/BOOTSTRAP-PROMPT-V4.2.md`
-**Versión**: V4.2
+**Archivo**: `ai-specs/BOOTSTRAP-PROMPT-V4.3.md`
+**Versión**: V4.3
 **Uso**: Correr `/init` en Claude Code, luego pegar el prompt.
 El prompt lee el codebase automáticamente y solo pregunta lo que no puede inferir.
 Soporta re-ejecución segura con backups y protección de archivos editados.
@@ -481,7 +481,7 @@ Crear `.bootstrap-meta.json` con estos valores (reemplazar TODOS los placeholder
 
 ```json
 {
-  "bootstrap_version": "4.2",
+  "bootstrap_version": "4.3",
   "content_hash": "{content_hash_computado}",
   "created_at": "{fecha_actual_ISO8601}",
   "openspec_version": "{version_openspec}",
@@ -585,6 +585,15 @@ test -f .ai-internal/mcp-server/dist/index.js && echo "✅ sdd-pipeline MCP serv
 test -f .mcp.json && echo "✅ .mcp.json configurado" || echo "❌ .mcp.json faltante"
 
 echo ""
+echo "=== JIRA IDENTITY ==="
+if [ -f .claude/settings.local.json ] && grep -q "mcp.atlassian.com" .claude/settings.local.json 2>/dev/null; then
+  echo "✅ .claude/settings.local.json — identidad Jira local configurada"
+  grep -q '.claude/settings.local.json' .gitignore 2>/dev/null && echo "✅ .gitignore protege settings.local.json" || echo "⚠️  .claude/settings.local.json NO está en .gitignore — agregar para proteger credenciales"
+else
+  echo "ℹ️  Sin identidad Jira local — usando MCP cloud de Atlassian"
+fi
+
+echo ""
 echo "=== RESUMEN ==="
 echo "Bootstrap version: $(cat .bootstrap-meta.json | grep -o '"bootstrap_version":"[^"]*"' | cut -d'"' -f4)"
 echo "Si hay placeholders pendientes arriba: corregirlos antes de usar el sistema."
@@ -600,12 +609,13 @@ echo "Si todo está ✅: el sistema está listo."
 - [ ] `openspec/config.yaml` tiene contexto completo (sin `{word_word}`)
 - [ ] `ai-specs/specs/{tipo}-standards.mdc` documenta patrones reales del codebase
 - [ ] El nombre del agente (`{tipo}-developer.md`) coincide con el tipo del proyecto
-- [ ] `.bootstrap-meta.json` existe con versión `4.2`
+- [ ] `.bootstrap-meta.json` existe con versión `4.3`
 - [ ] No hay MCP tools hardcoded con prefijos obsoletos
 - [ ] `.mcp.json` existe con `sdd-pipeline` configurado
 - [ ] `.ai-internal/mcp-server/dist/index.js` existe (MCP server compilado)
 - [ ] `sdd_check_config` responde OK (llamar la herramienta MCP para verificar)
 - [ ] Si re-ejecución: backups creados en `.bootstrap-backup/`
+- [ ] Si identidad Jira local: `.claude/settings.local.json` existe con auth y `.gitignore` lo protege
 - [ ] `docs/` estructura creada (api/, evidence/, assets/)
 - [ ] `docs/README.md` tiene contenido base (no vacío)
 - [ ] `docs/evidence/README.md` tiene convenciones
@@ -675,7 +685,7 @@ echo "Si todo está ✅: el sistema está listo."
 Al terminar la verificación:
 
 ```
-✅ Bootstrap V4.2 completado!
+✅ Bootstrap V4.3 completado!
 
 Resumen:
   Fase 0-2: Detección y perfil

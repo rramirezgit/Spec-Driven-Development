@@ -26,7 +26,7 @@ FILES=(
 )
 
 echo ""
-echo "🔧 Spec-Driven Development — Bootstrap V4.2"
+echo "🔧 Spec-Driven Development — Bootstrap V4.3"
 echo "============================================="
 echo ""
 
@@ -183,7 +183,7 @@ fi
 
 # ── Detectar upgrade pendiente ─────────────────
 
-# Extraer versión del bootstrap.md recién descargado (ej: "V4.2" → "4.2")
+# Extraer versión del bootstrap.md recién descargado (ej: "V4.3" → "4.3")
 NEW_VERSION=""
 if [ -f .claude/commands/bootstrap.md ]; then
   NEW_VERSION=$(grep -o 'V[0-9][0-9]*\.[0-9][0-9]*' .claude/commands/bootstrap.md | head -1 | sed 's/^V//')

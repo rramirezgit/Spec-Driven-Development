@@ -1,5 +1,14 @@
-# Bootstrap Prompt V4.2 — AI Workflow Setup
+# Bootstrap Prompt V4.3 — AI Workflow Setup
 
+> **Changelog V4.2 → V4.3**:
+> - Fase 0: Nuevo paso 0.0d — identidad Jira por proyecto (email + API token en `.claude/settings.local.json`)
+> - Fase 0: Validación de credenciales Jira con curl antes de guardar
+> - Fase 0: Perfil del proyecto incluye `jira_user_email`
+> - `/evidence`: Nuevo paso 3b — screenshot visual para cambios frontend (Chrome DevTools o usuario provee)
+> - `/evidence`: Screenshot se linkea inline en el markdown de evidencia para QA
+> - `/evidence`: Comentario en ticket incluye mención de screenshot si aplica
+> - Fase 7: Verificación de identidad Jira local y protección en `.gitignore`
+>
 > **Changelog V4.1 → V4.2**:
 > - Fase 0: Auto-detección de cloudId y project key via MCP Atlassian (paso 0.0c)
 > - Fase 0: MCP Atlassian es ahora **obligatorio** — sin él no se puede continuar el bootstrap
@@ -196,6 +205,117 @@ Mostrar confirmación:
 
 ---
 
+### 0.0d — Configurar identidad Jira para este proyecto
+
+> **Por qué**: El MCP cloud de Atlassian usa la cuenta OAuth de quien lo conectó. Para que cada proyecto pueda operar bajo un usuario Jira diferente (ej: Ricardo en un proyecto, Nicole en otro), se configura un MCP local con API token por proyecto.
+
+**Preguntar con AskUserQuestion** (single_select):
+
+"🔑 ¿Querés configurar una identidad Jira específica para este proyecto?"
+
+Opciones:
+1. "Sí, configurar usuario Jira" — credenciales por proyecto en `.claude/settings.local.json`
+2. "No, usar la cuenta actual" — mantener el MCP cloud de Atlassian (la identidad de quien autenticó en Claude.ai)
+
+**Si elige "No"** → saltar al paso 0.1.
+
+**Si elige "Sí"**:
+
+1. **Pedir credenciales** — Preguntar dos cosas (con mensajes separados):
+
+   ```
+   📧 ¿Cuál es el email de la cuenta de Jira para este proyecto?
+   (ej: nicole@tuempresa.com)
+   ```
+
+   Esperar respuesta. Luego:
+
+   ```
+   🔑 Necesito el API token de Jira para ese email.
+
+   Generalo acá: https://id.atlassian.com/manage-profile/security/api-tokens
+   → "Create API token" → copiá el token generado
+
+   ⚠️ El token se guarda SOLO en .claude/settings.local.json (local, gitignored).
+   Nunca se commitea ni se comparte.
+
+   Pegá el API token:
+   ```
+
+2. **Generar credencial Base64**:
+
+   ```bash
+   echo -n "{EMAIL}:{API_TOKEN}" | base64
+   ```
+
+   Guardar resultado como `JIRA_AUTH_BASE64`.
+
+3. **Validar credenciales** — Hacer un test con curl antes de guardar:
+
+   ```bash
+   curl -s -o /dev/null -w "%{http_code}" \
+     -H "Authorization: Basic {JIRA_AUTH_BASE64}" \
+     -H "Accept: application/json" \
+     "https://api.atlassian.com/oauth/token/accessible-resources"
+   ```
+
+   - **Si retorna 200** → credenciales válidas, continuar
+   - **Si retorna 401/403** → mostrar:
+     ```
+     ❌ Las credenciales no son válidas. Verificá:
+        - El email es correcto
+        - El API token fue copiado completo
+        - El token no expiró
+
+     ¿Querés reintentar?
+     ```
+     Dar opción de reintentar o continuar sin identidad local.
+
+4. **Crear `.claude/settings.local.json`**:
+
+   > Si ya existe, leerlo primero y hacer merge (preservar otras configuraciones como permissions).
+
+   Agregar/actualizar la sección `mcpServers` con:
+
+   ```json
+   {
+     "mcpServers": {
+       "atlassian": {
+         "type": "http",
+         "url": "https://mcp.atlassian.com/v1/mcp",
+         "headers": {
+           "Authorization": "Basic {JIRA_AUTH_BASE64}"
+         }
+       }
+     }
+   }
+   ```
+
+   > **Importante**: Si el archivo ya tiene `mcpServers` u otras keys, hacer merge — no sobreescribir todo el archivo.
+
+5. **Agregar a `.gitignore`**:
+
+   ```bash
+   # Solo si no existe ya la entrada
+   grep -qxF '.claude/settings.local.json' .gitignore 2>/dev/null || echo '.claude/settings.local.json' >> .gitignore
+   ```
+
+6. **Guardar en PROYECTO_PERFIL**:
+   - `jira_user_email`: {el email proporcionado}
+
+7. **Mostrar confirmación**:
+
+   ```
+   ✅ Identidad Jira configurada para este proyecto:
+      Usuario: {EMAIL}
+      Auth: .claude/settings.local.json (gitignored)
+
+   ⚠️ El MCP local estará activo en la próxima sesión de Claude Code.
+      Esta sesión sigue usando el MCP cloud actual.
+   ```
+
+---
+
 ### 0.1 — Verificar si existe CLAUDE.md
 
 ```bash
@@ -344,6 +464,7 @@ PROYECTO_PERFIL:
   cloud_id: [del paso 0.0c]
   workspace_name: [del paso 0.0c]
   project_key: [del paso 0.0c]
+  jira_user_email: [del paso 0.0d, o vacío si usa MCP cloud]
   estructura_carpetas: [descripcion breve]
   patron_componentes: [inferido de archivos existentes]
   patron_hooks: [inferido de archivos existentes]
@@ -417,6 +538,7 @@ Usá **AskUserQuestion** con TODAS las preguntas pendientes en UNA SOLA llamada.
 ✅ Stack: [lo que detectaste]
 ✅ Estructura: [lo que detectaste]
 ✅ Jira: {workspace_name} (cloudId: {cloud_id}) — Proyecto: {project_key}
+✅ Jira usuario: {jira_user_email} (local) | MCP cloud (si no configuró identidad local)
 ✅ MCPs detectados: [Atlassian: ✅, GitHub: ✅/❌, Figma: ✅/❌]
 ✅ openspec: v[versión detectada]
 [si re-ejecución: "🔄 Re-ejecución de bootstrap (V{version_previa} → V4)"]
@@ -466,6 +588,7 @@ State:       [server state + auth state]
 Forms:       [lib + validation] o "N/A"
 Testing:     [framework o "no configurado"]
 Tickets:     [Jira / Linear / GitHub Issues] + idioma
+Jira user:   [email configurado o "MCP cloud (cuenta OAuth)"]
 Diseño:      [Figma / Otro / No]
 OpenSpec:    v[versión]
 MCPs:        [lista de disponibles]
@@ -556,6 +679,7 @@ Crear `.ai-internal/project-profile.md` con TODOS los datos reales del PROYECTO_
 # Tracker: {tracker}
 # Tracker CloudId: {cloud_id}
 # Tracker Project Key: {project_key}
+# Jira User Email: {jira_user_email}
 # Idioma técnico: {idioma_tecnico}
 # Idioma tickets: {idioma_tickets}
 # Idioma UI: {idioma_ui}

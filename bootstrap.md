@@ -1,11 +1,11 @@
 ---
 name: "Bootstrap: Setup AI Workflow"
-description: Configura el sistema completo de flujos AI en este proyecto (V4.2)
+description: Configura el sistema completo de flujos AI en este proyecto (V4.3)
 category: Setup
 tags: [bootstrap, setup, workflow]
 ---
 
-# Bootstrap AI Workflow V4.2
+# Bootstrap AI Workflow V4.3
 
 Sos el orquestador del bootstrap. Tu trabajo es ejecutar las fases en orden, una a la vez, cargando el archivo correspondiente.
 
@@ -24,7 +24,7 @@ test -f .bootstrap-meta.json && grep -o '"content_hash"[[:space:]]*:[[:space:]]*
 Determinar `UPGRADE_PENDING`:
 
 1. **Tier 1 — Archivo explícito**: Si `.ai-internal/.upgrade-pending` existe → `UPGRADE_PENDING=true` (leer `from_version`, `to_version`, `trigger`, `from_hash`, `to_hash` del JSON)
-2. **Tier 2 — Versión diferente**: Si no existe `.upgrade-pending` pero sí `.bootstrap-meta.json`: comparar la versión de este archivo (`bootstrap_version`) con la versión de este bootstrap (V4.2). Si son distintas → `UPGRADE_PENDING=true` (fallback)
+2. **Tier 2 — Versión diferente**: Si no existe `.upgrade-pending` pero sí `.bootstrap-meta.json`: comparar la versión de este archivo (`bootstrap_version`) con la versión de este bootstrap (V4.3). Si son distintas → `UPGRADE_PENDING=true` (fallback)
 3. **Tier 3 — Hash ausente**: Si la versión es igual PERO `content_hash` está vacío o no existe en `.bootstrap-meta.json` → `UPGRADE_PENDING=true` (el proyecto fue bootstrapped antes de la detección por hash; forzar upgrade para computar el hash inicial)
 4. Si no existe `.bootstrap-meta.json` → `UPGRADE_PENDING=false` (instalación nueva, flujo normal)
 
@@ -70,7 +70,7 @@ echo "=== CHANGELOG ==="
 head -35 .ai-internal/phases/phase-0-detect.md
 ```
 
-Parsear las líneas que empiezan con `> -` del bloque `Changelog V{from} → V{to}` para extraer los cambios relevantes. Si hay múltiples bloques de changelog (ej: V3→V4, V4→V4.1, V4.1→V4.2), incluir TODOS los que apliquen entre `from_version` y `to_version`.
+Parsear las líneas que empiezan con `> -` del bloque `Changelog V{from} → V{to}` para extraer los cambios relevantes. Si hay múltiples bloques de changelog (ej: V3→V4, V4→V4.1, V4.1→V4.3), incluir TODOS los que apliquen entre `from_version` y `to_version`.
 
 ### 0b.3 — Detectar archivos modificados manualmente + gaps de infraestructura
 
@@ -122,14 +122,14 @@ Construir dos listas:
 
 | Gap | Condición | Desde versión |
 |-----|-----------|---------------|
-| `MCP_JSON` | `.mcp.json` no existe o no tiene `sdd-pipeline` | V4.2 |
-| `MCP_SERVER` | `.ai-internal/mcp-server/dist/index.js` no existe | V4.2 |
+| `MCP_JSON` | `.mcp.json` no existe o no tiene `sdd-pipeline` | V4.3 |
+| `MCP_SERVER` | `.ai-internal/mcp-server/dist/index.js` no existe | V4.3 |
 | `DOCS_STRUCTURE` | `docs/` no existe o le faltan archivos base | V4.1 |
 | `PLAYBOOK` | `ai-specs/AI-WORKFLOW-PLAYBOOK.md` no existe | V4 |
 | `OPENSPEC_SKILLS` | `.claude/skills/openspec-*/` no existen | V4 |
 | `DOC_STANDARDS` | `ai-specs/specs/documentation-standards.mdc` no existe | V4.1 |
 | `BASE_STANDARDS` | `ai-specs/specs/base-standards.mdc` no existe | V4 |
-| `PIPELINE_MIGRATE` | `pipeline-tracker.md` existe (legacy) y `pipeline-state.json` no | pre-V4.2 |
+| `PIPELINE_MIGRATE` | `pipeline-tracker.md` existe (legacy) y `pipeline-state.json` no | pre-V4.3 |
 
 ### 0b.4 — Pedir confirmacion al usuario
 
@@ -350,7 +350,7 @@ Si no existe `pipeline-tracker.md` ni `pipeline-state.json`: crear estado IDLE:
 #### Paso E: Actualizar metadata
 
 Actualizar `.bootstrap-meta.json`:
-- `bootstrap_version` → nueva versión (4.2)
+- `bootstrap_version` → nueva versión (4.3)
 - `previous_version` → versión anterior
 - `content_hash` → computar el hash actual ejecutando:
   ```bash
@@ -454,7 +454,7 @@ Basándote en el estado:
 Mostrá:
 
 ```
-🔧 AI Workflow Bootstrap V4.2
+🔧 AI Workflow Bootstrap V4.3
 ==============================
 
 Estado:

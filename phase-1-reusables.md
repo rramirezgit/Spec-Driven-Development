@@ -933,6 +933,48 @@ Contenido:
 - Casos edge a verificar
 - Notas para QA: ambiente, datos de prueba, dependencias
 
+## 3b. Screenshot visual (solo cambios frontend)
+
+> Skip si `--docs-only` o si el tipo de cambio NO involucra frontend.
+> Solo aplica a: Frontend UI, Frontend Logic, Fullstack.
+
+Preguntar con AskUserQuestion (single select):
+
+"📸 Los cambios incluyen frontend. ¿Incluir screenshot como evidencia visual en {TICKET_ID}?"
+
+Opciones:
+1. "Capturar con Chrome DevTools" — screenshot automático de la app corriendo
+2. "Yo proporciono el screenshot" — el usuario pasa la ruta de un archivo
+3. "Sin screenshot" — solo evidencia textual
+
+### Opción 1: Capturar con Chrome DevTools
+
+1. Verificar Chrome DevTools MCP disponible
+   - Si NO disponible → avisar "⚠️ Chrome DevTools MCP no disponible, continuando sin screenshot" y seguir
+2. Preguntar URL/ruta si no es evidente del contexto del ticket
+3. Asegurar directorio: `mkdir -p docs/evidence/screenshots`
+4. Capturar: `mcp__chrome-devtools__take_screenshot` con `filePath: "docs/evidence/screenshots/{TICKET_ID}.png"`
+5. Mostrar el screenshot al usuario (Read tool) y preguntar "¿Se ve bien?"
+   - Si no → opción de recapturar o cancelar
+
+### Opción 2: Usuario proporciona screenshot
+
+1. Preguntar: "Pasame el path del archivo"
+2. Asegurar directorio: `mkdir -p docs/evidence/screenshots`
+3. Copiar a `docs/evidence/screenshots/{TICKET_ID}.png` (bash cp)
+
+### Después de obtener el screenshot (ambas opciones):
+
+Agregar sección al final de `docs/evidence/{TICKET_ID}.md`:
+
+```markdown
+## Screenshot
+
+![Screenshot {TICKET_ID}](./screenshots/{TICKET_ID}.png)
+```
+
+> QA ve el screenshot directamente en GitHub al abrir el archivo de evidencia.
+
 ## 4. Generar/actualizar documentación cross-team (siempre)
 
 Según el tipo de cambio:
@@ -966,6 +1008,7 @@ Agregar comentario en el ticket:
 Archivos modificados: {N}
 Tests: {pasaron/no hay}
 Doc técnica: docs/{api|components}/{modulo}.md
+📸 Screenshot incluido en la evidencia (solo si se capturó/proporcionó screenshot)
 Listo para QA.
 ```
 
@@ -979,6 +1022,7 @@ Mostrar al dev:
 
 # Output
 - `docs/evidence/{TICKET_ID}.md` — creado (solo si no es --docs-only)
+- `docs/evidence/screenshots/{TICKET_ID}.png` — screenshot (si se capturó/proporcionó)
 - `docs/{api|components}/{modulo}.md` — creado/actualizado
 - `docs/README.md` — actualizado si hay archivos nuevos
 - Comentario en ticket (si MCP disponible y no es --docs-only)
@@ -992,6 +1036,7 @@ Mostrar al dev:
 - Usar templates de `documentation-standards.mdc` — no inline templates
 - Si actualiza un archivo existente: solo modificar secciones afectadas, marcar con `> 🆕 Actualizado por {TICKET_ID} ({FECHA})`
 - Degradar graciosamente si MCP no disponible
+- Si Chrome DevTools MCP no está disponible y el usuario eligió screenshot automático: degradar a "Sin screenshot" con aviso
 - No asumir formato de ticket ID — usar el ID exacto que provee el tracker del proyecto
 ```
 

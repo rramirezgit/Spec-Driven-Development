@@ -1,4 +1,4 @@
-# Spec-Driven Development — Bootstrap V4.2
+# Spec-Driven Development — Bootstrap V4.3
 
 Sistema de flujos de trabajo asistidos por IA para Claude Code.
 Incluye un MCP server que controla el pipeline de forma programatica (state machine en codigo, no en prompts).
@@ -47,7 +47,7 @@ El installer descarga todo, compila el MCP server, y `/bootstrap` genera el `.mc
 
 ---
 
-## Actualizar proyecto existente (cualquier version → V4.2)
+## Actualizar proyecto existente (cualquier version → V4.3)
 
 Para proyectos que **ya hicieron bootstrap con cualquier version anterior** (incluyendo versiones pre-MCP que usaban `pipeline-tracker.md`):
 
@@ -74,7 +74,17 @@ El bootstrap detecta automaticamente el upgrade y entra en **Modo Upgrade**:
 
 > **Nota**: `migrate-to-mcp.sh` esta **deprecado** — el upgrade automatico de `/bootstrap` ahora cubre todo lo que hacia ese script (y mas). Usa `install-bootstrap.sh` + `/bootstrap` en su lugar.
 
-### Que cambia en V4.2
+### Que cambia en V4.3
+
+| Cambio | Impacto |
+|--------|---------|
+| Identidad Jira por proyecto | Paso 0.0d: email + API token → `.claude/settings.local.json` (gitignored) |
+| Validacion de credenciales | curl test antes de guardar, retry si falla |
+| Screenshot en `/evidence` | Paso 3b: Chrome DevTools o screenshot manual para cambios frontend |
+| Screenshot inline en evidencia | QA ve el screenshot directo en GitHub |
+| Verificacion Jira identity | Fase 7 chequea `.claude/settings.local.json` y `.gitignore` |
+
+### Que cambio en V4.2
 
 | Cambio | Impacto |
 |--------|---------|
@@ -96,8 +106,8 @@ Estos archivos se **sobreescriben** al re-ejecutar `/bootstrap`:
 ai-specs/.commands/develop-{tipo}.md  ← nuevo: Step 0 crea rama
 .claude/commands/create-*-tickets.md  ← nuevo: asigna sprint + assignee
 .ai-internal/mcp-server/              ← nuevo: sin transicion IDLE→PLAN, projectKey
-.claude/commands/bootstrap.md         ← nuevo: V4.2
-.bootstrap-meta.json                  ← actualizado: version 4.2
+.claude/commands/bootstrap.md         ← nuevo: V4.3
+.bootstrap-meta.json                  ← actualizado: version 4.3
 ```
 
 ---
@@ -136,7 +146,7 @@ COMPLETADO -> TICKETS | IDLE
 
 Cualquier estado puede volver a IDLE (abandono controlado con confirmacion). Cualquier otra transicion es rechazada con error descriptivo.
 
-> **Nota V4.2**: La transicion `IDLE -> PLAN` fue eliminada. Ya no se puede implementar directamente sin pasar por artefactos/tickets primero.
+> **Nota V4.3**: La transicion `IDLE -> PLAN` fue eliminada. Ya no se puede implementar directamente sin pasar por artefactos/tickets primero.
 
 ### Que controla el MCP vs que controla Claude
 
