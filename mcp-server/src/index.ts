@@ -6,6 +6,7 @@ import { validateConfig, loadProjectConfig } from "./config.js";
 import {
   advance,
   getState,
+  loadState,
   registerTickets,
   setActiveTicket,
 } from "./pipeline.js";
@@ -136,13 +137,32 @@ server.tool(
 
 // ─── Tool 6: sdd_transition_jira ────────────────────────────────────────────
 
+const VALID_STATES_FOR_JIRA_TRANSITION = [
+  PipelineState.COMMIT,
+  PipelineState.COMPLETADO,
+];
+
 server.tool(
   "sdd_transition_jira",
-  "Genera instrucciones para transicionar un ticket a QA Review usando el MCP de Atlassian. NO ejecuta la transición directamente — retorna los pasos que Claude debe ejecutar con las herramientas del MCP de Atlassian.",
+  "Genera instrucciones para transicionar un ticket a QA Review usando el MCP de Atlassian. SOLO válido en estado COMMIT o COMPLETADO — requiere haber pasado por evidencia y commit primero.",
   {
     ticketId: z.string().describe("ID del ticket a transicionar (ej: AUTH-45)"),
   },
   async ({ ticketId }) => {
+    const data = await loadState();
+    if (!VALID_STATES_FOR_JIRA_TRANSITION.includes(data.state)) {
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: JSON.stringify({
+              ok: false,
+              error: `No se puede transicionar a QA desde el estado ${data.state}. Se requiere completar el ciclo: IMPLEMENTACION → EVIDENCIA → COMMIT antes de transicionar. Estados válidos: [${VALID_STATES_FOR_JIRA_TRANSITION.join(", ")}].`,
+            }, null, 2),
+          },
+        ],
+      };
+    }
     const result = await buildTransitionInstructions(ticketId);
     return {
       content: [
@@ -157,14 +177,33 @@ server.tool(
 
 // ─── Tool 7: sdd_comment_jira ───────────────────────────────────────────────
 
+const VALID_STATES_FOR_JIRA_COMMENT = [
+  PipelineState.COMMIT,
+  PipelineState.COMPLETADO,
+];
+
 server.tool(
   "sdd_comment_jira",
-  "Genera instrucciones para agregar un comentario a un ticket usando el MCP de Atlassian. NO ejecuta directamente — retorna los pasos que Claude debe ejecutar.",
+  "Genera instrucciones para agregar un comentario a un ticket usando el MCP de Atlassian. SOLO válido en estado COMMIT o COMPLETADO.",
   {
     ticketId: z.string().describe("ID del ticket (ej: AUTH-45)"),
     body: z.string().describe("Contenido del comentario"),
   },
   async ({ ticketId, body }) => {
+    const data = await loadState();
+    if (!VALID_STATES_FOR_JIRA_COMMENT.includes(data.state)) {
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: JSON.stringify({
+              ok: false,
+              error: `No se puede comentar en Jira desde el estado ${data.state}. Se requiere completar el ciclo: IMPLEMENTACION → EVIDENCIA → COMMIT antes de comentar. Estados válidos: [${VALID_STATES_FOR_JIRA_COMMENT.join(", ")}].`,
+            }, null, 2),
+          },
+        ],
+      };
+    }
     const result = await buildCommentInstructions(ticketId, body);
     return {
       content: [

@@ -115,11 +115,11 @@ El MCP server expone 6 herramientas que Claude llama como cualquier otro MCP too
 |------|----------|
 | `sdd_check_config` | Valida project-profile, cloudId, tracker. Gate obligatorio. |
 | `sdd_get_state` | Lee estado actual + que accion sigue + que comando ejecutar. |
-| `sdd_advance` | Transiciona estado. Rechaza transiciones ilegales con error. |
-| `sdd_register_tickets` | Registra tickets creados en el pipeline. |
-| `sdd_set_active_ticket` | Marca ticket activo (valida que existe en la lista). |
-| `sdd_transition_jira` | Genera instrucciones para transicionar ticket a QA Review via MCP Atlassian. |
-| `sdd_comment_jira` | Genera instrucciones para agregar comentario a ticket via MCP Atlassian. |
+| `sdd_advance` | Transiciona estado. Rechaza transiciones ilegales. Requiere activeTicket para PLAN/IMPLEMENTACION. |
+| `sdd_register_tickets` | Registra tickets creados en el pipeline. Solo en ARTEFACTOS o TICKETS. |
+| `sdd_set_active_ticket` | Marca ticket activo (valida que existe en la lista). Solo en TICKETS o PLAN. |
+| `sdd_transition_jira` | Genera instrucciones para transicionar ticket a QA Review. **Solo en COMMIT o COMPLETADO** — requiere evidencia + commit previos. |
+| `sdd_comment_jira` | Genera instrucciones para comentar ticket. **Solo en COMMIT o COMPLETADO**. |
 
 ### Transiciones validas (enforced en codigo)
 

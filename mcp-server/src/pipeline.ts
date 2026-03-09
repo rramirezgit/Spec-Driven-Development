@@ -99,6 +99,26 @@ export async function advance(
     return { ok: false, from, to, error: check.error };
   }
 
+  // Gate: PLAN requires activeTicket (can't plan without selecting a ticket)
+  if (to === PipelineState.PLAN && !data.activeTicket) {
+    return {
+      ok: false,
+      from,
+      to,
+      error: "No se puede avanzar a PLAN sin un ticket activo. Usá sdd_set_active_ticket primero.",
+    };
+  }
+
+  // Gate: IMPLEMENTACION requires activeTicket (can't implement without a ticket)
+  if (to === PipelineState.IMPLEMENTACION && !data.activeTicket) {
+    return {
+      ok: false,
+      from,
+      to,
+      error: "No se puede avanzar a IMPLEMENTACION sin un ticket activo. Usá sdd_set_active_ticket primero.",
+    };
+  }
+
   data.state = to;
   if (change) data.change = change;
 
