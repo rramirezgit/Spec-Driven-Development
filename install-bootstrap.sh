@@ -182,27 +182,54 @@ else
 fi
 
 # ── Detectar upgrade pendiente ─────────────────
+
 # Extraer versión del bootstrap.md recién descargado (ej: "V4.2" → "4.2")
 NEW_VERSION=""
 if [ -f .claude/commands/bootstrap.md ]; then
   NEW_VERSION=$(grep -o 'V[0-9][0-9]*\.[0-9][0-9]*' .claude/commands/bootstrap.md | head -1 | sed 's/^V//')
 fi
 
-# Leer versión actual del proyecto (si existe .bootstrap-meta.json)
+# Computar SHA-256 de TODOS los archivos descargados (content fingerprint)
+NEW_HASH=""
+if [ "$DOWNLOADED" -gt 0 ]; then
+  HASH_INPUT=""
+  for ENTRY in "${FILES[@]}"; do
+    DEST="${ENTRY##*|}"
+    if [ -f "$DEST" ]; then
+      HASH_INPUT="${HASH_INPUT}$(cat "$DEST")"
+    fi
+  done
+  NEW_HASH=$(printf '%s' "$HASH_INPUT" | shasum -a 256 | cut -d' ' -f1)
+fi
+
+# Leer versión y hash almacenados
 CURRENT_VERSION=""
+CURRENT_HASH=""
 if [ -f .bootstrap-meta.json ]; then
   CURRENT_VERSION=$(grep -o '"bootstrap_version"[[:space:]]*:[[:space:]]*"[^"]*"' .bootstrap-meta.json | head -1 | cut -d'"' -f4)
+  CURRENT_HASH=$(grep -o '"content_hash"[[:space:]]*:[[:space:]]*"[^"]*"' .bootstrap-meta.json | head -1 | cut -d'"' -f4)
 fi
 
 UPGRADE_PENDING=false
+UPGRADE_TRIGGER=""
 
+# Trigger 1: content hash diferente (archivos cambiaron)
+if [ -n "$CURRENT_HASH" ] && [ -n "$NEW_HASH" ] && [ "$CURRENT_HASH" != "$NEW_HASH" ]; then
+  UPGRADE_PENDING=true
+  UPGRADE_TRIGGER="content_changed"
+fi
+
+# Trigger 2: versión diferente (bump explícito)
 if [ -n "$CURRENT_VERSION" ] && [ -n "$NEW_VERSION" ] && [ "$CURRENT_VERSION" != "$NEW_VERSION" ]; then
   UPGRADE_PENDING=true
+  UPGRADE_TRIGGER="version_changed"
 fi
 
 if [ "$UPGRADE_PENDING" = true ]; then
   FROM_VERSION="${CURRENT_VERSION:-unknown}"
   TO_VERSION="${NEW_VERSION:-unknown}"
+  FROM_HASH="${CURRENT_HASH:-none}"
+  TO_HASH="${NEW_HASH:-none}"
 
   # Construir lista de archivos actualizados
   FILES_UPDATED="["
@@ -216,13 +243,20 @@ if [ "$UPGRADE_PENDING" = true ]; then
 {
   "from_version": "${FROM_VERSION}",
   "to_version": "${TO_VERSION}",
+  "from_hash": "${FROM_HASH}",
+  "to_hash": "${TO_HASH}",
+  "trigger": "${UPGRADE_TRIGGER}",
   "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
   "files_updated": ${FILES_UPDATED}
 }
 UPGEOF
 
   echo ""
-  echo "🔄 Upgrade detectado: V${FROM_VERSION} → V${TO_VERSION}"
+  if [ "$UPGRADE_TRIGGER" = "content_changed" ]; then
+    echo "🔄 Upgrade detectado (content_changed): archivos fuente modificados"
+  else
+    echo "🔄 Upgrade detectado (version_changed): V${FROM_VERSION} → V${TO_VERSION}"
+  fi
   echo "   Archivo: .ai-internal/.upgrade-pending"
 fi
 
@@ -234,7 +268,11 @@ echo "  ✅ Instalación completa ($DOWNLOADED archivos)"
 echo ""
 
 if [ "$UPGRADE_PENDING" = true ]; then
-  echo "  🔄 Upgrade pendiente: V${FROM_VERSION} → V${TO_VERSION}"
+  if [ "$UPGRADE_TRIGGER" = "content_changed" ]; then
+    echo "  🔄 Upgrade pendiente: archivos fuente modificados (mismo V${TO_VERSION})"
+  else
+    echo "  🔄 Upgrade pendiente: V${FROM_VERSION} → V${TO_VERSION}"
+  fi
   echo ""
   echo "  Abrí Claude Code y escribí:"
   echo ""

@@ -482,6 +482,7 @@ Crear `.bootstrap-meta.json` con estos valores (reemplazar TODOS los placeholder
 ```json
 {
   "bootstrap_version": "4.2",
+  "content_hash": "{content_hash_computado}",
   "created_at": "{fecha_actual_ISO8601}",
   "openspec_version": "{version_openspec}",
   "project_name": "{nombre}",
@@ -499,6 +500,11 @@ Crear `.bootstrap-meta.json` con estos valores (reemplazar TODOS los placeholder
 ```
 
 Para obtener los valores dinámicos:
+- `{content_hash_computado}`: computar SHA-256 de todos los archivos fuente del bootstrap ejecutando:
+  ```bash
+  cat .ai-internal/phases/phase-*.md .claude/commands/bootstrap.md .ai-internal/mcp-server/src/*.ts .ai-internal/mcp-server/package.json .ai-internal/mcp-server/tsconfig.json 2>/dev/null | shasum -a 256 | cut -d' ' -f1
+  ```
+  Este hash permite detectar upgrades incluso cuando la versión no cambia (fixes sin bump).
 - `{fecha_actual_ISO8601}`: usar `new Date().toISOString()` o equivalente (formato: `2024-01-15T12:00:00.000Z`)
 - `{version_openspec}`: ejecutar `openspec --version` y capturar la salida
 

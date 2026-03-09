@@ -18,13 +18,15 @@ echo "=== UPGRADE CHECK ==="
 test -f .ai-internal/.upgrade-pending && echo "UPGRADE_FILE=EXISTS" && cat .ai-internal/.upgrade-pending || echo "UPGRADE_FILE=NOT_FOUND"
 test -f .bootstrap-meta.json && echo "META_EXISTS=true" || echo "META_EXISTS=false"
 test -f .bootstrap-meta.json && grep -o '"bootstrap_version"[[:space:]]*:[[:space:]]*"[^"]*"' .bootstrap-meta.json | head -1 | cut -d'"' -f4 | xargs echo "CURRENT_VERSION=" || echo "CURRENT_VERSION=none"
+test -f .bootstrap-meta.json && grep -o '"content_hash"[[:space:]]*:[[:space:]]*"[^"]*"' .bootstrap-meta.json | head -1 | cut -d'"' -f4 | xargs echo "CURRENT_HASH=" || echo "CURRENT_HASH=none"
 ```
 
 Determinar `UPGRADE_PENDING`:
 
-1. Si `.ai-internal/.upgrade-pending` existe → `UPGRADE_PENDING=true` (leer `from_version` y `to_version` del JSON)
-2. Si no existe `.upgrade-pending` pero sí `.bootstrap-meta.json`: comparar la versión de este archivo (`bootstrap_version`) con la versión de este bootstrap (V4.2). Si son distintas → `UPGRADE_PENDING=true` (fallback)
-3. Si no existe `.bootstrap-meta.json` → `UPGRADE_PENDING=false` (instalación nueva, flujo normal)
+1. **Tier 1 — Archivo explícito**: Si `.ai-internal/.upgrade-pending` existe → `UPGRADE_PENDING=true` (leer `from_version`, `to_version`, `trigger`, `from_hash`, `to_hash` del JSON)
+2. **Tier 2 — Versión diferente**: Si no existe `.upgrade-pending` pero sí `.bootstrap-meta.json`: comparar la versión de este archivo (`bootstrap_version`) con la versión de este bootstrap (V4.2). Si son distintas → `UPGRADE_PENDING=true` (fallback)
+3. **Tier 3 — Hash ausente**: Si la versión es igual PERO `content_hash` está vacío o no existe en `.bootstrap-meta.json` → `UPGRADE_PENDING=true` (el proyecto fue bootstrapped antes de la detección por hash; forzar upgrade para computar el hash inicial)
+4. Si no existe `.bootstrap-meta.json` → `UPGRADE_PENDING=false` (instalación nueva, flujo normal)
 
 **Si `UPGRADE_PENDING=true` → ir directamente al Paso 0b: Modo Upgrade. NO seguir con Paso 1.**
 
@@ -350,6 +352,10 @@ Si no existe `pipeline-tracker.md` ni `pipeline-state.json`: crear estado IDLE:
 Actualizar `.bootstrap-meta.json`:
 - `bootstrap_version` → nueva versión (4.2)
 - `previous_version` → versión anterior
+- `content_hash` → computar el hash actual ejecutando:
+  ```bash
+  cat .ai-internal/phases/phase-*.md .claude/commands/bootstrap.md .ai-internal/mcp-server/src/*.ts .ai-internal/mcp-server/package.json .ai-internal/mcp-server/tsconfig.json 2>/dev/null | shasum -a 256 | cut -d' ' -f1
+  ```
 - Mantener todos los demás campos intactos (`project_name`, `project_type`, `framework`, `tracker`, `mcps_detected`, etc.)
 - Si faltan campos nuevos (ej: `mcps_detected` no existía en versiones anteriores), agregarlos con los valores del `project-profile.md`
 
