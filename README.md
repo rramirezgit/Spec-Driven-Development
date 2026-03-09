@@ -125,16 +125,16 @@ El MCP server expone 6 herramientas que Claude llama como cualquier otro MCP too
 
 ```
 IDLE -> ARTEFACTOS | TICKETS
-ARTEFACTOS -> TICKETS
-TICKETS -> PLAN
-PLAN -> IMPLEMENTACION
-IMPLEMENTACION -> EVIDENCIA
-EVIDENCIA -> COMMIT
-COMMIT -> COMPLETADO
+ARTEFACTOS -> TICKETS | IDLE
+TICKETS -> PLAN | IDLE
+PLAN -> IMPLEMENTACION | IDLE
+IMPLEMENTACION -> EVIDENCIA | IDLE
+EVIDENCIA -> COMMIT | IDLE
+COMMIT -> COMPLETADO | IDLE
 COMPLETADO -> TICKETS | IDLE
 ```
 
-Cualquier otra transicion es rechazada con error descriptivo.
+Cualquier estado puede volver a IDLE (abandono controlado con confirmacion). Cualquier otra transicion es rechazada con error descriptivo.
 
 > **Nota V4.2**: La transicion `IDLE -> PLAN` fue eliminada. Ya no se puede implementar directamente sin pasar por artefactos/tickets primero.
 

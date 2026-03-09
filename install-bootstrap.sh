@@ -115,23 +115,30 @@ for ENTRY in "${FILES[@]}"; do
   printf "  ⏳ %s..." "$FILENAME"
 
   CONTENT=""
+  DL_ERROR=""
 
   if [ "$DOWNLOAD_METHOD" = "gh" ]; then
     CONTENT=$(gh api "repos/${REPO}/contents/${REPO_PATH}" \
       -H "Accept: application/vnd.github.raw+json" \
-      --method GET 2>/dev/null) || true
+      --method GET 2>&1) || DL_ERROR="$CONTENT"
   else
     CONTENT=$(curl -sf -H "Authorization: token $GITHUB_TOKEN" \
-      "https://raw.githubusercontent.com/${REPO}/${BRANCH}/${REPO_PATH}" 2>/dev/null) || true
+      "https://raw.githubusercontent.com/${REPO}/${BRANCH}/${REPO_PATH}" 2>&1) || DL_ERROR="$CONTENT"
   fi
 
-  if [ -n "$CONTENT" ] && [ "$(printf '%s' "$CONTENT" | wc -l)" -gt 3 ]; then
+  # Validate: non-empty, more than 3 lines, and not a JSON error response
+  if [ -z "$DL_ERROR" ] && [ -n "$CONTENT" ] && \
+     [ "$(printf '%s' "$CONTENT" | wc -l)" -gt 3 ] && \
+     ! printf '%s' "$CONTENT" | head -1 | grep -q '^{'; then
     printf '%s' "$CONTENT" > "$DEST"
     LINES=$(wc -l < "$DEST" | tr -d ' ')
     printf "\r  ✅ %-28s → %s (%s líneas)\n" "$FILENAME" "$DEST" "$LINES"
     DOWNLOADED=$((DOWNLOADED + 1))
   else
     printf "\r  ❌ %-28s — falló\n" "$FILENAME"
+    if [ -n "$DL_ERROR" ]; then
+      echo "     Error: $(echo "$DL_ERROR" | head -2)"
+    fi
     FAILED=$((FAILED + 1))
   fi
 done
@@ -151,12 +158,18 @@ echo "📦 Compilando MCP server del pipeline..."
 if [ -f .ai-internal/mcp-server/package.json ]; then
   cd .ai-internal/mcp-server
   if command -v npm >/dev/null 2>&1; then
-    npm install --silent 2>/dev/null && npm run build --silent 2>/dev/null
-    if [ $? -eq 0 ]; then
+    echo ""
+    BUILD_OK=true
+    npm install --silent 2>&1 || BUILD_OK=false
+    if [ "$BUILD_OK" = true ]; then
+      npm run build 2>&1 || BUILD_OK=false
+    fi
+    if [ "$BUILD_OK" = true ]; then
       echo "  ✅ MCP server compilado"
     else
-      echo "  ⚠️  Error compilando MCP server. Ejecutá manualmente:"
-      echo "     cd .ai-internal/mcp-server && npm install && npm run build"
+      echo ""
+      echo "  ❌ Error compilando MCP server. Output arriba."
+      echo "     Para reintentar: cd .ai-internal/mcp-server && npm install && npm run build"
     fi
   else
     echo "  ⚠️  npm no encontrado. Instalá Node.js y ejecutá:"

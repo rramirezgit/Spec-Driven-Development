@@ -7,10 +7,15 @@ import { loadProjectConfig } from "./config.js";
  */
 const QA_TRANSITION_NAMES = [
   "qa review",
+  "ready for qa",
   "qa",
   "in review",
+  "code review",
   "review",
-  "ready for qa",
+  "ready for review",
+  "en revisión",
+  "revisión qa",
+  "revisión de código",
 ];
 
 export interface JiraDelegation {

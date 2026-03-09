@@ -29,7 +29,6 @@ export interface PipelineData {
   change: string | null;
   activeTicket: string | null;
   tickets: TicketEntry[];
-  mcpAvailable: boolean;
   log: LogEntry[];
 }
 
@@ -47,12 +46,12 @@ export const VALID_TRANSITIONS: Record<PipelineState, PipelineState[]> = {
     PipelineState.ARTEFACTOS,
     PipelineState.TICKETS,
   ],
-  [PipelineState.ARTEFACTOS]: [PipelineState.TICKETS],
-  [PipelineState.TICKETS]: [PipelineState.PLAN],
-  [PipelineState.PLAN]: [PipelineState.IMPLEMENTACION],
-  [PipelineState.IMPLEMENTACION]: [PipelineState.EVIDENCIA],
-  [PipelineState.EVIDENCIA]: [PipelineState.COMMIT],
-  [PipelineState.COMMIT]: [PipelineState.COMPLETADO],
+  [PipelineState.ARTEFACTOS]: [PipelineState.TICKETS, PipelineState.IDLE],
+  [PipelineState.TICKETS]: [PipelineState.PLAN, PipelineState.IDLE],
+  [PipelineState.PLAN]: [PipelineState.IMPLEMENTACION, PipelineState.IDLE],
+  [PipelineState.IMPLEMENTACION]: [PipelineState.EVIDENCIA, PipelineState.IDLE],
+  [PipelineState.EVIDENCIA]: [PipelineState.COMMIT, PipelineState.IDLE],
+  [PipelineState.COMMIT]: [PipelineState.COMPLETADO, PipelineState.IDLE],
   [PipelineState.COMPLETADO]: [PipelineState.TICKETS, PipelineState.IDLE],
 };
 
@@ -101,7 +100,6 @@ export function defaultPipelineData(): PipelineData {
     change: null,
     activeTicket: null,
     tickets: [],
-    mcpAvailable: true,
     log: [],
   };
 }

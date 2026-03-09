@@ -576,27 +576,34 @@ Usás herramientas MCP del server `sdd-pipeline` para controlar el pipeline de f
 
 # Sprint Gate — Validación obligatoria
 
-**Todo ticket debe estar en un sprint activo antes de poder trabajar en él.**
+**Todo ticket debe estar en un sprint activo antes de poder trabajar en él** (aplica solo a proyectos Scrum).
 
 Cuando se identifica un ticket para trabajar (en Opción 2, en estado TICKETS, o en cualquier momento antes de `sdd_set_active_ticket`):
 
 1. Llamar `getJiraIssue` (con el `atlassian_prefix` detectado) pasando el ticket ID y `fields: ["sprint", "summary"]`
 2. Verificar el campo `sprint`:
    - Si `sprint.state == "active"` → continuar normalmente
-   - Si `sprint` es `null` / no tiene sprint / `sprint.state != "active"` → **BLOQUEAR**:
-     ```
-     ❌ El ticket {TICKET_ID} no está en un sprint activo.
+   - Si `sprint` es `null` / no tiene sprint / `sprint.state != "active"`:
+     - **Posibilidad 1: Proyecto Kanban** — Si el campo sprint no existe en el esquema del issue type (es decir, no está presente en los fields del ticket, no simplemente está vacío), el proyecto probablemente usa Kanban. En este caso → **continuar sin bloquear**. Mostrar nota informativa:
+       ```
+       ℹ️ Proyecto Kanban detectado — Sprint Gate no aplica.
+       Continuando con {TICKET_ID}.
+       ```
+     - **Posibilidad 2: Proyecto Scrum sin sprint** → **BLOQUEAR**:
+       ```
+       ❌ El ticket {TICKET_ID} no está en un sprint activo.
 
-     Sprint actual: {sprint.name si existe, o "ninguno"}
-     Estado: {sprint.state si existe, o "sin asignar"}
+       Sprint actual: {sprint.name si existe, o "ninguno"}
+       Estado: {sprint.state si existe, o "sin asignar"}
 
-     Para trabajar en un ticket, debe estar en un sprint activo.
-     Asignalo a un sprint activo en Jira y volvé a intentar.
-     ```
+       Para trabajar en un ticket, debe estar en un sprint activo.
+       Asignalo a un sprint activo en Jira y volvé a intentar.
+       ```
 
 **Alternativa de consulta masiva** (para Opción 6 Sprint y estado TICKETS con múltiples tickets):
 - Usar `searchJiraIssuesUsingJql` con: `sprint in openSprints() AND project = {project_key} AND key in ({lista_de_keys})`
 - Los tickets que NO aparezcan en el resultado no están en sprint activo.
+- Para proyectos Kanban: `sprint in openSprints()` no aplica. Usar solo `project = {project_key} AND key in ({lista_de_keys})`.
 
 # Flujo de cada invocación
 
@@ -709,7 +716,19 @@ Lanzar subagentes en paralelo (máximo 5) — **SOLO planificación** (enrich + 
 # Estados del pipeline (cuando NO es IDLE)
 
 Cuando `sdd_get_state` retorna un estado que no es IDLE, mostrar el estado actual y ofrecer el siguiente paso.
-**En todos los estados**, la última opción de AskUserQuestion debe ser **"Quiero hacer otra cosa"**. Si la elige → `sdd_advance(IDLE)` (solo desde COMPLETADO) o mostrar advertencia de que perderá progreso.
+**En todos los estados**, la última opción de AskUserQuestion debe ser **"Quiero hacer otra cosa"**. Comportamiento:
+- Desde **COMPLETADO** → `sdd_advance(IDLE)` (archiva el change automáticamente).
+- Desde **cualquier otro estado** → mostrar advertencia explícita:
+  ```
+  ⚠️ Hay un pipeline activo en estado {estado_actual}.
+  Si abandonás ahora, el progreso de este ciclo se pierde
+  (artefactos, tickets registrados, plan técnico, etc.).
+
+  ¿Abandonar pipeline y volver a IDLE?
+  ```
+  AskUserQuestion: "Sí, abandonar" / "No, continuar donde estaba"
+  - Si abandona → `sdd_advance(IDLE)` — la transición a IDLE es válida desde cualquier estado y resetea todo (activeTicket, tickets, change).
+  - Si continúa → mostrar nextAction normal.
 
 ## ARTEFACTOS → crear tickets
 Mostrar artefactos encontrados. Ofrecer crear tickets con `/create-{tracker}-tickets`.

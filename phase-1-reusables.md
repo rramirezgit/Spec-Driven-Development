@@ -626,26 +626,17 @@ If `gh` not found: show commit summary, suggest manual PR creation, skip to step
 
 Si hay ticket ID (de args, branch `feature/<ID>-*`, o prefijo del commit):
 
-### 7.1. Obtener transiciones disponibles
-Usar `getTransitionsForJiraIssue` (o equivalente del tracker MCP) para el ticket.
+### 7.1. Llamar `sdd_transition_jira(ticketId)`
+El MCP tool retorna instrucciones de delegación con los pasos exactos a ejecutar.
 
-### 7.2. Buscar la transición a QA
-Buscar (case-insensitive) en las transiciones disponibles alguno de estos nombres:
-- "QA Review", "Ready for QA", "QA"
-- "In Review", "Code Review", "Review"
-- "En Revisión", "Revisión QA", "Revisión de código"
-- "Ready for Review"
+### 7.2. Ejecutar los pasos de delegación
+Seguir los pasos que retorna `sdd_transition_jira`:
+1. Llamar `getTransitionsForJiraIssue` con los params indicados
+2. Buscar la transición que coincida (el MCP tool incluye la lista de nombres válidos en `matchLogic`)
+3. Llamar `transitionJiraIssue` con el ID de la transición encontrada
 
-Usar la PRIMERA coincidencia encontrada.
-
-### 7.3. Ejecutar transición
-Usar `transitionJiraIssue` (o equivalente) con el ID de la transición encontrada.
-
-### 7.4. Verificar éxito
-Después de ejecutar, verificar que el ticket cambió de estado.
-
-### 7.5. Agregar comentario con evidencia
-Si existe `docs/evidence/{TICKET_ID}.md`:
+### 7.3. Agregar comentario con evidencia
+Llamar `sdd_comment_jira(ticketId, body)` con:
 ```
 ✅ Implementación completada — PR #{número}
 
@@ -656,7 +647,7 @@ Si existe `docs/evidence/{TICKET_ID}.md`:
 Listo para QA.
 ```
 
-### 7.6. Si la transición falla
+### 7.4. Si la transición falla
 
 **Si no se encuentra transición compatible**:
 ```
@@ -668,10 +659,10 @@ Listo para QA.
    ❗ Acción requerida: mover manualmente a QA Review en el tracker.
 ```
 
-**Si el MCP no está disponible**:
+**Si el MCP de Atlassian no está disponible**:
 ```
 ⚠️ TRANSICIÓN PENDIENTE: {TICKET_ID}
-   MCP de tracker no disponible.
+   MCP de Atlassian no disponible.
 
    ❗ Acción requerida: mover manualmente a QA Review en el tracker.
 ```
