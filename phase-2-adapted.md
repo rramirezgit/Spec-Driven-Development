@@ -573,6 +573,11 @@ Usás herramientas MCP del server `sdd-pipeline` para controlar el pipeline de f
 8. **RECORDATORIO POST-EJECUCIÓN**: Después de ejecutar un subcomando (.md), volvé acá y ejecutá HALT.
 9. **SPRINT GATE**: Antes de trabajar en cualquier ticket, validar que esté en un sprint activo.
 10. **UN TICKET A LA VEZ**: Trabajar un solo ticket. Completar el ciclo completo (PLAN → IMPLEMENTACION → EVIDENCIA → COMMIT → COMPLETADO) antes de tomar el siguiente. Sin excepciones.
+11. **UX CONVERSACIONAL**: El usuario NO necesita saber qué comandos existen ni en qué orden van. Vos manejás todo internamente. Reglas:
+    - **NUNCA listés el flujo completo** (ej: "opsx:ff → create-tickets → plan → develop → evidence → commit"). El usuario no necesita ver la receta.
+    - **NUNCA le digas al usuario que ejecute un comando** (ej: "ahora ejecutá /opsx:ff"). Vos ejecutás todo automáticamente cuando el usuario elige continuar.
+    - **Hablá en términos de acciones, no de comandos** (ej: "¿Creo los tickets?" en vez de "Ejecutá /create-jira-tickets").
+    - Los nombres de comandos internos (`/opsx:ff`, `/develop-*`, etc.) son detalles de implementación — no los expongas al usuario.
 
 # Sprint Gate — Validación obligatoria
 
@@ -652,7 +657,9 @@ AskUserQuestion (single_select):
 ## Acciones del menú
 
 ### Opción 1: Feature nuevo
-Preguntar: "¿Qué querés construir? Describilo brevemente."
+Preguntar: "Contame qué querés construir."
+
+> El usuario solo necesita describir la idea. Vos hacés todo: explorar el codebase, crear artefactos, tickets, plan, implementación, evidencia y commit — paso a paso, preguntando "¿seguimos?" entre cada uno. NUNCA le muestres la secuencia de pasos futuros ni le pidas que ejecute comandos.
 
 **Exploración profunda obligatoria** — Antes de crear artefactos, explorar el codebase a fondo:
 
@@ -808,18 +815,22 @@ Si no hay más tickets → `sdd_advance(IDLE)` (archivar primero con `/opsx:arch
 Después de ejecutar cualquier paso:
 
 1. Ya llamaste `sdd_advance` — el estado está persistido.
-2. **Mostrar resumen**:
+2. **Mostrar resumen breve**:
 ```
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Completado: {qué se hizo}
-Artefactos: {archivos creados o modificados}
-Ticket activo: {activeTicket del state}
-Siguiente disponible: {nextAction del state}
+✅ {qué se hizo — en lenguaje natural, sin nombres de comandos}
+{archivos creados o modificados, si aplica}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
-3. **AskUserQuestion**: "Continuar con {siguiente}" / "Pausar acá"
+3. **AskUserQuestion**: "Seguimos" / "Pausar acá"
+   - Si elige "Seguimos" → ejecutar el siguiente paso automáticamente. NO decirle qué comando va a correr.
+   - La pregunta debe describir la acción en lenguaje natural (ej: "¿Creo los tickets en Jira?" / "¿Arranco a implementar?" / "¿Genero la evidencia?")
 
-**IMPORTANTE**: Solo mencionás el paso inmediato siguiente. NUNCA listés los pasos 3, 4, 5 que vendrán después.
+**REGLAS ESTRICTAS**:
+- **NUNCA listés el flujo completo** ni muestres la secuencia de pasos futuros.
+- **NUNCA le digas al usuario que ejecute un comando** — vos lo hacés automáticamente.
+- **Solo mencionás el paso inmediato siguiente**, descrito como acción (no como comando).
+- El usuario solo ve: qué se hizo → ¿seguimos? → qué se hizo → ¿seguimos? Así hasta completar.
 
 # Protocolo Skip Audit
 
