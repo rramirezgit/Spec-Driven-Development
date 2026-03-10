@@ -652,15 +652,19 @@ Usar la rama resuelta como `--base` en `gh pr create`.
   Ver: `docs/evidence/{TICKET_ID}.md`
   ```
 
-## 7. Transicionar ticket a QA Review (OBLIGATORIO si hay ticket ID)
+## 7. Transicionar ticket a Dev Done (OBLIGATORIO si hay ticket ID)
+
+> **Flujo**: `/commit` mueve a **Dev Done** (desarrollo terminado, pendiente de deploy).
+> El de servidores deploya a dev y mueve a **QA Review**.
+> QA prueba en dev y mueve a **QA Approved** o **QA Failed**.
 
 Si hay ticket ID (de args, branch `feature/<ID>-*`, o prefijo del commit):
 
 ### 7.0. Resolver nombre real del status
 
-Leer `Jira Statuses` de `.ai-internal/project-profile.md` para obtener el nombre real del status "QA Review" en este proyecto (puede ser "QA Review", "Code Review", "En QA", etc.).
+Leer `Jira Statuses` de `.ai-internal/project-profile.md` para obtener el nombre real del status "Dev Done" en este proyecto (puede ser "Dev Done", "Desarrollo Terminado", "Development Done", "Ready for Deploy", "Pendiente de Deploy", etc.).
 
-Si el profile no tiene `Jira Statuses` o está vacío → usar nombres por defecto: "QA Review", "QA", "Code Review", "En QA", "En Revisión".
+Si el profile no tiene `Jira Statuses` o está vacío → usar nombres por defecto: "Dev Done", "Development Done", "Desarrollo Terminado", "Ready for Deploy", "Pendiente de Deploy".
 
 ### 7.1. Llamar `sdd_transition_jira(ticketId)`
 El MCP tool retorna instrucciones de delegación con los pasos exactos a ejecutar.
@@ -668,19 +672,19 @@ El MCP tool retorna instrucciones de delegación con los pasos exactos a ejecuta
 ### 7.2. Ejecutar los pasos de delegación
 Seguir los pasos que retorna `sdd_transition_jira`:
 1. Llamar `getTransitionsForJiraIssue` con los params indicados
-2. Buscar la transición cuyo nombre coincida con el status real de QA Review (del paso 7.0)
+2. Buscar la transición cuyo nombre coincida con el status real de Dev Done (del paso 7.0)
 3. Llamar `transitionJiraIssue` con el ID de la transición encontrada
 
-### 7.3. Agregar comentario con evidencia
+### 7.3. Agregar comentario
 Llamar `sdd_comment_jira(ticketId, body)` con:
 ```
-✅ Implementación completada — PR #{número}
+✅ Desarrollo completado — PR #{número} → {DEV_BRANCH}
 
 📝 Evidencia: docs/evidence/{TICKET_ID}.md
 📁 Archivos modificados: {N}
 🧪 Tests: {estado}
 
-Listo para QA.
+Pendiente: deploy a dev para QA.
 ```
 
 ### 7.4. Si la transición falla
@@ -690,7 +694,7 @@ Listo para QA.
 ⚠️ TRANSICIÓN PENDIENTE: {TICKET_ID}
    Estado actual: {estado_actual}
    Transiciones disponibles: {lista de nombres}
-   Ninguna coincide con el status de QA Review ({nombre_real}).
+   Ninguna coincide con Dev Done ({nombre_real}).
 
    ❗ Acción requerida: mover manualmente en el tracker.
 ```
