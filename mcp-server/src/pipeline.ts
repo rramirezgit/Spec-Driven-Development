@@ -9,7 +9,7 @@ import {
   STATE_DESCRIPTIONS,
   defaultPipelineData,
 } from "./types.js";
-import type { PipelineData, LogEntry, TicketEntry } from "./types.js";
+import type { PipelineData, LogEntry, TicketEntry, MergeType } from "./types.js";
 import { loadProjectConfig } from "./config.js";
 
 const MAX_LOG_ENTRIES = 100;
@@ -151,6 +151,65 @@ export async function advance(
     }
   }
 
+  // Gate: COMMIT → COMPLETADO requires correct merge type registered
+  if (from === PipelineState.COMMIT && to === PipelineState.COMPLETADO) {
+    if (!data.mergeRecord) {
+      return {
+        ok: false,
+        from,
+        to,
+        error:
+          "⛔ No se puede completar sin registrar el merge. " +
+          "Usá sdd_register_merge para registrar cómo se mergeó el código. " +
+          "Feature branches: merge directo a dev (sin PR). " +
+          "Hotfix branches: PR a main.",
+      };
+    }
+
+    const branch = (data.featureBranch ?? "").toLowerCase();
+    const isHotfix = branch.startsWith("hotfix/");
+    const record = data.mergeRecord;
+
+    if (!isHotfix && record.type === "pr") {
+      return {
+        ok: false,
+        from,
+        to,
+        error:
+          "⛔ Feature branches NO llevan PR. El flujo correcto es: " +
+          "merge directo a dev (git merge, sin PR). " +
+          "Los PR solo se crean en release (dev → main) o hotfix (→ main). " +
+          "Usá sdd_register_merge con type='direct' y targetBranch='dev'.",
+      };
+    }
+
+    if (!isHotfix) {
+      const target = record.targetBranch.toLowerCase();
+      if (target === "main" || target === "master") {
+        return {
+          ok: false,
+          from,
+          to,
+          error:
+            "⛔ Feature branches NUNCA van a main directamente. " +
+            "El merge debe ir a dev/develop. " +
+            "Main solo recibe código via /release-to-main (PR dev → main).",
+        };
+      }
+    }
+
+    if (isHotfix && record.type !== "pr") {
+      return {
+        ok: false,
+        from,
+        to,
+        error:
+          "⛔ Hotfix branches requieren PR a main (no merge directo). " +
+          "Usá sdd_register_merge con type='pr' y targetBranch='main'.",
+      };
+    }
+  }
+
   // Gate: COMPLETADO → TICKETS requires user confirmation via sdd_confirm_next
   if (
     from === PipelineState.COMPLETADO &&
@@ -184,6 +243,7 @@ export async function advance(
     data.awaitingUserConfirmation = false;
     data.featureBranch = null;
     data.screenshotCaptured = false;
+    data.mergeRecord = null;
   }
 
   // Reset per-ticket state when cycling back to TICKETS from COMPLETADO
@@ -192,6 +252,7 @@ export async function advance(
     data.activeTicket = null;
     data.featureBranch = null;
     data.screenshotCaptured = false;
+    data.mergeRecord = null;
   }
 
   const logEntry: LogEntry = {
@@ -391,6 +452,42 @@ export async function registerScreenshot(
   return { ok: true };
 }
 
+// ─── Merge registration ─────────────────────────────────────────────────────
+
+export interface RegisterMergeResult {
+  ok: boolean;
+  error?: string;
+}
+
+export async function registerMerge(
+  type: MergeType,
+  targetBranch: string,
+): Promise<RegisterMergeResult> {
+  const data = await loadState();
+
+  if (
+    data.state !== PipelineState.EVIDENCIA &&
+    data.state !== PipelineState.COMMIT
+  ) {
+    return {
+      ok: false,
+      error: `Solo se puede registrar merge en estado EVIDENCIA o COMMIT. Estado actual: ${data.state}.`,
+    };
+  }
+
+  data.mergeRecord = { type, targetBranch };
+
+  const logEntry: LogEntry = {
+    timestamp: new Date().toISOString(),
+    action: "REGISTER_MERGE",
+    detail: `${type} merge to ${targetBranch} from ${data.featureBranch ?? "unknown"} for ticket ${data.activeTicket}.`,
+  };
+  data.log.push(logEntry);
+
+  await saveState(data);
+  return { ok: true };
+}
+
 export interface ConfirmNextResult {
   ok: boolean;
   remainingTickets: string[];
@@ -445,6 +542,7 @@ export interface GetStateResult {
   awaitingUserConfirmation: boolean;
   featureBranch: string | null;
   screenshotCaptured: boolean;
+  mergeRecord: { type: string; targetBranch: string } | null;
 }
 
 export async function getState(): Promise<GetStateResult> {
@@ -470,5 +568,6 @@ export async function getState(): Promise<GetStateResult> {
     awaitingUserConfirmation: data.awaitingUserConfirmation ?? false,
     featureBranch: data.featureBranch ?? null,
     screenshotCaptured: data.screenshotCaptured ?? false,
+    mergeRecord: data.mergeRecord ?? null,
   };
 }

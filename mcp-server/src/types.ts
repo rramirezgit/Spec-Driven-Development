@@ -24,6 +24,15 @@ export interface LogEntry {
   detail?: string;
 }
 
+export type MergeType = "direct" | "pr";
+
+export interface MergeRecord {
+  /** "direct" = git merge (feature→dev), "pr" = pull request (hotfix→main, release dev→main) */
+  type: MergeType;
+  /** Target branch (e.g., "dev", "main") */
+  targetBranch: string;
+}
+
 export interface PipelineData {
   state: PipelineState;
   change: string | null;
@@ -36,6 +45,8 @@ export interface PipelineData {
   featureBranch?: string | null;
   /** True when a screenshot has been captured for the active ticket */
   screenshotCaptured?: boolean;
+  /** Records how the code was merged (direct merge vs PR) */
+  mergeRecord?: MergeRecord | null;
 }
 
 export interface ProjectConfig {
@@ -111,5 +122,6 @@ export function defaultPipelineData(): PipelineData {
     awaitingUserConfirmation: false,
     featureBranch: null,
     screenshotCaptured: false,
+    mergeRecord: null,
   };
 }

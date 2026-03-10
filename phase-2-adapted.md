@@ -803,11 +803,23 @@ Para proyectos backend-only: el screenshot gate no aplica, se avanza directo.
 **Esto NO es opcional** — el commit y PR son parte del ciclo del ticket.
 Leer y ejecutar `/commit`. Después: `sdd_advance(COMMIT)`.
 
-## COMMIT → completar y transicionar ticket
-Llamar `sdd_transition_jira(ticketId)` — retorna instrucciones de delegación.
-Ejecutar los pasos del MCP de Atlassian que indica la respuesta (getTransitionsForJiraIssue → transitionJiraIssue).
-Si el MCP de Atlassian no está disponible: informar al usuario y continuar.
-Después: `sdd_advance(COMPLETADO)`.
+## COMMIT → merge + transicionar ticket
+
+**⛔ GATE DE MERGE (enforced por el MCP server)**:
+`sdd_advance(COMPLETADO)` fallará si no se registró el merge con `sdd_register_merge`.
+Además valida que el tipo de merge sea correcto:
+- **Feature branches** (`feature/*`): `type='direct'`, `targetBranch='dev'` — merge directo, SIN PR
+- **Hotfix branches** (`hotfix/*`): `type='pr'`, `targetBranch='main'` — PR a main
+
+Secuencia obligatoria:
+1. Hacer el merge (git merge a dev para features, gh pr create para hotfix)
+2. `sdd_register_merge({ type: "direct", targetBranch: "dev" })` (o "pr"/"main" para hotfix)
+3. Llamar `sdd_transition_jira(ticketId)` para mover a QA Review
+4. Solo entonces: `sdd_advance(COMPLETADO)`
+
+**REGLA**: Feature branches NUNCA llevan PR. Los PR solo existen en:
+- Release: dev → main (via `/release-to-main`)
+- Hotfix: hotfix/* → main
 
 ## COMPLETADO → siguiente ticket (gate de confirmación obligatorio)
 Mostrar resumen del ciclo completado:

@@ -12,7 +12,9 @@ import {
   confirmNext,
   registerBranch,
   registerScreenshot,
+  registerMerge,
 } from "./pipeline.js";
+import type { MergeType } from "./types.js";
 import { buildTransitionInstructions, buildCommentInstructions } from "./jira.js";
 
 const server = new McpServer({
@@ -190,7 +192,34 @@ server.tool(
   },
 );
 
-// ─── Tool 8: sdd_confirm_next ────────────────────────────────────────────────
+// ─── Tool 8: sdd_register_merge ─────────────────────────────────────────────
+
+server.tool(
+  "sdd_register_merge",
+  "Registra cómo se mergeó el código. OBLIGATORIO antes de completar — sdd_advance(COMPLETADO) fallará sin merge registrado. " +
+    "REGLAS ESTRICTAS: " +
+    "Feature branches (feature/*) → type='direct', targetBranch='dev' (merge directo, SIN PR). " +
+    "Hotfix branches (hotfix/*) → type='pr', targetBranch='main' (PR directo a main). " +
+    "NUNCA crear PR para feature branches. Los PR solo existen en release (dev→main) o hotfix (→main). " +
+    "VIOLACIÓN: crear un PR para una feature branch es una violación grave del flujo.",
+  {
+    type: z.enum(["direct", "pr"]).describe("'direct' = git merge directo (feature→dev), 'pr' = pull request (hotfix→main)"),
+    targetBranch: z.string().describe("Rama destino del merge (ej: 'dev', 'main')"),
+  },
+  async ({ type, targetBranch }) => {
+    const result = await registerMerge(type as MergeType, targetBranch);
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify(result, null, 2),
+        },
+      ],
+    };
+  },
+);
+
+// ─── Tool 9: sdd_confirm_next ────────────────────────────────────────────────
 
 server.tool(
   "sdd_confirm_next",
@@ -213,7 +242,7 @@ server.tool(
   },
 );
 
-// ─── Tool 9: sdd_transition_jira ──────────────────────────────────────────
+// ─── Tool 10: sdd_transition_jira ─────────────────────────────────────────
 
 const VALID_STATES_FOR_JIRA_TRANSITION = [
   PipelineState.COMMIT,
@@ -253,7 +282,7 @@ server.tool(
   },
 );
 
-// ─── Tool 10: sdd_comment_jira ──────────────────────────────────────────────
+// ─── Tool 11: sdd_comment_jira ──────────────────────────────────────────────
 
 const VALID_STATES_FOR_JIRA_COMMENT = [
   PipelineState.COMMIT,
