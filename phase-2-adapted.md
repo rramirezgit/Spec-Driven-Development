@@ -756,9 +756,19 @@ Después: `sdd_set_active_ticket(ID)` + leer `/plan-{tipo}-ticket` + `sdd_advanc
 
 ## PLAN → crear rama e implementar
 Mostrar plan técnico.
-**Rama obligatoria** — `/develop-{tipo}` crea la rama `feature/{TICKET_ID}-{slug}` automáticamente (Step 0 del comando). Nunca se implementa en main/master/develop.
+
+**⛔ GATE DE RAMA (enforced por el MCP server)**:
+`sdd_advance(IMPLEMENTACION)` fallará si no hay rama registrada con `sdd_register_branch`.
+Secuencia obligatoria:
+1. Crear la rama `feature/{TICKET_ID}-{slug}` con git checkout -b
+2. Registrar la rama: `sdd_register_branch("feature/{TICKET_ID}-slug")`
+3. Solo entonces: `sdd_advance(IMPLEMENTACION)`
+
+Ramas protegidas (main, dev, master, develop) son **RECHAZADAS por el server**.
+El nombre debe seguir el patrón `feature/`, `hotfix/`, o `bugfix/`.
+
 Ofrecer implementar con `/develop-{tipo}`.
-Después: `sdd_advance(IMPLEMENTACION)`.
+Después: `sdd_register_branch(rama)` + `sdd_advance(IMPLEMENTACION)`.
 
 ## IMPLEMENTACION → verificar y generar evidencia
 Mostrar archivos modificados.
@@ -775,8 +785,21 @@ AskUserQuestion: "Sí, funciona — generar evidencia" / "No, necesito ajustes"
 - Si necesita ajustes → hacer los cambios, volver a verificar. NO avanzar hasta que confirme.
 - Si funciona → leer y ejecutar `/evidence`. Después: `sdd_advance(EVIDENCIA)`.
 
-## EVIDENCIA → commit + PR (obligatorio)
+## EVIDENCIA → screenshot + commit + PR (obligatorio)
 Mostrar evidencia generada.
+
+**⛔ GATE DE SCREENSHOT (enforced por el MCP server para frontend/fullstack/mobile)**:
+`sdd_advance(COMMIT)` fallará si no se registró un screenshot con `sdd_register_screenshot`.
+Secuencia obligatoria para proyectos con UI:
+1. Iniciar el proyecto (`npm run dev`, `npm start`, o el comando correspondiente)
+2. Navegar a la página/vista afectada con Chrome DevTools o Playwright
+3. Verificar visualmente que el cambio funciona
+4. Capturar screenshot: `take_screenshot` → guardar en `docs/evidence/screenshots/{TICKET_ID}.png`
+5. Registrar: `sdd_register_screenshot("docs/evidence/screenshots/{TICKET_ID}.png")`
+6. Solo entonces: leer y ejecutar `/commit` → `sdd_advance(COMMIT)`
+
+Para proyectos backend-only: el screenshot gate no aplica, se avanza directo.
+
 **Esto NO es opcional** — el commit y PR son parte del ciclo del ticket.
 Leer y ejecutar `/commit`. Después: `sdd_advance(COMMIT)`.
 
@@ -786,7 +809,7 @@ Ejecutar los pasos del MCP de Atlassian que indica la respuesta (getTransitionsF
 Si el MCP de Atlassian no está disponible: informar al usuario y continuar.
 Después: `sdd_advance(COMPLETADO)`.
 
-## COMPLETADO → siguiente ticket (ciclo obligatorio)
+## COMPLETADO → siguiente ticket (gate de confirmación obligatorio)
 Mostrar resumen del ciclo completado:
 ```
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -800,15 +823,27 @@ Jira: transicionado a QA Review
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
+**⛔ GATE DE CONFIRMACIÓN (enforced por el MCP server)**:
+El server bloquea `sdd_advance(TICKETS)` hasta que se llame `sdd_confirm_next`.
+Y `sdd_confirm_next` SOLO se puede llamar DESPUÉS de que el usuario respondió.
+Secuencia obligatoria:
+1. Mostrar resumen del ticket completado
+2. **AskUserQuestion**: "¿Continuar con el siguiente ticket?" / "Pausar acá"
+3. **ESPERAR respuesta del usuario** — NO continuar automáticamente
+4. Si el usuario confirma → `sdd_confirm_next` → `sdd_advance(TICKETS)`
+5. Si el usuario dice pausar → `sdd_advance(IDLE)`
+
 Si hay más tickets registrados en el pipeline:
 1. Mostrar lista de tickets pendientes
 2. **Sprint Gate** en el siguiente ticket (ver regla 9)
 3. AskUserQuestion: "Continuar con {siguiente ticket}" / "Pausar acá"
-4. Si continúa → `sdd_advance(TICKETS)` + `sdd_set_active_ticket(siguiente)` → repetir ciclo completo
+4. **ESPERAR** — el MCP server rechazará `sdd_advance(TICKETS)` si no llamaste `sdd_confirm_next`
+5. Si continúa → `sdd_confirm_next` + `sdd_advance(TICKETS)` + `sdd_set_active_ticket(siguiente)` → repetir ciclo completo
 
 Si no hay más tickets → `sdd_advance(IDLE)` (archivar primero con `/opsx:archive`).
 
 > **IMPORTANTE**: No se puede tomar un ticket nuevo sin haber completado evidencia + commit + PR + transición del ticket anterior. El ciclo es atómico.
+> **ENFORCEMENT**: El MCP server rechaza la transición COMPLETADO → TICKETS sin `sdd_confirm_next`. Esto NO es solo una instrucción — es un bloqueo en código.
 
 # Protocolo HALT (obligatorio después de CADA paso)
 

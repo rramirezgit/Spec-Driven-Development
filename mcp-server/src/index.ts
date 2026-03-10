@@ -9,6 +9,9 @@ import {
   loadState,
   registerTickets,
   setActiveTicket,
+  confirmNext,
+  registerBranch,
+  registerScreenshot,
 } from "./pipeline.js";
 import { buildTransitionInstructions, buildCommentInstructions } from "./jira.js";
 
@@ -135,7 +138,82 @@ server.tool(
   },
 );
 
-// ─── Tool 6: sdd_transition_jira ────────────────────────────────────────────
+// ─── Tool 6: sdd_register_branch ─────────────────────────────────────────────
+
+server.tool(
+  "sdd_register_branch",
+  "Registra la rama feature creada para el ticket activo. " +
+    "OBLIGATORIO antes de implementar — sdd_advance(IMPLEMENTACION) fallará sin rama registrada. " +
+    "La rama DEBE seguir el patrón feature/{TICKET_ID}-slug. " +
+    "Ramas protegidas (main, dev, master, develop) son RECHAZADAS. " +
+    "NUNCA se implementa directamente en ramas de integración.",
+  {
+    branchName: z.string().describe("Nombre de la rama creada (ej: feature/AUTH-45-login-google)"),
+  },
+  async ({ branchName }) => {
+    const result = await registerBranch(branchName);
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify(result, null, 2),
+        },
+      ],
+    };
+  },
+);
+
+// ─── Tool 7: sdd_register_screenshot ────────────────────────────────────────
+
+server.tool(
+  "sdd_register_screenshot",
+  "Registra que se capturó un screenshot de evidencia visual. " +
+    "OBLIGATORIO para proyectos frontend/fullstack/mobile — sdd_advance(COMMIT) fallará sin screenshot. " +
+    "ANTES de llamar este tool: 1) Iniciar el proyecto (npm run dev o similar), " +
+    "2) Navegar a la página afectada con Chrome DevTools o Playwright, " +
+    "3) Capturar screenshot con take_screenshot, " +
+    "4) Guardar en docs/evidence/screenshots/{TICKET_ID}.png. " +
+    "VIOLACIÓN: registrar screenshot sin haberlo capturado realmente.",
+  {
+    filePath: z.string().describe("Ruta del archivo de screenshot capturado (ej: docs/evidence/screenshots/AUTH-45.png)"),
+  },
+  async ({ filePath }) => {
+    const result = await registerScreenshot(filePath);
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify(result, null, 2),
+        },
+      ],
+    };
+  },
+);
+
+// ─── Tool 8: sdd_confirm_next ────────────────────────────────────────────────
+
+server.tool(
+  "sdd_confirm_next",
+  "Desbloquea la transición al siguiente ticket DESPUÉS de que el usuario confirmó explícitamente. " +
+    "OBLIGATORIO: antes de llamar este tool, DEBÉS haber mostrado el resumen del ticket completado " +
+    "y usado AskUserQuestion para preguntar al usuario si quiere continuar. " +
+    "Si el usuario NO respondió aún, NO llames este tool. " +
+    "VIOLACIÓN: llamar este tool sin confirmación del usuario es una violación del protocolo.",
+  {},
+  async () => {
+    const result = await confirmNext();
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify(result, null, 2),
+        },
+      ],
+    };
+  },
+);
+
+// ─── Tool 9: sdd_transition_jira ──────────────────────────────────────────
 
 const VALID_STATES_FOR_JIRA_TRANSITION = [
   PipelineState.COMMIT,
@@ -175,7 +253,7 @@ server.tool(
   },
 );
 
-// ─── Tool 7: sdd_comment_jira ───────────────────────────────────────────────
+// ─── Tool 10: sdd_comment_jira ──────────────────────────────────────────────
 
 const VALID_STATES_FOR_JIRA_COMMENT = [
   PipelineState.COMMIT,

@@ -30,6 +30,12 @@ export interface PipelineData {
   activeTicket: string | null;
   tickets: TicketEntry[];
   log: LogEntry[];
+  /** True when in COMPLETADO and user hasn't confirmed to continue yet */
+  awaitingUserConfirmation?: boolean;
+  /** Name of the feature branch created for the active ticket */
+  featureBranch?: string | null;
+  /** True when a screenshot has been captured for the active ticket */
+  screenshotCaptured?: boolean;
 }
 
 export interface ProjectConfig {
@@ -80,7 +86,7 @@ export const NEXT_ACTIONS: Record<PipelineState, string> = {
   [PipelineState.IMPLEMENTACION]: "Generar evidencia de QA",
   [PipelineState.EVIDENCIA]: "Commit + merge a dev + transición QA",
   [PipelineState.COMMIT]: "Marcar ticket como completado",
-  [PipelineState.COMPLETADO]: "Siguiente ticket o archivar change",
+  [PipelineState.COMPLETADO]: "Preguntar al usuario si quiere continuar (sdd_confirm_next requerido)",
 };
 
 /** Maps each state to the recommended command */
@@ -92,7 +98,7 @@ export const NEXT_COMMANDS: Record<PipelineState, string> = {
   [PipelineState.IMPLEMENTACION]: "/evidence <ID>",
   [PipelineState.EVIDENCIA]: "/commit",
   [PipelineState.COMMIT]: "sdd_advance(COMPLETADO)",
-  [PipelineState.COMPLETADO]: "sdd_advance(TICKETS) o sdd_advance(IDLE)",
+  [PipelineState.COMPLETADO]: "AskUserQuestion → sdd_confirm_next → sdd_advance(TICKETS) o sdd_advance(IDLE)",
 };
 
 export function defaultPipelineData(): PipelineData {
@@ -102,5 +108,8 @@ export function defaultPipelineData(): PipelineData {
     activeTicket: null,
     tickets: [],
     log: [],
+    awaitingUserConfirmation: false,
+    featureBranch: null,
+    screenshotCaptured: false,
   };
 }

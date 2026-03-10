@@ -119,20 +119,79 @@ export async function advance(
     };
   }
 
+  // Gate: IMPLEMENTACION requires a feature branch (can't implement on main/dev)
+  if (to === PipelineState.IMPLEMENTACION && !data.featureBranch) {
+    return {
+      ok: false,
+      from,
+      to,
+      error:
+        "⛔ No se puede implementar sin una rama feature creada. " +
+        "Usá sdd_register_branch para registrar la rama feature/{TICKET_ID}-slug " +
+        "ANTES de avanzar a IMPLEMENTACION. NUNCA implementar en main/dev directamente.",
+    };
+  }
+
+  // Gate: EVIDENCIA → COMMIT requires screenshot for frontend/fullstack projects
+  if (from === PipelineState.EVIDENCIA && to === PipelineState.COMMIT) {
+    const config = await loadProjectConfig();
+    const tipo = config?.tipo?.toLowerCase() ?? "";
+    const requiresScreenshot =
+      tipo.includes("frontend") || tipo.includes("fullstack") || tipo.includes("mobile");
+    if (requiresScreenshot && !data.screenshotCaptured) {
+      return {
+        ok: false,
+        from,
+        to,
+        error:
+          "⛔ Proyecto " + tipo + " requiere screenshot obligatorio antes de avanzar a COMMIT. " +
+          "Usá Chrome DevTools o Playwright para capturar un screenshot del cambio funcionando, " +
+          "luego llamá sdd_register_screenshot. Sin evidencia visual no se puede avanzar.",
+      };
+    }
+  }
+
+  // Gate: COMPLETADO → TICKETS requires user confirmation via sdd_confirm_next
+  if (
+    from === PipelineState.COMPLETADO &&
+    to === PipelineState.TICKETS &&
+    data.awaitingUserConfirmation
+  ) {
+    return {
+      ok: false,
+      from,
+      to,
+      error:
+        "⛔ No se puede continuar al siguiente ticket sin confirmación del usuario. " +
+        "Llamá sdd_confirm_next DESPUÉS de que el usuario haya confirmado explícitamente " +
+        "que quiere continuar. Usá AskUserQuestion para preguntarle.",
+    };
+  }
+
   data.state = to;
   if (change) data.change = change;
+
+  // Set confirmation gate when entering COMPLETADO
+  if (to === PipelineState.COMPLETADO) {
+    data.awaitingUserConfirmation = true;
+  }
 
   // Reset when going back to IDLE (full reset)
   if (to === PipelineState.IDLE) {
     data.activeTicket = null;
     data.tickets = [];
     data.change = null;
+    data.awaitingUserConfirmation = false;
+    data.featureBranch = null;
+    data.screenshotCaptured = false;
   }
 
-  // Reset activeTicket when cycling back to TICKETS from COMPLETADO
+  // Reset per-ticket state when cycling back to TICKETS from COMPLETADO
   // (previous ticket is done, need to select a new one)
   if (to === PipelineState.TICKETS && from === PipelineState.COMPLETADO) {
     data.activeTicket = null;
+    data.featureBranch = null;
+    data.screenshotCaptured = false;
   }
 
   const logEntry: LogEntry = {
@@ -236,6 +295,145 @@ export async function setActiveTicket(
   return { ok: true, ticket };
 }
 
+// ─── Branch registration ────────────────────────────────────────────────────
+
+export interface RegisterBranchResult {
+  ok: boolean;
+  branch?: string;
+  error?: string;
+}
+
+const FEATURE_BRANCH_PATTERN = /^(feature|hotfix|bugfix)\/.+/;
+const FORBIDDEN_BRANCHES = ["main", "master", "dev", "develop", "staging", "production"];
+
+export async function registerBranch(
+  branchName: string,
+): Promise<RegisterBranchResult> {
+  const data = await loadState();
+
+  if (
+    data.state !== PipelineState.PLAN &&
+    data.state !== PipelineState.TICKETS
+  ) {
+    return {
+      ok: false,
+      error: `Solo se puede registrar una rama en estado PLAN o TICKETS. Estado actual: ${data.state}.`,
+    };
+  }
+
+  // Reject direct work on protected branches
+  const normalized = branchName.toLowerCase().trim();
+  if (FORBIDDEN_BRANCHES.includes(normalized)) {
+    return {
+      ok: false,
+      error:
+        `⛔ Rama "${branchName}" es una rama protegida. ` +
+        "Creá una rama feature/{TICKET_ID}-slug para trabajar. " +
+        "NUNCA se implementa en main, dev, master o develop directamente.",
+    };
+  }
+
+  // Validate branch name follows convention
+  if (!FEATURE_BRANCH_PATTERN.test(normalized)) {
+    return {
+      ok: false,
+      error:
+        `⛔ Rama "${branchName}" no sigue la convención. ` +
+        "Las ramas deben seguir el patrón: feature/{TICKET_ID}-slug, hotfix/{TICKET_ID}-slug, o bugfix/{TICKET_ID}-slug.",
+    };
+  }
+
+  data.featureBranch = branchName;
+
+  const logEntry: LogEntry = {
+    timestamp: new Date().toISOString(),
+    action: "REGISTER_BRANCH",
+    detail: branchName,
+  };
+  data.log.push(logEntry);
+
+  await saveState(data);
+  return { ok: true, branch: branchName };
+}
+
+// ─── Screenshot registration ─────────────────────────────────────────────────
+
+export interface RegisterScreenshotResult {
+  ok: boolean;
+  error?: string;
+}
+
+export async function registerScreenshot(
+  filePath: string,
+): Promise<RegisterScreenshotResult> {
+  const data = await loadState();
+
+  if (
+    data.state !== PipelineState.IMPLEMENTACION &&
+    data.state !== PipelineState.EVIDENCIA
+  ) {
+    return {
+      ok: false,
+      error: `Solo se puede registrar screenshot en estado IMPLEMENTACION o EVIDENCIA. Estado actual: ${data.state}.`,
+    };
+  }
+
+  data.screenshotCaptured = true;
+
+  const logEntry: LogEntry = {
+    timestamp: new Date().toISOString(),
+    action: "REGISTER_SCREENSHOT",
+    detail: `Screenshot captured: ${filePath} for ticket ${data.activeTicket}.`,
+  };
+  data.log.push(logEntry);
+
+  await saveState(data);
+  return { ok: true };
+}
+
+export interface ConfirmNextResult {
+  ok: boolean;
+  remainingTickets: string[];
+  error?: string;
+}
+
+export async function confirmNext(): Promise<ConfirmNextResult> {
+  const data = await loadState();
+
+  if (data.state !== PipelineState.COMPLETADO) {
+    return {
+      ok: false,
+      remainingTickets: [],
+      error: `Solo se puede confirmar continuación en estado COMPLETADO. Estado actual: ${data.state}.`,
+    };
+  }
+
+  if (!data.awaitingUserConfirmation) {
+    return {
+      ok: false,
+      remainingTickets: [],
+      error: "No hay confirmación pendiente.",
+    };
+  }
+
+  data.awaitingUserConfirmation = false;
+
+  const completedTicket = data.activeTicket;
+  const remaining = data.tickets
+    .filter((t) => t.id !== completedTicket)
+    .map((t) => t.id);
+
+  const logEntry: LogEntry = {
+    timestamp: new Date().toISOString(),
+    action: "USER_CONFIRMED_NEXT",
+    detail: `User confirmed continue after completing ${completedTicket}. Remaining: ${remaining.length}.`,
+  };
+  data.log.push(logEntry);
+
+  await saveState(data);
+  return { ok: true, remainingTickets: remaining };
+}
+
 export interface GetStateResult {
   state: PipelineState;
   stateDescription: string;
@@ -244,6 +442,9 @@ export interface GetStateResult {
   tickets: TicketEntry[];
   nextAction: string;
   nextCommand: string;
+  awaitingUserConfirmation: boolean;
+  featureBranch: string | null;
+  screenshotCaptured: boolean;
 }
 
 export async function getState(): Promise<GetStateResult> {
@@ -266,5 +467,8 @@ export async function getState(): Promise<GetStateResult> {
     tickets: data.tickets,
     nextAction: NEXT_ACTIONS[data.state],
     nextCommand,
+    awaitingUserConfirmation: data.awaitingUserConfirmation ?? false,
+    featureBranch: data.featureBranch ?? null,
+    screenshotCaptured: data.screenshotCaptured ?? false,
   };
 }
