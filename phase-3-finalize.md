@@ -617,6 +617,7 @@ echo "Si todo está ✅: el sistema está listo."
 - [ ] `/evidence` command existe en `ai-specs/.commands/`
 - [ ] `/generate-docs` command existe en `ai-specs/.commands/`
 - [ ] `/commit` incluye evidence check (paso 2)
+- [ ] No existe `.claude/commands/start.md` (menú legacy eliminado)
 
 ---
 

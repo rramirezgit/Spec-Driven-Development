@@ -225,8 +225,26 @@ if [ -n "$CURRENT_VERSION" ] && [ -n "$NEW_VERSION" ] && [ "$CURRENT_VERSION" !=
   UPGRADE_TRIGGER="version_changed"
 fi
 
+# Tier 0: Proyecto pre-meta (bootstrapped antes de V4.3, sin .bootstrap-meta.json)
+if [ "$UPGRADE_PENDING" = false ] && [ ! -f .bootstrap-meta.json ]; then
+  LEGACY_SIGNALS=0
+  test -f .claude/commands/start.md && LEGACY_SIGNALS=$((LEGACY_SIGNALS + 1))
+  test -d ai-specs && LEGACY_SIGNALS=$((LEGACY_SIGNALS + 1))
+  test -f CLAUDE.md && LEGACY_SIGNALS=$((LEGACY_SIGNALS + 1))
+  test -d .claude/commands/opsx && LEGACY_SIGNALS=$((LEGACY_SIGNALS + 1))
+
+  if [ "$LEGACY_SIGNALS" -ge 2 ]; then
+    UPGRADE_PENDING=true
+    UPGRADE_TRIGGER="pre_meta_legacy"
+  fi
+fi
+
 if [ "$UPGRADE_PENDING" = true ]; then
-  FROM_VERSION="${CURRENT_VERSION:-unknown}"
+  if [ "$UPGRADE_TRIGGER" = "pre_meta_legacy" ]; then
+    FROM_VERSION="pre-meta"
+  else
+    FROM_VERSION="${CURRENT_VERSION:-unknown}"
+  fi
   TO_VERSION="${NEW_VERSION:-unknown}"
   FROM_HASH="${CURRENT_HASH:-none}"
   TO_HASH="${NEW_HASH:-none}"
@@ -254,6 +272,8 @@ UPGEOF
   echo ""
   if [ "$UPGRADE_TRIGGER" = "content_changed" ]; then
     echo "🔄 Upgrade detectado (content_changed): archivos fuente modificados"
+  elif [ "$UPGRADE_TRIGGER" = "pre_meta_legacy" ]; then
+    echo "🔄 Upgrade detectado (pre_meta_legacy): proyecto legacy sin .bootstrap-meta.json"
   else
     echo "🔄 Upgrade detectado (version_changed): V${FROM_VERSION} → V${TO_VERSION}"
   fi
@@ -270,6 +290,8 @@ echo ""
 if [ "$UPGRADE_PENDING" = true ]; then
   if [ "$UPGRADE_TRIGGER" = "content_changed" ]; then
     echo "  🔄 Upgrade pendiente: archivos fuente modificados (mismo V${TO_VERSION})"
+  elif [ "$UPGRADE_TRIGGER" = "pre_meta_legacy" ]; then
+    echo "  🔄 Upgrade pendiente: proyecto legacy (pre-meta) → V${TO_VERSION}"
   else
     echo "  🔄 Upgrade pendiente: V${FROM_VERSION} → V${TO_VERSION}"
   fi

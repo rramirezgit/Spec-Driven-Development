@@ -114,6 +114,32 @@ Una vez actualizado, volvé a correr este prompt.
 
 ---
 
+### 0.0a — Detectar y limpiar archivos legacy
+
+> Proyectos bootstrapped antes de V4.3 pueden tener archivos obsoletos que interfieren con el flujo actual.
+
+```bash
+echo "=== LEGACY FILE DETECTION ==="
+test -f .claude/commands/start.md && echo "LEGACY_START_MD=true" || echo "LEGACY_START_MD=false"
+test -f .claude/settings.local.json && echo "LEGACY_SETTINGS=true" || echo "LEGACY_SETTINGS=false"
+```
+
+**Si `LEGACY_START_MD=true`**:
+- Crear backup: `mkdir -p .bootstrap-backup && cp .claude/commands/start.md .bootstrap-backup/start.md`
+- Eliminar: `rm .claude/commands/start.md`
+- Mostrar: "🗑️ Archivo legacy eliminado: `.claude/commands/start.md` (backup en `.bootstrap-backup/start.md`)"
+
+**Si `LEGACY_SETTINGS=true`**:
+- Verificar si contiene credenciales Jira (email/token):
+  ```bash
+  grep -q "jira\|atlassian\|email\|token" .claude/settings.local.json 2>/dev/null && echo "HAS_JIRA_CREDS=true" || echo "HAS_JIRA_CREDS=false"
+  ```
+- Si tiene credenciales Jira: mostrar "⚠️ `.claude/settings.local.json` contiene credenciales Jira legacy. Desde V4.2 se usa MCP Atlassian — las credenciales manuales ya no son necesarias."
+
+Si no se detectaron archivos legacy, continuar silenciosamente.
+
+---
+
 ### 0.0b — Detectar MCPs disponibles
 
 ```bash

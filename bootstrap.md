@@ -55,13 +55,28 @@ Parsear del `.upgrade-pending`:
 Parsear del `project-profile.md`:
 - Tipo de proyecto, framework, tracker, nombre, idiomas, MCPs detectados, etc.
 
-**Si `NO_PROFILE`**: El proyecto no tiene profile (probablemente nunca completó Fase 0). En este caso, DETENER y mostrar:
-```
-❌ No se encontró .ai-internal/project-profile.md
-   El upgrade necesita el perfil del proyecto para regenerar archivos adaptados.
-   Ejecutá /bootstrap sin upgrade para completar la configuración inicial.
-```
-Eliminar `.ai-internal/.upgrade-pending` y DETENER.
+**Si `NO_PROFILE`**: Verificar si es un proyecto legacy (pre-meta):
+
+- Si `from_version` es `"pre-meta"` (proyecto bootstrapped antes de V4.3):
+  ```bash
+  rm -f .ai-internal/.upgrade-pending
+  ```
+  Mostrar:
+  ```
+  🔄 Proyecto legacy detectado (pre-meta, sin perfil guardado).
+     Se ejecutará bootstrap completo (4 fases) para configurar el sistema desde cero.
+     Los archivos obsoletos (start.md, etc.) se limpiarán en Fase 0.
+  ```
+  **Continuar con Paso 1** (flujo normal — esto ejecutará Phase 0 desde cero, que incluye limpieza legacy).
+
+- Si `from_version` NO es `"pre-meta"`:
+  DETENER y mostrar:
+  ```
+  ❌ No se encontró .ai-internal/project-profile.md
+     El upgrade necesita el perfil del proyecto para regenerar archivos adaptados.
+     Ejecutá /bootstrap sin upgrade para completar la configuración inicial.
+  ```
+  Eliminar `.ai-internal/.upgrade-pending` y DETENER.
 
 ### 0b.2 — Leer changelog
 
