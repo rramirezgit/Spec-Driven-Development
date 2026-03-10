@@ -605,27 +605,21 @@ test -f "docs/evidence/${TICKET_ID}.md" && echo "EVIDENCE_EXISTS" || echo "NO_EV
 ## 5. Commit and push
 `git push -u origin <branch>` if new branch.
 
-## 6. Pull Request (via `gh` CLI)
+## 6. Merge a dev (directo, sin PR)
 
-**Preflight**: Check if `gh` is available:
-```bash
-gh --version 2>/dev/null || echo "GH_NOT_FOUND"
-```
-If `gh` not found: show commit summary, suggest manual PR creation, skip to step 7.
+> **Flujo**: ticket branch → merge directo a dev → QA prueba en dev → `/release-to-main` crea PR dev → main.
+> El PR solo existe cuando va a main (ahí sí hay code review).
 
-### 6.1. Determinar rama base (target branch)
-
-**Flujo normal**: ticket branch → PR a `dev` → QA revisa en ambiente dev → release a `main`.
-**Flujo hotfix**: si la rama actual empieza con `hotfix/` → PR directo a `main`.
+### 6.1. Resolver rama de desarrollo
 
 ```bash
 CURRENT_BRANCH=$(git branch --show-current)
 echo "CURRENT_BRANCH=$CURRENT_BRANCH"
 ```
 
-**Si `CURRENT_BRANCH` empieza con `hotfix/`** → usar `main` como base, saltar a 6.2.
+**Si `CURRENT_BRANCH` empieza con `hotfix/`** → flujo hotfix: crear PR directo a `main` (ver 6.3).
 
-**Si no es hotfix**, resolver la rama de desarrollo:
+**Si no es hotfix**, resolver `DEV_BRANCH`:
 
 1. **Profile**: leer `Dev Branch` de `.ai-internal/project-profile.md` — si tiene valor, usar esa rama
 2. **Auto-detección**: si no hay profile o el campo está vacío:
@@ -638,33 +632,60 @@ echo "CURRENT_BRANCH=$CURRENT_BRANCH"
 
    Opciones: construir dinámicamente con las ramas remotas (excluyendo `main`/`master` y la rama actual) + "Otra rama".
 
-Usar la rama resuelta como `--base` en `gh pr create`.
+### 6.2. Ejecutar merge a dev
 
-### 6.2. Crear el PR
+```bash
+git fetch origin
+git checkout {DEV_BRANCH}
+git pull origin {DEV_BRANCH}
+git merge {CURRENT_BRANCH} --no-edit
+git push origin {DEV_BRANCH}
+git checkout {CURRENT_BRANCH}
+```
 
-- **Idioma del PR**: título y descripción en el mismo idioma que el commit (ver `AGENTS.md` § Language). Si no hay AGENTS.md, usar español.
-- Title: aligned with commit, include ticket ID if applicable
+**Si hay conflictos de merge**: NO resolverlos automáticamente. Mostrar:
+```
+⚠️ Conflictos al mergear {CURRENT_BRANCH} → {DEV_BRANCH}
+
+   Archivos en conflicto:
+   {lista de archivos}
+
+   Resolvé los conflictos manualmente y volvé a ejecutar /commit.
+```
+Hacer `git merge --abort`, volver a la rama original y HALT.
+
+**Si el merge es exitoso**: continuar con paso 7.
+
+### 6.3. Flujo hotfix (solo para branches `hotfix/*`)
+
+Si la rama empieza con `hotfix/`:
+
+```bash
+gh --version 2>/dev/null || echo "GH_NOT_FOUND"
+```
+
+Si `gh` disponible: crear PR directo a `main` con `[HOTFIX]` en el título.
+- Title: `[HOTFIX] {descripción del commit}`
 - Description: resumen, link al ticket, notas de testing
-- **If hotfix**: agregar `[HOTFIX]` al título del PR
-- **If evidence exists**: add link to evidence file in PR description:
-  ```
-  ## Evidencia
-  Ver: `docs/evidence/{TICKET_ID}.md`
-  ```
+- **If evidence exists**: agregar link a evidencia
 
-## 7. Transicionar ticket a Dev Done (OBLIGATORIO si hay ticket ID)
+Si `gh` no disponible: mostrar instrucciones manuales.
 
-> **Flujo**: `/commit` mueve a **Dev Done** (desarrollo terminado, pendiente de deploy).
-> El de servidores deploya a dev y mueve a **QA Review**.
-> QA prueba en dev y mueve a **QA Approved** o **QA Failed**.
+Saltar al paso 7.
+
+## 7. Transicionar ticket a QA Review (OBLIGATORIO si hay ticket ID)
+
+> **Flujo**: `/commit` mergea a dev y mueve a **QA Review**.
+> El de servidores ve el ticket en QA Review, deploya a dev.
+> QA prueba y mueve a **QA Approved** o **QA Failed**.
 
 Si hay ticket ID (de args, branch `feature/<ID>-*`, o prefijo del commit):
 
 ### 7.0. Resolver nombre real del status
 
-Leer `Jira Statuses` de `.ai-internal/project-profile.md` para obtener el nombre real del status "Dev Done" en este proyecto (puede ser "Dev Done", "Desarrollo Terminado", "Development Done", "Ready for Deploy", "Pendiente de Deploy", etc.).
+Leer `Jira Statuses` de `.ai-internal/project-profile.md` para obtener el nombre real del status "QA Review" en este proyecto (puede ser "QA Review", "Code Review", "En QA", "En Revisión", etc.).
 
-Si el profile no tiene `Jira Statuses` o está vacío → usar nombres por defecto: "Dev Done", "Development Done", "Desarrollo Terminado", "Ready for Deploy", "Pendiente de Deploy".
+Si el profile no tiene `Jira Statuses` o está vacío → usar nombres por defecto: "QA Review", "QA", "Code Review", "En QA", "En Revisión".
 
 ### 7.1. Llamar `sdd_transition_jira(ticketId)`
 El MCP tool retorna instrucciones de delegación con los pasos exactos a ejecutar.
@@ -672,13 +693,13 @@ El MCP tool retorna instrucciones de delegación con los pasos exactos a ejecuta
 ### 7.2. Ejecutar los pasos de delegación
 Seguir los pasos que retorna `sdd_transition_jira`:
 1. Llamar `getTransitionsForJiraIssue` con los params indicados
-2. Buscar la transición cuyo nombre coincida con el status real de Dev Done (del paso 7.0)
+2. Buscar la transición cuyo nombre coincida con el status real de QA Review (del paso 7.0)
 3. Llamar `transitionJiraIssue` con el ID de la transición encontrada
 
 ### 7.3. Agregar comentario
 Llamar `sdd_comment_jira(ticketId, body)` con:
 ```
-✅ Desarrollo completado — PR #{número} → {DEV_BRANCH}
+✅ Desarrollo completado — mergeado a {DEV_BRANCH}
 
 📝 Evidencia: docs/evidence/{TICKET_ID}.md
 📁 Archivos modificados: {N}
@@ -694,7 +715,7 @@ Pendiente: deploy a dev para QA.
 ⚠️ TRANSICIÓN PENDIENTE: {TICKET_ID}
    Estado actual: {estado_actual}
    Transiciones disponibles: {lista de nombres}
-   Ninguna coincide con Dev Done ({nombre_real}).
+   Ninguna coincide con QA Review ({nombre_real}).
 
    ❗ Acción requerida: mover manualmente en el tracker.
 ```
@@ -707,16 +728,16 @@ Pendiente: deploy a dev para QA.
    ❗ Acción requerida: mover manualmente en el tracker.
 ```
 
-**IMPORTANTE**: La falla en la transición NO bloquea el commit/PR (el código ya está subido). Pero SIEMPRE se reporta como acción pendiente.
+**IMPORTANTE**: La falla en la transición NO bloquea el commit/merge (el código ya está subido). Pero SIEMPRE se reporta como acción pendiente.
 
 - No ticket ID → reportar: "Sin ticket ID — no se transicionó ningún ticket"
 - No-git mode → skip entirely
 
 ## 8. Resumen
-Archivos commiteados, scope, PR URL, estado de transición del ticket, estado de evidencia.
+Archivos commiteados, scope, merge a dev, estado de transición del ticket, estado de evidencia.
 
 **El resumen SIEMPRE incluye el estado de la transición**:
-- ✅ Ticket {ID} transicionado a QA Review
+- ✅ Ticket {ID} transicionado a QA Review — mergeado a {DEV_BRANCH}
 - ⚠️ Ticket {ID} NO transicionado — requiere acción manual
 - ℹ️ Sin ticket ID asociado
 

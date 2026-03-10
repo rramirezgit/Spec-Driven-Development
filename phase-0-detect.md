@@ -221,8 +221,7 @@ Mostrar confirmación:
    |-----------------|----------------------|-----------|
    | **To Do** | Backlog, Open, Abierto, Por Hacer | Estado inicial |
    | **In Progress** | En Progreso, En Desarrollo | Developer trabajando |
-   | **Dev Done** | Desarrollo Terminado, Development Done, Ready for Deploy, Pendiente de Deploy | `/commit` transiciona aquí — avisa que hay código listo para deployar a dev |
-   | **QA Review** | QA, En QA, Code Review, En Revisión | Servidores deployó a dev, QA puede probar |
+   | **QA Review** | QA, En QA, Code Review, En Revisión | `/commit` transiciona aquí — código mergeado a dev, pendiente deploy y QA |
    | **QA Approved** | QA Aprobado, Approved, Aprobado, Ready for Release | `/release-to-main` lee estos |
    | **QA Failed** | QA Rechazado, QA Fallido, Rejected, Rechazado | QA rechaza, dev vuelve a fixear |
    | **Done** | Hecho, Closed, Cerrado, Completado | Post-merge a main |
@@ -239,7 +238,6 @@ Mostrar confirmación:
    📋 Columnas del workflow:
       ✅ To Do         → {nombre_real_en_jira}
       ✅ In Progress   → {nombre_real_en_jira}
-      ✅ Dev Done      → {nombre_real_en_jira}
       ✅ QA Review     → {nombre_real_en_jira}
       ✅ QA Approved   → {nombre_real_en_jira}
       ✅ QA Failed     → {nombre_real_en_jira}
@@ -254,7 +252,7 @@ Mostrar confirmación:
       ❌ QA Failed   — necesaria para el flujo de rechazo de QA
 
    El flujo completo requiere estas columnas:
-     To Do → In Progress → Dev Done → QA Review → QA Approved / QA Failed → Done
+     To Do → In Progress → QA Review → QA Approved / QA Failed → Done
 
    Acción requerida:
      1. Abrí la configuración del board en Jira
