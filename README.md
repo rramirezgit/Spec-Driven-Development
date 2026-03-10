@@ -1,4 +1,4 @@
-# Spec-Driven Development — Bootstrap V4.3
+# Spec-Driven Development — Bootstrap V4.4
 
 Sistema de flujos de trabajo asistidos por IA para Claude Code.
 Incluye un MCP server que controla el pipeline de forma programatica (state machine en codigo, no en prompts).
@@ -20,6 +20,42 @@ Incluye un MCP server que controla el pipeline de forma programatica (state mach
 ### Nota sobre Jira
 
 La interaccion con Jira (transiciones, comentarios) se delega al MCP de Atlassian que ya esta configurado y autenticado en Claude Code. No se necesitan variables de entorno adicionales (`JIRA_API_TOKEN`/`JIRA_EMAIL` ya no son necesarias).
+
+---
+
+## Flujo de desarrollo (V4.4)
+
+```
+Ticket (To Do) → Crear rama feature/{ID}-slug
+                → Desarrollar en la rama
+                → Generar evidencia (/evidence)
+                → Commit + merge directo a dev
+                → Transicionar ticket a QA Review (con comentario completo)
+                → QA prueba en ambiente dev
+                    → QA Approved: ticket listo para release
+                    → QA Failed: dev fixea en la rama, re-merge a dev
+                → /release-to-main: lee tickets aprobados, crea PR dev → main
+                → Merge PR → tickets a Done
+```
+
+### Columnas Jira requeridas (5)
+
+| Columna | Aliases aceptados | Proposito |
+|---------|-------------------|-----------|
+| **To Do** | Backlog, Open, Abierto, Por Hacer | Estado inicial |
+| **In Progress** | En Progreso, En Desarrollo | Developer trabajando |
+| **QA Review** | QA, En QA, Code Review, En Revision | `/commit` transiciona aqui |
+| **QA Approved / QA Failed** | QA Aprobado, Approved, Rechazado | QA aprueba o rechaza |
+| **Done** | Hecho, Closed, Cerrado, Completado | Post-merge a main |
+
+El bootstrap verifica automaticamente que el board tenga estas columnas (paso 0.0d).
+
+### Ramas
+
+| Patron | Destino | Mecanismo |
+|--------|---------|-----------|
+| `feature/{ID}-slug` | dev | Merge directo (sin PR) |
+| `hotfix/{ID}-slug` | main | PR directo a main |
 
 ---
 
@@ -47,7 +83,7 @@ El installer descarga todo, compila el MCP server, y `/bootstrap` genera el `.mc
 
 ---
 
-## Actualizar proyecto existente (cualquier version → V4.3)
+## Actualizar proyecto existente (cualquier version → V4.4)
 
 Para proyectos que **ya hicieron bootstrap con cualquier version anterior** (incluyendo versiones pre-MCP que usaban `pipeline-tracker.md`):
 
@@ -74,14 +110,26 @@ El bootstrap detecta automaticamente el upgrade y entra en **Modo Upgrade**:
 
 > **Nota**: `migrate-to-mcp.sh` esta **deprecado** — el upgrade automatico de `/bootstrap` ahora cubre todo lo que hacia ese script (y mas). Usa `install-bootstrap.sh` + `/bootstrap` en su lugar.
 
-### Que cambia en V4.3
+### Que cambia en V4.4
+
+| Cambio | Impacto |
+|--------|---------|
+| Flujo git completo | Rama por ticket → merge directo a dev → QA en dev → PR dev→main via `/release-to-main` |
+| 5 columnas Jira | To Do → In Progress → QA Review → QA Approved/Failed → Done |
+| Verificacion de columnas | Bootstrap detecta columnas del board y mapea automaticamente a los estados requeridos |
+| `/release-to-main` (opcion 7) | Lee tickets QA Approved via JQL, crea PR dev→main con evidencia por ticket |
+| Hotfix support | `hotfix/*` branches crean PR directo a main (bypasean dev) |
+| Comentario QA completo | Al transicionar a QA: resumen, archivos, plan de pruebas, screenshots, links de evidencia |
+| Auto-deteccion dev branch | Bootstrap detecta la rama de desarrollo existente (dev, develop, staging) |
+| MCP server: transiciones custom | Lee nombres de columnas del perfil del proyecto para matching dinamico |
+
+### Que cambio en V4.3
 
 | Cambio | Impacto |
 |--------|---------|
 | Verificacion MCP Atlassian | Paso 0.0d: confirma que el MCP esta autenticado (ya no pide email/token manual) |
 | Screenshot en `/evidence` | Paso 3b: Chrome DevTools o screenshot manual para cambios frontend |
 | Screenshot inline en evidencia | QA ve el screenshot directo en GitHub |
-| Verificacion Jira MCP | Fase 7 chequea que el MCP Atlassian este conectado |
 
 ### Que cambio en V4.2
 
@@ -90,10 +138,8 @@ El bootstrap detecta automaticamente el upgrade y entra en **Modo Upgrade**:
 | MCP Atlassian obligatorio | Si no esta configurado, el bootstrap bloquea |
 | Auto-deteccion cloudId + projectKey | Ya no pregunta manualmente, lo obtiene del MCP |
 | Eliminada opcion "Implementar directo" | Transicion IDLE→PLAN removida del state machine |
-| Exploracion profunda obligatoria | Antes de artefactos o enrich-ticket |
 | Sprint Gate | Tickets deben estar en sprint activo para trabajar |
-| Asignacion de tickets al crear | Assignee + sprint activo automatico |
-| Un ticket a la vez | Ciclo completo obligatorio: implementar → evidencia → commit → PR → transicion |
+| Un ticket a la vez | Ciclo completo obligatorio: implementar → evidencia → commit → merge → transicion |
 | Rama por ticket | `feature/{ID}-{slug}` obligatoria, nunca en main |
 
 ### Archivos que se regeneran
@@ -101,13 +147,29 @@ El bootstrap detecta automaticamente el upgrade y entra en **Modo Upgrade**:
 Estos archivos se **sobreescriben** al re-ejecutar `/bootstrap`:
 
 ```
-.claude/commands/menu.md              ← nuevo: 7 opciones, Sprint Gate, release-to-main, ciclo obligatorio
-ai-specs/.commands/develop-{tipo}.md  ← nuevo: Step 0 crea rama
-.claude/commands/create-*-tickets.md  ← nuevo: asigna sprint + assignee
-.ai-internal/mcp-server/              ← nuevo: sin transicion IDLE→PLAN, projectKey
-.claude/commands/bootstrap.md         ← nuevo: V4.3
-.bootstrap-meta.json                  ← actualizado: version 4.3
+.claude/commands/menu.md              ← 7 opciones, Sprint Gate, release-to-main, ciclo obligatorio
+ai-specs/.commands/develop-{tipo}.md  ← Step 0 crea rama, merge directo a dev
+ai-specs/.commands/commit.md          ← merge a dev + comentario QA completo
+ai-specs/.commands/release-to-main.md ← JQL QA Approved + PR dev→main
+.claude/commands/create-*-tickets.md  ← asigna sprint + assignee
+.ai-internal/mcp-server/              ← transiciones custom + merge a dev
+.claude/commands/bootstrap.md         ← V4.4
+.bootstrap-meta.json                  ← actualizado: version 4.4
 ```
+
+---
+
+## Menu de opciones (/menu)
+
+| # | Opcion | Que hace |
+|---|--------|---------|
+| 1 | Crear artefactos | Genera specs, ADRs, diagramas |
+| 2 | Crear tickets | Crea tickets en Jira desde artefactos |
+| 3 | Planificar ticket | Selecciona ticket, genera plan tecnico |
+| 4 | Implementar | Desarrolla segun el plan |
+| 5 | Evidencia + commit | Genera evidencia, commit, merge a dev, transicion QA |
+| 6 | Estado del pipeline | Muestra estado actual y siguiente accion |
+| 7 | Release a main | Lee tickets QA Approved, crea PR dev→main |
 
 ---
 
@@ -115,10 +177,10 @@ ai-specs/.commands/develop-{tipo}.md  ← nuevo: Step 0 crea rama
 
 ```
 Claude <-> MCP Server (stdio) <-> pipeline-state.json (local)
-                               <-> Jira REST API (para QA transition)
+                               <-> Delegacion a MCP Atlassian (Jira)
 ```
 
-El MCP server expone 6 herramientas que Claude llama como cualquier otro MCP tool:
+El MCP server expone 7 herramientas que Claude llama como cualquier otro MCP tool:
 
 | Tool | Que hace |
 |------|----------|
@@ -127,8 +189,8 @@ El MCP server expone 6 herramientas que Claude llama como cualquier otro MCP too
 | `sdd_advance` | Transiciona estado. Rechaza transiciones ilegales. Requiere activeTicket para PLAN/IMPLEMENTACION. |
 | `sdd_register_tickets` | Registra tickets creados en el pipeline. Solo en ARTEFACTOS o TICKETS. |
 | `sdd_set_active_ticket` | Marca ticket activo (valida que existe en la lista). Solo en TICKETS o PLAN. |
-| `sdd_transition_jira` | Genera instrucciones para transicionar ticket a QA Review. **Solo en COMMIT o COMPLETADO** — requiere evidencia + commit previos. |
-| `sdd_comment_jira` | Genera instrucciones para comentar ticket. **Solo en COMMIT o COMPLETADO**. |
+| `sdd_transition_jira` | Genera instrucciones para transicionar ticket a QA Review. Usa nombres de columna custom del perfil. **Solo en COMMIT o COMPLETADO**. |
+| `sdd_comment_jira` | Genera instrucciones para comentar ticket con evidencia completa. **Solo en COMMIT o COMPLETADO**. |
 
 ### Transiciones validas (enforced en codigo)
 
@@ -145,8 +207,6 @@ COMPLETADO -> TICKETS | IDLE
 
 Cualquier estado puede volver a IDLE (abandono controlado con confirmacion). Cualquier otra transicion es rechazada con error descriptivo.
 
-> **Nota V4.3**: La transicion `IDLE -> PLAN` fue eliminada. Ya no se puede implementar directamente sin pasar por artefactos/tickets primero.
-
 ### Que controla el MCP vs que controla Claude
 
 | MCP Server (deterministic) | Claude (LLM) |
@@ -154,10 +214,10 @@ Cualquier estado puede volver a IDLE (abandono controlado con confirmacion). Cua
 | Estado del pipeline | Ejecutar comandos .md |
 | Validar transiciones | Interactuar con el usuario |
 | Config gate | Crear artefactos (codigo, planes, evidencia) |
-| Registro de tickets | Operaciones git |
+| Registro de tickets | Operaciones git (merge a dev, PR a main) |
 | Persistencia JSON | Decidir que comando ejecutar (segun nextCommand) |
 | Delegacion a MCP Atlassian | Ejecutar transiciones/comentarios Jira via MCP Atlassian |
-| — | HALT protocol y Skip Audit |
+| Matching de transiciones custom | HALT protocol y Skip Audit |
 
 ---
 
@@ -165,9 +225,9 @@ Cualquier estado puede volver a IDLE (abandono controlado con confirmacion). Cua
 
 | Fase | Que hace |
 |------|----------|
-| 0-2 | Detecta stack, pregunta lo minimo, confirma perfil |
+| 0-2 | Detecta stack, verifica MCP Atlassian, valida columnas Jira, detecta dev branch, confirma perfil |
 | 3-4 | Crea 10 OPSX commands + 10 AI commands + 1 agente |
-| 5 | Genera archivos adaptados (CLAUDE.md, specs, menu.md) |
+| 5 | Genera archivos adaptados (CLAUDE.md, specs, menu.md con 7 opciones) |
 | 6-7 | Docs base, OpenSpec init, MCP config, verificacion |
 
 ---
@@ -176,22 +236,22 @@ Cualquier estado puede volver a IDLE (abandono controlado con confirmacion). Cua
 
 ```
 Spec-Driven-Development/
-├── phase-0-detect.md          # Deteccion + preguntas + confirmacion
-├── phase-1-reusables.md       # Dirs + archivos reusables
-├── phase-2-adapted.md         # Archivos adaptados (incluye menu.md template)
+├── phase-0-detect.md          # Deteccion + MCP verification + columnas Jira
+├── phase-1-reusables.md       # Dirs + archivos reusables (commit, release-to-main)
+├── phase-2-adapted.md         # Archivos adaptados (menu.md con 7 opciones)
 ├── phase-3-finalize.md        # Docs + OpenSpec + MCP config + verificacion
 ├── bootstrap.md               # Comando orquestador (/bootstrap)
 ├── install-bootstrap.sh       # Installer para proyectos nuevos
-├── migrate-to-mcp.sh          # DEPRECADO — usar install-bootstrap.sh + /bootstrap
+├── CLAUDE.md                  # Git Rules para este repo
 └── mcp-server/                # MCP server del pipeline
     ├── package.json
     ├── tsconfig.json
     └── src/
         ├── types.ts           # Enums, interfaces, transiciones validas
-        ├── config.ts          # Carga y validacion de project-profile
+        ├── config.ts          # Carga y validacion de project-profile + Jira statuses
         ├── pipeline.ts        # State machine (load, save, advance)
-        ├── jira.ts            # Jira REST API (transition, comment)
-        └── index.ts           # Server MCP con 6 tools
+        ├── jira.ts            # Delegacion a MCP Atlassian (transiciones custom)
+        └── index.ts           # Server MCP con 7 tools
 ```
 
 ## Que se instala en el proyecto
@@ -200,7 +260,7 @@ Spec-Driven-Development/
 proyecto/
 ├── .ai-internal/                  <- gitignored
 │   ├── phases/                    <- las 4 fases de bootstrap
-│   ├── project-profile.md         <- perfil detectado
+│   ├── project-profile.md         <- perfil detectado (incluye jira_statuses, dev_branch)
 │   ├── pipeline-state.json        <- estado del pipeline (MCP)
 │   └── mcp-server/                <- MCP server compilado
 │       ├── src/
@@ -210,7 +270,8 @@ proyecto/
 ├── .mcp.json                      <- config MCP para Claude Code
 ├── .claude/commands/
 │   ├── bootstrap.md
-│   └── menu.md                    <- orquestador (usa MCP tools)
+│   └── menu.md                    <- orquestador con 7 opciones (usa MCP tools)
+├── docs/evidence/                 <- evidencia por ticket ({TICKET_ID}.md + screenshots)
 └── ... (lo que genera el bootstrap)
 ```
 
@@ -246,5 +307,9 @@ cd .ai-internal/mcp-server && npm install && npm run build
 **sdd_check_config falla** — Verificar que existe `.ai-internal/project-profile.md` con cloudId y tracker
 
 **sdd_transition_jira falla** — Verificar que el MCP de Atlassian esta configurado y autenticado en Claude Code
+
+**Columnas Jira no detectadas** — Verificar que el board tenga las 5 columnas requeridas (To Do, In Progress, QA Review, QA Approved/QA Failed, Done)
+
+**Merge a dev falla** — Verificar que la rama `dev` existe en el repo. El bootstrap la detecta automaticamente en paso 0.2
 
 **Quiero empezar de cero** — `/bootstrap` y elegir "Empezar de cero"

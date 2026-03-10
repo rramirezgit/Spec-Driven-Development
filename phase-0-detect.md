@@ -1,5 +1,15 @@
-# Bootstrap Prompt V4.3 — AI Workflow Setup
+# Bootstrap Prompt V4.4 — AI Workflow Setup
 
+> **Changelog V4.3 → V4.4**:
+> - Flujo git: merge directo a dev (sin PR) — PR solo para release dev→main
+> - 5 columnas Jira: To Do → In Progress → QA Review → QA Approved/Failed → Done
+> - Bootstrap verifica columnas del board y mapea automaticamente (paso 0.0d)
+> - Auto-deteccion de dev branch (dev, develop, staging)
+> - `/release-to-main`: nueva opcion 7 en menu — lee QA Approved via JQL, crea PR dev→main
+> - Hotfix support: `hotfix/*` branches → PR directo a main
+> - Comentario QA completo al transicionar: resumen, archivos, plan de pruebas, screenshots
+> - MCP server: transiciones custom — lee nombres de columna del perfil del proyecto
+>
 > **Changelog V4.2 → V4.3**:
 > - Fase 0: Paso 0.0d simplificado — verifica que el MCP Atlassian esté autenticado (ya no pide email/token manual)
 > - `/evidence`: Nuevo paso 3b — screenshot visual para cambios frontend (Chrome DevTools o usuario provee)

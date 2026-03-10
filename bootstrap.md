@@ -1,11 +1,11 @@
 ---
 name: "Bootstrap: Setup AI Workflow"
-description: Configura el sistema completo de flujos AI en este proyecto (V4.3)
+description: Configura el sistema completo de flujos AI en este proyecto (V4.4)
 category: Setup
 tags: [bootstrap, setup, workflow]
 ---
 
-# Bootstrap AI Workflow V4.3
+# Bootstrap AI Workflow V4.4
 
 Sos el orquestador del bootstrap. Tu trabajo es ejecutar las fases en orden, una a la vez, cargando el archivo correspondiente.
 
@@ -24,7 +24,7 @@ test -f .bootstrap-meta.json && grep -o '"content_hash"[[:space:]]*:[[:space:]]*
 Determinar `UPGRADE_PENDING`:
 
 1. **Tier 1 — Archivo explícito**: Si `.ai-internal/.upgrade-pending` existe → `UPGRADE_PENDING=true` (leer `from_version`, `to_version`, `trigger`, `from_hash`, `to_hash` del JSON)
-2. **Tier 2 — Versión diferente**: Si no existe `.upgrade-pending` pero sí `.bootstrap-meta.json`: comparar la versión de este archivo (`bootstrap_version`) con la versión de este bootstrap (V4.3). Si son distintas → `UPGRADE_PENDING=true` (fallback)
+2. **Tier 2 — Versión diferente**: Si no existe `.upgrade-pending` pero sí `.bootstrap-meta.json`: comparar la versión de este archivo (`bootstrap_version`) con la versión de este bootstrap (V4.4). Si son distintas → `UPGRADE_PENDING=true` (fallback)
 3. **Tier 3 — Hash ausente**: Si la versión es igual PERO `content_hash` está vacío o no existe en `.bootstrap-meta.json` → `UPGRADE_PENDING=true` (el proyecto fue bootstrapped antes de la detección por hash; forzar upgrade para computar el hash inicial)
 4. Si no existe `.bootstrap-meta.json` → `UPGRADE_PENDING=false` (instalación nueva, flujo normal)
 
@@ -70,7 +70,7 @@ echo "=== CHANGELOG ==="
 head -35 .ai-internal/phases/phase-0-detect.md
 ```
 
-Parsear las líneas que empiezan con `> -` del bloque `Changelog V{from} → V{to}` para extraer los cambios relevantes. Si hay múltiples bloques de changelog (ej: V3→V4, V4→V4.1, V4.1→V4.3), incluir TODOS los que apliquen entre `from_version` y `to_version`.
+Parsear las líneas que empiezan con `> -` del bloque `Changelog V{from} → V{to}` para extraer los cambios relevantes. Si hay múltiples bloques de changelog (ej: V3→V4, V4→V4.1, V4.1→V4.3, V4.3→V4.4), incluir TODOS los que apliquen entre `from_version` y `to_version`.
 
 ### 0b.3 — Detectar archivos modificados manualmente + gaps de infraestructura
 
@@ -113,7 +113,7 @@ test -f ai-specs/specs/base-standards.mdc && echo "BASE_STANDARDS=EXISTS" || ech
 test -f .ai-internal/pipeline-tracker.md && echo "PIPELINE_TRACKER_LEGACY=EXISTS" || echo "PIPELINE_TRACKER_LEGACY=NOT_FOUND"
 test -f .ai-internal/pipeline-state.json && echo "PIPELINE_STATE_JSON=EXISTS" || echo "PIPELINE_STATE_JSON=MISSING"
 
-# Jira MCP (V4.3+)
+# Jira MCP (V4.3+) + Jira columns (V4.4+)
 echo ""
 echo "=== JIRA MCP ==="
 # El MCP de Atlassian se valida en el paso 0.0c/0.0d — aquí solo verificamos que siga funcional
@@ -378,7 +378,7 @@ Si `JIRA_MCP=CONNECTED`: no hacer nada (ya está funcional).
 #### Paso E: Actualizar metadata
 
 Actualizar `.bootstrap-meta.json`:
-- `bootstrap_version` → nueva versión (4.3)
+- `bootstrap_version` → nueva versión (4.4)
 - `previous_version` → versión anterior
 - `content_hash` → computar el hash actual ejecutando:
   ```bash
@@ -482,7 +482,7 @@ Basándote en el estado:
 Mostrá:
 
 ```
-🔧 AI Workflow Bootstrap V4.3
+🔧 AI Workflow Bootstrap V4.4
 ==============================
 
 Estado:
