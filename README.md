@@ -166,7 +166,7 @@ Cualquier estado puede volver a IDLE (abandono controlado con confirmacion). Cua
 | Fase | Que hace |
 |------|----------|
 | 0-2 | Detecta stack, pregunta lo minimo, confirma perfil |
-| 3-4 | Crea 10 OPSX commands + 9 AI commands + 1 agente |
+| 3-4 | Crea 10 OPSX commands + 10 AI commands + 1 agente |
 | 5 | Genera archivos adaptados (CLAUDE.md, specs, menu.md) |
 | 6-7 | Docs base, OpenSpec init, MCP config, verificacion |
 

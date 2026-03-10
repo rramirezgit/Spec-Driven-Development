@@ -1,11 +1,13 @@
 import { loadProjectConfig } from "./config.js";
 
 /**
- * QA transition names to search for (case-insensitive).
+ * Default QA transition names to search for (case-insensitive).
  * The Atlassian MCP's getTransitionsForJiraIssue returns available transitions.
  * Claude must match one of these names from the result.
+ * If the project profile has a custom QA status name (from bootstrap column detection),
+ * it gets prepended to this list for priority matching.
  */
-const QA_TRANSITION_NAMES = [
+const DEFAULT_QA_TRANSITION_NAMES = [
   "qa review",
   "ready for qa",
   "qa",
@@ -57,6 +59,14 @@ export async function buildTransitionInstructions(
     };
   }
 
+  // Build transition name list: custom name from profile gets priority
+  const transitionNames = config.jiraQaStatus
+    ? [config.jiraQaStatus.toLowerCase(), ...DEFAULT_QA_TRANSITION_NAMES]
+    : [...DEFAULT_QA_TRANSITION_NAMES];
+
+  // Deduplicate
+  const uniqueNames = [...new Set(transitionNames)];
+
   return {
     ok: true,
     action: "DELEGATE_TO_ATLASSIAN_MCP",
@@ -71,7 +81,7 @@ export async function buildTransitionInstructions(
           cloudId: config.cloudId,
           issueIdOrKey: ticketId,
         },
-        matchLogic: `De las transiciones retornadas, buscar una cuyo nombre (case-insensitive) sea uno de: ${QA_TRANSITION_NAMES.join(", ")}. Si ninguna coincide, informar al usuario que la transición a QA no está disponible y listar las transiciones existentes.`,
+        matchLogic: `De las transiciones retornadas, buscar una cuyo nombre (case-insensitive) sea uno de: ${uniqueNames.join(", ")}. Si ninguna coincide, informar al usuario que la transición a QA no está disponible y listar las transiciones existentes.`,
       },
       {
         step: 2,

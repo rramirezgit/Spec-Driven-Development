@@ -39,6 +39,7 @@ export interface ProjectConfig {
   cloudId: string;
   projectKey: string;
   idioma: string;
+  jiraQaStatus: string;
 }
 
 export const VALID_TRANSITIONS: Record<PipelineState, PipelineState[]> = {
@@ -64,7 +65,7 @@ export const STATE_DESCRIPTIONS: Record<PipelineState, string> = {
   [PipelineState.PLAN]: "Plan técnico listo — implementar",
   [PipelineState.IMPLEMENTACION]:
     "Código implementado — generar evidencia",
-  [PipelineState.EVIDENCIA]: "Evidencia generada — commit + PR",
+  [PipelineState.EVIDENCIA]: "Evidencia generada — commit + merge a dev",
   [PipelineState.COMMIT]: "Commit realizado — completar ciclo",
   [PipelineState.COMPLETADO]:
     "Ticket completado — siguiente ticket o archivar",
@@ -77,7 +78,7 @@ export const NEXT_ACTIONS: Record<PipelineState, string> = {
   [PipelineState.TICKETS]: "Seleccionar ticket y crear plan técnico",
   [PipelineState.PLAN]: "Implementar el plan técnico",
   [PipelineState.IMPLEMENTACION]: "Generar evidencia de QA",
-  [PipelineState.EVIDENCIA]: "Commit + PR + transición QA",
+  [PipelineState.EVIDENCIA]: "Commit + merge a dev + transición QA",
   [PipelineState.COMMIT]: "Marcar ticket como completado",
   [PipelineState.COMPLETADO]: "Siguiente ticket o archivar change",
 };

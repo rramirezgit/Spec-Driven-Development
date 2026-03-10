@@ -65,6 +65,18 @@ function parseProfile(content: string): ProjectConfig {
     return "";
   };
 
+  // Extract QA Review status name from Jira Statuses JSON (if present)
+  const jiraStatusesRaw = get("Jira Statuses", "jira_statuses");
+  let jiraQaStatus = "";
+  if (jiraStatusesRaw) {
+    try {
+      const statuses = JSON.parse(jiraStatusesRaw);
+      jiraQaStatus = statuses.qa_review || "";
+    } catch {
+      // Not valid JSON — ignore
+    }
+  }
+
   return {
     nombre: get("Nombre", "nombre", "Project Name", "project_name"),
     tipo: get("Tipo", "tipo", "Type", "type", "Project Type"),
@@ -72,6 +84,7 @@ function parseProfile(content: string): ProjectConfig {
     cloudId: get("CloudId", "cloudId", "cloud_id", "Tracker CloudId"),
     projectKey: get("Tracker Project Key", "project_key", "Project Key"),
     idioma: get("Idioma", "idioma", "Language", "language"),
+    jiraQaStatus,
   };
 }
 
