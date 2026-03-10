@@ -101,7 +101,7 @@ El bootstrap detecta automaticamente el upgrade y entra en **Modo Upgrade**:
 Estos archivos se **sobreescriben** al re-ejecutar `/bootstrap`:
 
 ```
-.claude/commands/menu.md              ← nuevo: 6 opciones, Sprint Gate, ciclo obligatorio
+.claude/commands/menu.md              ← nuevo: 7 opciones, Sprint Gate, release-to-main, ciclo obligatorio
 ai-specs/.commands/develop-{tipo}.md  ← nuevo: Step 0 crea rama
 .claude/commands/create-*-tickets.md  ← nuevo: asigna sprint + assignee
 .ai-internal/mcp-server/              ← nuevo: sin transicion IDLE→PLAN, projectKey

@@ -152,7 +152,7 @@ Cambios en esta versión:
 
 Archivos que se regeneran:
   ✏️  .claude/commands/opsx/ (10 comandos)
-  ✏️  ai-specs/.commands/ (9 comandos + 1 agente)
+  ✏️  ai-specs/.commands/ (10 comandos + 1 agente)
   ✏️  .claude/commands/menu.md
   ✏️  ai-specs/.commands/develop-{tipo}.md
   ✏️  ai-specs/.commands/plan-{tipo}-ticket.md
@@ -211,7 +211,7 @@ mkdir -p "$BACKUP_DIR"
 
 Leer `.ai-internal/phases/phase-1-reusables.md` y ejecutar sus instrucciones para sobreescribir:
 - Los 10 comandos OPSX en `.claude/commands/opsx/`
-- Los 9 comandos AI en `ai-specs/.commands/`
+- Los 10 comandos AI en `ai-specs/.commands/`
 - El agente en `ai-specs/.agents/`
 
 Estos son idénticos en todos los proyectos → siempre se sobreescriben sin preguntar.
@@ -408,7 +408,7 @@ Mostrar:
 
 Archivos regenerados:
   ✅ .claude/commands/opsx/ (10 comandos)
-  ✅ ai-specs/.commands/ (9 comandos + 1 agente)
+  ✅ ai-specs/.commands/ (10 comandos + 1 agente)
   ✅ .claude/commands/menu.md
   ✅ ai-specs/.commands/develop-{tipo}.md
   ✅ ai-specs/.commands/plan-{tipo}-ticket.md
@@ -487,7 +487,7 @@ Mostrá:
 
 Estado:
   {✅|⏳|⬜} Fase 0-2: Detección y perfil
-  {✅|⏳|⬜} Fase 3-4: Archivos reusables (10 OPSX + 9 commands + 1 agent)
+  {✅|⏳|⬜} Fase 3-4: Archivos reusables (10 OPSX + 10 commands + 1 agent)
   {✅|⏳|⬜} Fase 5:   Archivos adaptados al proyecto
   {✅|⏳|⬜} Fase 5b-7: Docs base + OpenSpec + Verificación
 

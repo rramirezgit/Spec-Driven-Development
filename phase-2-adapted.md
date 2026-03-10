@@ -610,7 +610,7 @@ Cuando se identifica un ticket para trabajar (en Opción 2, en estado TICKETS, o
 ```
 1. sdd_check_config → si error, mostrar y HALT
 2. sdd_get_state → leer state, nextAction, nextCommand
-3. Si IDLE → mostrar menú (6 opciones)
+3. Si IDLE → mostrar menú (7 opciones)
 4. Si no → mostrar estado actual + "Siguiente: {nextAction}"
 5. Ejecutar el comando .md correspondiente (UNO solo)
 6. sdd_advance({nuevo_estado})
@@ -626,6 +626,7 @@ Si el usuario pasa un argumento directo, ir a ese flujo sin menú:
 - "review" / "pr" → Ejecutar SOLO review-pr
 - "test" → Ejecutar SOLO test-plan
 - "sprint" / "6" → Flujo Sprint (ver abajo)
+- "release" / "7" → Ejecutar SOLO release-to-main
 - "status" → Llamar sdd_get_state y mostrar sin ejecutar nada
 - "evidence" / "evidencia" → Ejecutar SOLO evidence
 
@@ -645,6 +646,7 @@ AskUserQuestion (single_select):
 4. Review PR — revisar un pull request
 5. Test plan — generar plan de testing
 6. Sprint — planificar varios tickets en paralelo
+7. Release a main — tickets aprobados por QA → PR a main
 ```
 
 ## Acciones del menú
@@ -712,6 +714,10 @@ Lanzar subagentes en paralelo (máximo 5) — **SOLO planificación** (enrich + 
 **HALT después**. Mostrar resumen de tickets planificados y ofrecer empezar a implementar **de a uno**.
 
 > **IMPORTANTE**: Sprint mode planifica en paralelo pero la implementación es siempre secuencial — un ticket a la vez, ciclo completo (ver regla 10).
+
+### Opción 7: Release a main
+Leer y ejecutar `/release-to-main`. **HALT después.**
+(No afecta el pipeline — release es atómico.)
 
 # Estados del pipeline (cuando NO es IDLE)
 

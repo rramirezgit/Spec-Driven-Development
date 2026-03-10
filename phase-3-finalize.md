@@ -370,7 +370,7 @@ Usado por `/commit` para crear PRs.
 Ver BOOTSTRAP-PROMPT-V4.md
 
 ### Checklist
-- [ ] `/menu` muestra menú con 6 opciones
+- [ ] `/menu` muestra menú con 7 opciones
 - [ ] `/opsx:onboard` inicia tutorial
 - [ ] `/explain test` da explicación estructurada
 - [ ] CLAUDE.md sin placeholders `{}`
@@ -598,7 +598,7 @@ echo "Si todo está ✅: el sistema está listo."
 **Checklist final** (confirmá cada uno):
 - [ ] `ls .claude/commands/opsx/` muestra 10 archivos
 - [ ] `ls .claude/skills/` muestra 10 directorios (generados por openspec init)
-- [ ] `/menu` muestra el menú interactivo con 6 opciones
+- [ ] `/menu` muestra el menú interactivo con 7 opciones
 - [ ] `/opsx:onboard` inicia el tutorial
 - [ ] `CLAUDE.md` refleja el stack real (sin `{word_word}` sin reemplazar)
 - [ ] `openspec/config.yaml` tiene contexto completo (sin `{word_word}`)

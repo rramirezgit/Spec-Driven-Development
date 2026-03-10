@@ -516,6 +516,7 @@ Reusables (sin modificación):
   - ai-specs/.commands/test-plan.md
   - ai-specs/.commands/evidence.md
   - ai-specs/.commands/generate-docs.md
+  - ai-specs/.commands/release-to-main.md
   - ai-specs/.agents/product-strategy-analyst.md
 
 Adaptados al proyecto:

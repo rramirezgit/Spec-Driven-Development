@@ -615,22 +615,28 @@ If `gh` not found: show commit summary, suggest manual PR creation, skip to step
 
 ### 6.1. Determinar rama base (target branch)
 
-El PR siempre va a la rama de desarrollo. El flujo es: **ticket branch → dev → QA revisa en ambiente dev → merge a main**.
+**Flujo normal**: ticket branch → PR a `dev` → QA revisa en ambiente dev → release a `main`.
+**Flujo hotfix**: si la rama actual empieza con `hotfix/` → PR directo a `main`.
 
-**Orden de resolución**:
+```bash
+CURRENT_BRANCH=$(git branch --show-current)
+echo "CURRENT_BRANCH=$CURRENT_BRANCH"
+```
 
-1. **Profile**: leer `Dev Branch` de `.ai-internal/project-profile.md` — si tiene valor, usar esa rama directamente
+**Si `CURRENT_BRANCH` empieza con `hotfix/`** → usar `main` como base, saltar a 6.2.
+
+**Si no es hotfix**, resolver la rama de desarrollo:
+
+1. **Profile**: leer `Dev Branch` de `.ai-internal/project-profile.md` — si tiene valor, usar esa rama
 2. **Auto-detección**: si no hay profile o el campo está vacío:
    ```bash
    git branch -r --list 'origin/dev' 'origin/develop' 'origin/development' | sed 's|origin/||' | head -1 | xargs
    ```
 3. **Preguntar**: si no se encuentra ninguna, usar **AskUserQuestion** (single_select):
 
-   "No encontré una rama de desarrollo (`dev`). ¿Cuál es la rama de desarrollo de este proyecto?"
+   "No encontré una rama de desarrollo (`dev`). ¿Cuál es la rama de desarrollo?"
 
-   Opciones: construir dinámicamente con las ramas remotas del repo (excluyendo `main`/`master` y la rama actual) + "Otra rama".
-
-   Si elige "Otra rama": preguntar el nombre exacto.
+   Opciones: construir dinámicamente con las ramas remotas (excluyendo `main`/`master` y la rama actual) + "Otra rama".
 
 Usar la rama resuelta como `--base` en `gh pr create`.
 
@@ -639,6 +645,7 @@ Usar la rama resuelta como `--base` en `gh pr create`.
 - **Idioma del PR**: título y descripción en el mismo idioma que el commit (ver `AGENTS.md` § Language). Si no hay AGENTS.md, usar español.
 - Title: aligned with commit, include ticket ID if applicable
 - Description: resumen, link al ticket, notas de testing
+- **If hotfix**: agregar `[HOTFIX]` al título del PR
 - **If evidence exists**: add link to evidence file in PR description:
   ```
   ## Evidencia
@@ -1211,6 +1218,139 @@ Generar:
 - Usar templates de `documentation-standards.mdc` — no inline templates
 - Cross-reference a ai-specs/ y CLAUDE.md cuando corresponda — no duplicar contenido
 - Iterativo: confirmar con el usuario entre cada fase
+```
+
+---
+
+### `ai-specs/.commands/release-to-main.md`
+
+```markdown
+# Role
+Release manager. Lee tickets aprobados por QA y crea un PR de dev a main.
+
+# Arguments
+`$ARGUMENTS`:
+- Vacío → buscar tickets aprobados automáticamente
+- "check" / "status" → solo mostrar tickets aprobados sin crear PR
+
+# Process
+
+## 1. Resolver rama de desarrollo
+
+Leer `Dev Branch` de `.ai-internal/project-profile.md`.
+Si no existe, auto-detectar:
+```bash
+git branch -r --list 'origin/dev' 'origin/develop' 'origin/development' | sed 's|origin/||' | head -1 | xargs
+```
+Si no se encuentra → preguntar al usuario. Guardar como `DEV_BRANCH`.
+
+## 2. Buscar tickets aprobados por QA
+
+Leer `Tracker Project Key` de `.ai-internal/project-profile.md` → `PROJECT_KEY`.
+
+Buscar tickets en estado "QA Approved" (o equivalente) via Jira MCP:
+
+Llamar `searchJiraIssuesUsingJql` con:
+- cloudId del profile
+- JQL: `project = {PROJECT_KEY} AND status in ("QA Approved", "QA Aprobado", "Approved", "Aprobado") ORDER BY updated DESC`
+
+Si no hay resultados, intentar con statuses alternativos:
+- JQL: `project = {PROJECT_KEY} AND status in ("Done", "Ready for Release", "Listo para Release") AND status changed after -7d ORDER BY updated DESC`
+
+## 3. Mostrar resumen
+
+```
+📋 Tickets aprobados por QA:
+
+  ✅ {TICKET-1}: {título}
+  ✅ {TICKET-2}: {título}
+  ...
+
+  Total: {N} tickets listos para release
+
+  Release: {DEV_BRANCH} → main
+```
+
+Si hay tickets con estado "QA Failed" / "QA Rechazado" en el mismo proyecto, mostrar advertencia:
+```
+⚠️  Tickets rechazados por QA (NO incluidos):
+  ❌ {TICKET-X}: {título} — estado: QA Failed
+```
+
+Si no hay tickets aprobados:
+```
+ℹ️  No hay tickets aprobados por QA en este momento.
+    Los tickets deben estar en estado "QA Approved" para incluirlos en el release.
+```
+HALT.
+
+Si `$ARGUMENTS` es "check" / "status": mostrar resumen y HALT (no crear PR).
+
+## 4. Confirmar release
+
+Usar **AskUserQuestion** (single_select):
+"¿Crear PR de {DEV_BRANCH} → main con estos {N} tickets?"
+
+Opciones:
+- "Crear PR de release"
+- "Cancelar"
+
+Si cancela → HALT.
+
+## 5. Crear PR de release
+
+```bash
+gh --version 2>/dev/null || echo "GH_NOT_FOUND"
+```
+
+Si `gh` no disponible: mostrar instrucciones manuales y HALT.
+
+Verificar que `DEV_BRANCH` esté actualizado:
+```bash
+git fetch origin
+git log --oneline origin/{DEV_BRANCH}...origin/main | head -20
+```
+
+Si no hay commits nuevos en dev vs main:
+```
+ℹ️  No hay cambios en {DEV_BRANCH} que no estén en main.
+```
+HALT.
+
+Crear el PR:
+- **Title**: `Release: {N} tickets aprobados por QA`
+- **Base**: `main`
+- **Head**: `{DEV_BRANCH}`
+- **Body**:
+  ```
+  ## Tickets incluidos
+
+  {por cada ticket aprobado:}
+  - [{TICKET-ID}]({jira_url}) — {título}
+
+  ## QA
+  Todos los tickets fueron probados y aprobados en el ambiente de desarrollo.
+
+  {si hay tickets rechazados:}
+  ## Excluidos (QA Failed)
+  - {TICKET-X} — {título} (pendiente de fix)
+  ```
+
+## 6. Mostrar resultado
+
+```
+✅ PR de release creado: {PR_URL}
+
+   {DEV_BRANCH} → main
+   {N} tickets incluidos
+
+   Cuando se apruebe y mergee el PR, los cambios pasan a producción.
+```
+
+# Guardrails
+- NUNCA hacer merge directo — siempre crear PR para review
+- NUNCA incluir tickets que no estén aprobados por QA
+- Si hay conflictos entre dev y main, reportarlos — no intentar resolverlos automáticamente
 ```
 
 ---
