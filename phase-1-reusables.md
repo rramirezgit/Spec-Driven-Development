@@ -696,17 +696,75 @@ Seguir los pasos que retorna `sdd_transition_jira`:
 2. Buscar la transición cuyo nombre coincida con el status real de QA Review (del paso 7.0)
 3. Llamar `transitionJiraIssue` con el ID de la transición encontrada
 
-### 7.3. Agregar comentario
+### 7.3. Agregar comentario completo para QA
+
+Antes de construir el comentario, recopilar la información:
+
+```bash
+# Evidencia
+test -f "docs/evidence/${TICKET_ID}.md" && echo "EVIDENCE=YES" || echo "EVIDENCE=NO"
+test -f "docs/evidence/screenshots/${TICKET_ID}.png" && echo "SCREENSHOT=YES" || echo "SCREENSHOT=NO"
+
+# Archivos modificados en el branch
+git diff {DEV_BRANCH}...{CURRENT_BRANCH} --stat
+
+# Repo URL para links
+gh repo view --json url -q .url 2>/dev/null || git remote get-url origin 2>/dev/null | sed 's/\.git$//' | sed 's|git@github.com:|https://github.com/|'
+```
+
+**Si existe evidencia** (`docs/evidence/{TICKET_ID}.md`): leer el archivo para extraer:
+- Resumen del cambio
+- Tabla de archivos modificados
+- Pasos de verificación manual (plan de pruebas para QA)
+- Casos edge
+- Notas para QA
+
+**Si NO existe evidencia**: construir un resumen básico a partir del diff y el commit message.
+
 Llamar `sdd_comment_jira(ticketId, body)` con:
+
 ```
 ✅ Desarrollo completado — mergeado a {DEV_BRANCH}
 
-📝 Evidencia: docs/evidence/{TICKET_ID}.md
-📁 Archivos modificados: {N}
-🧪 Tests: {estado}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📋 Resumen del cambio
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+{resumen de qué se hizo y por qué — extraído de la evidencia o del commit message}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📁 Archivos modificados ({N})
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+{tabla de archivos: ruta | tipo de cambio | descripción breve}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🧪 Plan de pruebas para QA
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+{por cada paso de verificación:}
+☐ {paso}: {acción a realizar} → Resultado esperado: {qué debe pasar}
+
+{si hay casos edge:}
+⚠️ Casos edge a verificar:
+☐ {caso edge 1}
+☐ {caso edge 2}
+
+{si hay notas para QA (ambiente, datos de prueba, dependencias):}
+📝 Notas: {notas}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📎 Links
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📝 Evidencia: {GH_REPO_URL}/blob/{DEV_BRANCH}/docs/evidence/{TICKET_ID}.md
+{si tiene screenshot:} 📸 Screenshot: {GH_REPO_URL}/blob/{DEV_BRANCH}/docs/evidence/screenshots/{TICKET_ID}.png
+🔀 Branch: {CURRENT_BRANCH} → {DEV_BRANCH}
 
 Pendiente: deploy a dev para QA.
 ```
+
+> **Nota**: El comentario debe ser autocontenido — QA no debería necesitar abrir otros archivos para saber qué probar. Los links son complementarios para evidencia detallada.
 
 ### 7.4. Si la transición falla
 
