@@ -1354,6 +1354,19 @@ Si no hay commits nuevos en dev vs main:
 ```
 HALT.
 
+Antes de crear el PR, buscar evidencia de cada ticket:
+```bash
+for TICKET in {lista_de_tickets_aprobados}; do
+  test -f "docs/evidence/${TICKET}.md" && echo "${TICKET}=HAS_EVIDENCE" || echo "${TICKET}=NO_EVIDENCE"
+  test -f "docs/evidence/screenshots/${TICKET}.png" && echo "${TICKET}_SCREENSHOT=YES" || echo "${TICKET}_SCREENSHOT=NO"
+done
+```
+
+Obtener la URL del repo para los links:
+```bash
+gh repo view --json url -q .url 2>/dev/null || git remote get-url origin 2>/dev/null | sed 's/\.git$//' | sed 's|git@github.com:|https://github.com/|'
+```
+
 Crear el PR:
 - **Title**: `Release: {N} tickets aprobados por QA`
 - **Base**: `main`
@@ -1363,10 +1376,16 @@ Crear el PR:
   ## Tickets incluidos
 
   {por cada ticket aprobado:}
-  - [{TICKET-ID}]({jira_url}) — {título}
+  - [{TICKET-ID}]({jira_url}) — {título} | [Evidencia]({GH_REPO_URL}/blob/{DEV_BRANCH}/docs/evidence/{TICKET-ID}.md) {si tiene screenshot: "| [Screenshot]({GH_REPO_URL}/blob/{DEV_BRANCH}/docs/evidence/screenshots/{TICKET-ID}.png?raw=true)"}
+  {si el ticket NO tiene evidencia: marcar con ⚠️ en vez de link}
 
   ## QA
   Todos los tickets fueron probados y aprobados en el ambiente de desarrollo.
+
+  {si hay tickets sin evidencia:}
+  ### Tickets sin evidencia
+  ⚠️ Los siguientes tickets no tienen evidencia documentada:
+  - {TICKET-X} — {título}
 
   {si hay tickets rechazados:}
   ## Excluidos (QA Failed)
@@ -1380,6 +1399,8 @@ Crear el PR:
 
    {DEV_BRANCH} → main
    {N} tickets incluidos
+   📝 Evidencia: {X}/{N} tickets con evidencia documentada
+   {si hay sin evidencia: "⚠️ {Y} tickets sin evidencia"}
 
    Cuando se apruebe y mergee el PR, los cambios pasan a producción.
 ```
