@@ -1,4 +1,5 @@
-import { readFile, writeFile, mkdir, rename } from "node:fs/promises";
+import { readFile, writeFile, mkdir, rename, stat as fsStat } from "node:fs/promises";
+import { execSync } from "node:child_process";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -458,6 +459,24 @@ export async function registerBranch(
     };
   }
 
+  // Verify the branch actually exists in git
+  try {
+    const currentBranch = execSync("git rev-parse --abbrev-ref HEAD", {
+      cwd: PROJECT_ROOT,
+      encoding: "utf-8",
+    }).trim();
+    if (currentBranch !== branchName) {
+      return {
+        ok: false,
+        error:
+          `⛔ La rama actual es "${currentBranch}" pero intentás registrar "${branchName}". ` +
+          "Creá la rama primero (git checkout -b) y asegurate de estar parado en ella.",
+      };
+    }
+  } catch {
+    // git not available — skip verification (CI environment, etc.)
+  }
+
   data.featureBranch = branchName;
 
   const logEntry: LogEntry = {
@@ -493,12 +512,44 @@ export async function registerScreenshot(
     };
   }
 
+  // Verify the screenshot file actually exists on disk
+  const fullPath = join(PROJECT_ROOT, filePath);
+  try {
+    const stat = await fsStat(fullPath);
+    if (!stat.isFile()) {
+      return {
+        ok: false,
+        error: `⛔ "${filePath}" no es un archivo válido.`,
+      };
+    }
+    // Verify it's an image (check extension)
+    const ext = filePath.toLowerCase().split(".").pop() ?? "";
+    if (!["png", "jpg", "jpeg", "webp", "gif"].includes(ext)) {
+      return {
+        ok: false,
+        error: `⛔ "${filePath}" no parece ser una imagen (extensión: .${ext}). Se esperan: .png, .jpg, .jpeg, .webp, .gif.`,
+      };
+    }
+    // Verify minimum file size (empty/corrupt images are < 100 bytes)
+    if (stat.size < 100) {
+      return {
+        ok: false,
+        error: `⛔ "${filePath}" es demasiado pequeño (${stat.size} bytes). No parece ser un screenshot válido.`,
+      };
+    }
+  } catch {
+    return {
+      ok: false,
+      error: `⛔ El archivo de screenshot no existe: ${filePath}. Capturá el screenshot primero con Chrome DevTools o Playwright.`,
+    };
+  }
+
   data.screenshotCaptured = true;
 
   const logEntry: LogEntry = {
     timestamp: new Date().toISOString(),
     action: "REGISTER_SCREENSHOT",
-    detail: `Screenshot captured: ${filePath} for ticket ${data.activeTicket}.`,
+    detail: `Screenshot verified on disk: ${filePath} for ticket ${data.activeTicket}.`,
   };
   data.log.push(logEntry);
 
@@ -646,12 +697,32 @@ export async function registerMerge(
     };
   }
 
+  // Verify the merge actually happened: check that the feature branch
+  // is an ancestor of the target branch (meaning it was merged)
+  if (type === "direct") {
+    try {
+      // Check that the target branch contains the feature branch commits
+      const featureBranch = data.featureBranch ?? "";
+      execSync(
+        `git merge-base --is-ancestor ${featureBranch} ${targetBranch}`,
+        { cwd: PROJECT_ROOT, encoding: "utf-8" },
+      );
+    } catch {
+      return {
+        ok: false,
+        error:
+          `⛔ La rama "${data.featureBranch}" no fue mergeada a "${targetBranch}". ` +
+          "Ejecutá el merge primero (git checkout dev && git merge feature/...) y después registrá.",
+      };
+    }
+  }
+
   data.mergeRecord = { type, targetBranch };
 
   const logEntry: LogEntry = {
     timestamp: new Date().toISOString(),
     action: "REGISTER_MERGE",
-    detail: `${type} merge to ${targetBranch} from ${data.featureBranch ?? "unknown"} for ticket ${data.activeTicket}.`,
+    detail: `${type} merge to ${targetBranch} from ${data.featureBranch ?? "unknown"} for ticket ${data.activeTicket}. Verified in git.`,
   };
   data.log.push(logEntry);
 
