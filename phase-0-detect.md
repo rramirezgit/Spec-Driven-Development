@@ -296,6 +296,9 @@ ls docs/ 2>/dev/null | head -20
 ls docs/evidence/ 2>/dev/null | head -10
 ls docs/api/ 2>/dev/null | head -10
 
+# Detectar rama de desarrollo
+git branch -r --list 'origin/dev' 'origin/develop' 'origin/development' 2>/dev/null | sed 's|origin/||' | head -1 | xargs echo "DEV_BRANCH=" || echo "DEV_BRANCH=not_found"
+
 # Detectar tipo de proyecto
 test -f next.config.js -o -f next.config.ts && echo "NEXTJS"
 test -f vite.config.ts -o -f vite.config.js && echo "VITE"
@@ -371,6 +374,7 @@ PROYECTO_PERFIL:
   workspace_name: [del paso 0.0c]
   project_key: [del paso 0.0c]
   jira_identity: [mcp_cloud — del paso 0.0d]
+  dev_branch: [dev | develop | development — auto-detectado de ramas remotas]
   estructura_carpetas: [descripcion breve]
   patron_componentes: [inferido de archivos existentes]
   patron_hooks: [inferido de archivos existentes]
@@ -586,6 +590,7 @@ Crear `.ai-internal/project-profile.md` con TODOS los datos reales del PROYECTO_
 # Tracker CloudId: {cloud_id}
 # Tracker Project Key: {project_key}
 # Jira Identity: {jira_identity}
+# Dev Branch: {dev_branch}
 # Idioma técnico: {idioma_tecnico}
 # Idioma tickets: {idioma_tickets}
 # Idioma UI: {idioma_ui}

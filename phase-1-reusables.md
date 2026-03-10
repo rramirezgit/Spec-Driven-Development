@@ -613,21 +613,26 @@ gh --version 2>/dev/null || echo "GH_NOT_FOUND"
 ```
 If `gh` not found: show commit summary, suggest manual PR creation, skip to step 7.
 
-### 6.1. Elegir rama base (target branch)
+### 6.1. Determinar rama base (target branch)
 
-Listar las ramas remotas del repo:
-```bash
-git branch -r --list 'origin/*' | sed 's|origin/||' | grep -v HEAD | xargs
-```
+El PR siempre va a la rama de desarrollo. El flujo es: **ticket branch → dev → QA revisa en ambiente dev → merge a main**.
 
-Usar **AskUserQuestion** (single_select):
-"¿A qué rama va el PR?"
+**Orden de resolución**:
 
-Opciones: construir dinámicamente con las ramas detectadas (ej: `main`, `dev`, `staging`, etc.). Si hay más de 4, mostrar las más comunes (main, dev/develop, staging) + "Otra rama".
+1. **Profile**: leer `Dev Branch` de `.ai-internal/project-profile.md` — si tiene valor, usar esa rama directamente
+2. **Auto-detección**: si no hay profile o el campo está vacío:
+   ```bash
+   git branch -r --list 'origin/dev' 'origin/develop' 'origin/development' | sed 's|origin/||' | head -1 | xargs
+   ```
+3. **Preguntar**: si no se encuentra ninguna, usar **AskUserQuestion** (single_select):
 
-Si elige "Otra rama": preguntar el nombre exacto.
+   "No encontré una rama de desarrollo (`dev`). ¿Cuál es la rama de desarrollo de este proyecto?"
 
-Usar la rama elegida como `--base` en `gh pr create`.
+   Opciones: construir dinámicamente con las ramas remotas del repo (excluyendo `main`/`master` y la rama actual) + "Otra rama".
+
+   Si elige "Otra rama": preguntar el nombre exacto.
+
+Usar la rama resuelta como `--base` en `gh pr create`.
 
 ### 6.2. Crear el PR
 
