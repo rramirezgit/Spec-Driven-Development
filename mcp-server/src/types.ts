@@ -47,6 +47,12 @@ export interface PipelineData {
   screenshotCaptured?: boolean;
   /** Records how the code was merged (direct merge vs PR) */
   mergeRecord?: MergeRecord | null;
+  /** True when implementation is done but user hasn't verified it works yet */
+  awaitingVerification?: boolean;
+  /** True when sprint has been validated for the active ticket */
+  sprintValidated?: boolean;
+  /** Path to the evidence file for the active ticket */
+  evidenceFilePath?: string | null;
 }
 
 export interface ProjectConfig {
@@ -94,7 +100,7 @@ export const NEXT_ACTIONS: Record<PipelineState, string> = {
   [PipelineState.ARTEFACTOS]: "Crear tickets en el tracker",
   [PipelineState.TICKETS]: "Seleccionar ticket y crear plan técnico",
   [PipelineState.PLAN]: "Implementar el plan técnico",
-  [PipelineState.IMPLEMENTACION]: "Generar evidencia de QA",
+  [PipelineState.IMPLEMENTACION]: "Verificar con usuario que funciona (sdd_confirm_implementation) → generar evidencia",
   [PipelineState.EVIDENCIA]: "Commit + merge a dev + transición QA",
   [PipelineState.COMMIT]: "Marcar ticket como completado",
   [PipelineState.COMPLETADO]: "Preguntar al usuario si quiere continuar (sdd_confirm_next requerido)",
@@ -123,5 +129,8 @@ export function defaultPipelineData(): PipelineData {
     featureBranch: null,
     screenshotCaptured: false,
     mergeRecord: null,
+    awaitingVerification: false,
+    sprintValidated: false,
+    evidenceFilePath: null,
   };
 }

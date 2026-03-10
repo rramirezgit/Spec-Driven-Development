@@ -13,6 +13,9 @@ import {
   registerBranch,
   registerScreenshot,
   registerMerge,
+  confirmImplementation,
+  confirmSprint,
+  registerEvidence,
 } from "./pipeline.js";
 import type { MergeType } from "./types.js";
 import { buildTransitionInstructions, buildCommentInstructions } from "./jira.js";
@@ -192,7 +195,85 @@ server.tool(
   },
 );
 
-// ─── Tool 8: sdd_register_merge ─────────────────────────────────────────────
+// ─── Tool 8: sdd_confirm_sprint ──────────────────────────────────────────────
+
+server.tool(
+  "sdd_confirm_sprint",
+  "Confirma que el sprint fue validado para el ticket. " +
+    "OBLIGATORIO antes de sdd_set_active_ticket — el server rechazará activar un ticket sin sprint validado. " +
+    "ANTES de llamar: verificar con getJiraIssue que el ticket tiene sprint.state='active'. " +
+    "Si el proyecto es Kanban (sin sprints), pasar kanban=true para bypass.",
+  {
+    kanban: z
+      .boolean()
+      .optional()
+      .default(false)
+      .describe("true si el proyecto es Kanban y no usa sprints"),
+  },
+  async ({ kanban }) => {
+    const result = await confirmSprint(kanban);
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify(result, null, 2),
+        },
+      ],
+    };
+  },
+);
+
+// ─── Tool 9: sdd_confirm_implementation ─────────────────────────────────────
+
+server.tool(
+  "sdd_confirm_implementation",
+  "Confirma que el usuario verificó que la implementación funciona. " +
+    "OBLIGATORIO antes de generar evidencia — sdd_advance(EVIDENCIA) fallará sin verificación. " +
+    "ANTES de llamar: mostrar archivos modificados, tests ejecutados, " +
+    "y preguntar al usuario con AskUserQuestion si funciona correctamente. " +
+    "SOLO llamar DESPUÉS de que el usuario respondió 'sí funciona'. " +
+    "VIOLACIÓN: llamar sin confirmación del usuario.",
+  {},
+  async () => {
+    const result = await confirmImplementation();
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify(result, null, 2),
+        },
+      ],
+    };
+  },
+);
+
+// ─── Tool 10: sdd_register_evidence ─────────────────────────────────────────
+
+server.tool(
+  "sdd_register_evidence",
+  "Registra el archivo de evidencia generado. " +
+    "OBLIGATORIO antes de commit — sdd_advance(COMMIT) fallará sin evidencia registrada. " +
+    "El archivo DEBE existir en disco — el server verifica que el archivo existe. " +
+    "No se puede falsear: si el archivo no existe, el registro falla.",
+  {
+    filePath: z
+      .string()
+      .describe("Ruta relativa al archivo de evidencia (ej: docs/evidence/AUTH-45.md)"),
+  },
+  async ({ filePath }) => {
+    const result = await registerEvidence(filePath);
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify(result, null, 2),
+        },
+      ],
+    };
+  },
+);
+
+// ─── Tool 11: sdd_register_merge ─────────────────────────────────────────────
 
 server.tool(
   "sdd_register_merge",
@@ -219,7 +300,7 @@ server.tool(
   },
 );
 
-// ─── Tool 9: sdd_confirm_next ────────────────────────────────────────────────
+// ─── Tool 12: sdd_confirm_next ───────────────────────────────────────────────
 
 server.tool(
   "sdd_confirm_next",
@@ -242,7 +323,7 @@ server.tool(
   },
 );
 
-// ─── Tool 10: sdd_transition_jira ─────────────────────────────────────────
+// ─── Tool 13: sdd_transition_jira ────────────────────────────────────────────
 
 const VALID_STATES_FOR_JIRA_TRANSITION = [
   PipelineState.COMMIT,
@@ -282,7 +363,7 @@ server.tool(
   },
 );
 
-// ─── Tool 11: sdd_comment_jira ──────────────────────────────────────────────
+// ─── Tool 14: sdd_comment_jira ──────────────────────────────────────────────
 
 const VALID_STATES_FOR_JIRA_COMMENT = [
   PipelineState.COMMIT,

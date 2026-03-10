@@ -749,8 +749,16 @@ Después: `sdd_register_tickets([...])` + `sdd_advance(TICKETS)`.
 
 ## TICKETS → seleccionar UN ticket y planificar
 Mostrar tickets con `sdd_get_state`. Pedir selección de **UN solo ticket** con AskUserQuestion.
-**Sprint Gate** — Validar que el ticket seleccionado esté en un sprint activo (ver regla 9). Si no → BLOQUEAR.
-Después: `sdd_set_active_ticket(ID)` + leer `/plan-{tipo}-ticket` + `sdd_advance(PLAN)`.
+
+**⛔ SPRINT GATE (enforced por el MCP server)**:
+`sdd_set_active_ticket` fallará si no se validó el sprint con `sdd_confirm_sprint`.
+Secuencia obligatoria:
+1. Seleccionar ticket con AskUserQuestion
+2. Verificar sprint activo: `getJiraIssue(ticketId, fields: ["sprint", "summary"])`
+   - Si `sprint.state == "active"` → `sdd_confirm_sprint()`
+   - Si no hay sprint (Kanban) → `sdd_confirm_sprint(kanban=true)`
+   - Si Scrum sin sprint activo → BLOQUEAR, informar al usuario
+3. Solo entonces: `sdd_set_active_ticket(ID)` + leer `/plan-{tipo}-ticket` + `sdd_advance(PLAN)`
 
 > **Regla**: Se selecciona UN ticket. No se pueden seleccionar múltiples para trabajar en paralelo.
 
@@ -771,19 +779,21 @@ Ofrecer implementar con `/develop-{tipo}`.
 Después: `sdd_register_branch(rama)` + `sdd_advance(IMPLEMENTACION)`.
 
 ## IMPLEMENTACION → verificar y generar evidencia
-Mostrar archivos modificados.
-**Verificación obligatoria** — Antes de avanzar, confirmar con el usuario:
-```
-✅ Implementación completada para {TICKET_ID}
 
-Archivos modificados: {lista}
-Tests: {resultado si se corrieron}
+**⛔ GATE DE VERIFICACIÓN (enforced por el MCP server)**:
+`sdd_advance(EVIDENCIA)` fallará si no se llamó `sdd_confirm_implementation`.
+Y `sdd_confirm_implementation` SOLO se puede llamar DESPUÉS de que el usuario confirmó.
+Secuencia obligatoria:
+1. Mostrar archivos modificados y tests ejecutados
+2. AskUserQuestion: "¿Funciona correctamente?" / "Necesito ajustes"
+3. **ESPERAR respuesta del usuario**
+4. Si funciona → `sdd_confirm_implementation` → ejecutar `/evidence` → `sdd_advance(EVIDENCIA)`
+5. Si necesita ajustes → hacer cambios, volver a preguntar. NO avanzar.
 
-¿El ticket funciona correctamente? Verificá antes de continuar.
-```
-AskUserQuestion: "Sí, funciona — generar evidencia" / "No, necesito ajustes"
-- Si necesita ajustes → hacer los cambios, volver a verificar. NO avanzar hasta que confirme.
-- Si funciona → leer y ejecutar `/evidence`. Después: `sdd_advance(EVIDENCIA)`.
+**⛔ GATE DE EVIDENCIA (enforced por el MCP server)**:
+`sdd_advance(COMMIT)` fallará si no se registró evidencia con `sdd_register_evidence`.
+El server **verifica que el archivo existe en disco** — no se puede falsear.
+Secuencia: generar `/evidence` → `sdd_register_evidence("docs/evidence/{TICKET_ID}.md")`
 
 ## EVIDENCIA → screenshot + commit + PR (obligatorio)
 Mostrar evidencia generada.

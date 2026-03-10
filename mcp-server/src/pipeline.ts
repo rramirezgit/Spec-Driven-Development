@@ -132,6 +132,37 @@ export async function advance(
     };
   }
 
+  // Gate: IMPLEMENTACION → EVIDENCIA requires user verification
+  if (from === PipelineState.IMPLEMENTACION && to === PipelineState.EVIDENCIA) {
+    if (data.awaitingVerification) {
+      return {
+        ok: false,
+        from,
+        to,
+        error:
+          "⛔ No se puede generar evidencia sin verificación del usuario. " +
+          "El usuario DEBE confirmar que la implementación funciona correctamente. " +
+          "Mostrá los archivos modificados, preguntá con AskUserQuestion si funciona, " +
+          "y llamá sdd_confirm_implementation cuando confirme.",
+      };
+    }
+  }
+
+  // Gate: EVIDENCIA → COMMIT requires evidence file registered
+  if (from === PipelineState.EVIDENCIA && to === PipelineState.COMMIT) {
+    if (!data.evidenceFilePath) {
+      return {
+        ok: false,
+        from,
+        to,
+        error:
+          "⛔ No se puede avanzar a COMMIT sin evidencia registrada. " +
+          "Generá el archivo de evidencia (docs/evidence/{TICKET_ID}.md) y " +
+          "registralo con sdd_register_evidence.",
+      };
+    }
+  }
+
   // Gate: EVIDENCIA → COMMIT requires screenshot for frontend/fullstack projects
   if (from === PipelineState.EVIDENCIA && to === PipelineState.COMMIT) {
     const config = await loadProjectConfig();
@@ -230,6 +261,11 @@ export async function advance(
   data.state = to;
   if (change) data.change = change;
 
+  // Set verification gate when entering IMPLEMENTACION
+  if (to === PipelineState.IMPLEMENTACION) {
+    data.awaitingVerification = true;
+  }
+
   // Set confirmation gate when entering COMPLETADO
   if (to === PipelineState.COMPLETADO) {
     data.awaitingUserConfirmation = true;
@@ -244,6 +280,9 @@ export async function advance(
     data.featureBranch = null;
     data.screenshotCaptured = false;
     data.mergeRecord = null;
+    data.awaitingVerification = false;
+    data.sprintValidated = false;
+    data.evidenceFilePath = null;
   }
 
   // Reset per-ticket state when cycling back to TICKETS from COMPLETADO
@@ -253,6 +292,9 @@ export async function advance(
     data.featureBranch = null;
     data.screenshotCaptured = false;
     data.mergeRecord = null;
+    data.awaitingVerification = false;
+    data.sprintValidated = false;
+    data.evidenceFilePath = null;
   }
 
   const logEntry: LogEntry = {
@@ -331,6 +373,18 @@ export async function setActiveTicket(
     return {
       ok: false,
       error: `Solo se puede activar un ticket en estado TICKETS o PLAN. Estado actual: ${data.state}.`,
+    };
+  }
+
+  // Sprint Gate: require sprint validation before activating ticket
+  if (!data.sprintValidated) {
+    return {
+      ok: false,
+      error:
+        "⛔ Sprint Gate: no se puede activar un ticket sin validar el sprint. " +
+        "Primero verificá que el ticket esté en un sprint activo usando getJiraIssue, " +
+        "luego llamá sdd_confirm_sprint. Si el proyecto es Kanban (sin sprints), " +
+        "llamá sdd_confirm_sprint(kanban=true) para bypass.",
     };
   }
 
@@ -452,6 +506,123 @@ export async function registerScreenshot(
   return { ok: true };
 }
 
+// ─── Implementation verification ─────────────────────────────────────────────
+
+export interface ConfirmImplementationResult {
+  ok: boolean;
+  error?: string;
+}
+
+export async function confirmImplementation(): Promise<ConfirmImplementationResult> {
+  const data = await loadState();
+
+  if (data.state !== PipelineState.IMPLEMENTACION) {
+    return {
+      ok: false,
+      error: `Solo se puede confirmar implementación en estado IMPLEMENTACION. Estado actual: ${data.state}.`,
+    };
+  }
+
+  if (!data.awaitingVerification) {
+    return {
+      ok: false,
+      error: "No hay verificación pendiente.",
+    };
+  }
+
+  data.awaitingVerification = false;
+
+  const logEntry: LogEntry = {
+    timestamp: new Date().toISOString(),
+    action: "USER_VERIFIED_IMPLEMENTATION",
+    detail: `User confirmed implementation works for ticket ${data.activeTicket}.`,
+  };
+  data.log.push(logEntry);
+
+  await saveState(data);
+  return { ok: true };
+}
+
+// ─── Sprint validation ───────────────────────────────────────────────────────
+
+export interface ConfirmSprintResult {
+  ok: boolean;
+  error?: string;
+}
+
+export async function confirmSprint(
+  kanban: boolean,
+): Promise<ConfirmSprintResult> {
+  const data = await loadState();
+
+  if (
+    data.state !== PipelineState.TICKETS &&
+    data.state !== PipelineState.PLAN
+  ) {
+    return {
+      ok: false,
+      error: `Solo se puede validar sprint en estado TICKETS o PLAN. Estado actual: ${data.state}.`,
+    };
+  }
+
+  data.sprintValidated = true;
+
+  const logEntry: LogEntry = {
+    timestamp: new Date().toISOString(),
+    action: "SPRINT_VALIDATED",
+    detail: kanban
+      ? "Kanban project — sprint gate bypassed."
+      : "Sprint validated as active via Jira.",
+  };
+  data.log.push(logEntry);
+
+  await saveState(data);
+  return { ok: true };
+}
+
+// ─── Evidence registration ───────────────────────────────────────────────────
+
+export interface RegisterEvidenceResult {
+  ok: boolean;
+  error?: string;
+}
+
+export async function registerEvidence(
+  filePath: string,
+): Promise<RegisterEvidenceResult> {
+  const data = await loadState();
+
+  if (data.state !== PipelineState.EVIDENCIA) {
+    return {
+      ok: false,
+      error: `Solo se puede registrar evidencia en estado EVIDENCIA. Estado actual: ${data.state}.`,
+    };
+  }
+
+  // Verify the evidence file actually exists on disk
+  const fullPath = join(PROJECT_ROOT, filePath);
+  try {
+    await readFile(fullPath, "utf-8");
+  } catch {
+    return {
+      ok: false,
+      error: `⛔ El archivo de evidencia no existe: ${filePath}. Generá el archivo primero con /evidence.`,
+    };
+  }
+
+  data.evidenceFilePath = filePath;
+
+  const logEntry: LogEntry = {
+    timestamp: new Date().toISOString(),
+    action: "REGISTER_EVIDENCE",
+    detail: `Evidence file registered: ${filePath} for ticket ${data.activeTicket}.`,
+  };
+  data.log.push(logEntry);
+
+  await saveState(data);
+  return { ok: true };
+}
+
 // ─── Merge registration ─────────────────────────────────────────────────────
 
 export interface RegisterMergeResult {
@@ -543,6 +714,9 @@ export interface GetStateResult {
   featureBranch: string | null;
   screenshotCaptured: boolean;
   mergeRecord: { type: string; targetBranch: string } | null;
+  awaitingVerification: boolean;
+  sprintValidated: boolean;
+  evidenceFilePath: string | null;
 }
 
 export async function getState(): Promise<GetStateResult> {
@@ -569,5 +743,8 @@ export async function getState(): Promise<GetStateResult> {
     featureBranch: data.featureBranch ?? null,
     screenshotCaptured: data.screenshotCaptured ?? false,
     mergeRecord: data.mergeRecord ?? null,
+    awaitingVerification: data.awaitingVerification ?? false,
+    sprintValidated: data.sprintValidated ?? false,
+    evidenceFilePath: data.evidenceFilePath ?? null,
   };
 }
