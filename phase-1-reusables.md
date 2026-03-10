@@ -613,6 +613,24 @@ gh --version 2>/dev/null || echo "GH_NOT_FOUND"
 ```
 If `gh` not found: show commit summary, suggest manual PR creation, skip to step 7.
 
+### 6.1. Elegir rama base (target branch)
+
+Listar las ramas remotas del repo:
+```bash
+git branch -r --list 'origin/*' | sed 's|origin/||' | grep -v HEAD | xargs
+```
+
+Usar **AskUserQuestion** (single_select):
+"¿A qué rama va el PR?"
+
+Opciones: construir dinámicamente con las ramas detectadas (ej: `main`, `dev`, `staging`, etc.). Si hay más de 4, mostrar las más comunes (main, dev/develop, staging) + "Otra rama".
+
+Si elige "Otra rama": preguntar el nombre exacto.
+
+Usar la rama elegida como `--base` en `gh pr create`.
+
+### 6.2. Crear el PR
+
 - **Idioma del PR**: título y descripción en el mismo idioma que el commit (ver `AGENTS.md` § Language). Si no hay AGENTS.md, usar español.
 - Title: aligned with commit, include ticket ID if applicable
 - Description: resumen, link al ticket, notas de testing
