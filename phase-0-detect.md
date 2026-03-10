@@ -203,22 +203,73 @@ Mostrar confirmación:
 
 ---
 
-### 0.0d — Verificar que el MCP de Atlassian está autenticado
+### 0.0d — Verificar autenticación y columnas del workflow en Jira
 
-> **Por qué**: El paso 0.0c ya validó que el MCP existe y puede listar recursos. Este paso confirma que la autenticación funciona correctamente haciendo una llamada real a Jira.
-
-**Si el paso 0.0c fue exitoso** (se obtuvo cloudId y project_key), el MCP ya está autenticado → mostrar:
-
-```
-✅ MCP Atlassian autenticado y funcional:
-   Workspace: {workspace_name}
-   Proyecto: {project_key}
-```
-
-Guardar en PROYECTO_PERFIL:
-- `jira_identity`: "mcp_cloud" (usa la cuenta OAuth del MCP conectado)
+> **Por qué**: El flujo depende de columnas específicas en Jira para transicionar tickets automáticamente. Si faltan columnas, `/commit` y `/release-to-main` no van a funcionar.
 
 **Si el paso 0.0c falló** → ya se bloqueó en ese paso, no se llega aquí.
+
+**Si el paso 0.0c fue exitoso**, verificar las columnas del workflow:
+
+1. **Obtener statuses del proyecto** — Llamar `getJiraProjectStatuses` (usando el `atlassian_prefix` detectado) con el cloudId y projectKey obtenidos en 0.0c.
+
+   > Si `getJiraProjectStatuses` no está disponible como tool, usar alternativa: buscar un issue del proyecto con `searchJiraIssuesUsingJql` (JQL: `project = {project_key} ORDER BY created DESC`) y luego llamar `getTransitionsForJiraIssue` para ver las transiciones disponibles. Repetir desde distintos estados si es posible.
+
+2. **Columnas requeridas** — El flujo necesita estos statuses (o equivalentes):
+
+   | Status requerido | Equivalentes aceptados | Usado por |
+   |-----------------|----------------------|-----------|
+   | **To Do** | Backlog, Open, Abierto, Por Hacer | Estado inicial |
+   | **In Progress** | En Progreso, En Desarrollo | Developer trabajando |
+   | **QA Review** | QA, En QA, Code Review, En Revisión | `/commit` transiciona aquí |
+   | **QA Approved** | QA Aprobado, Approved, Aprobado, Ready for Release | `/release-to-main` lee estos |
+   | **QA Failed** | QA Rechazado, QA Fallido, Rejected, Rechazado | QA rechaza, dev vuelve a fixear |
+   | **Done** | Hecho, Closed, Cerrado, Completado | Post-merge a main |
+
+3. **Matching** — Para cada status requerido, buscar si alguno de los statuses del proyecto coincide (case-insensitive). Un status del proyecto puede matchear por nombre exacto o por cualquiera de los equivalentes.
+
+4. **Mostrar resultado**:
+
+   ```
+   ✅ MCP Atlassian autenticado y funcional:
+      Workspace: {workspace_name}
+      Proyecto: {project_key}
+
+   📋 Columnas del workflow:
+      ✅ To Do         → {nombre_real_en_jira}
+      ✅ In Progress   → {nombre_real_en_jira}
+      ✅ QA Review     → {nombre_real_en_jira}
+      ✅ QA Approved   → {nombre_real_en_jira}
+      ✅ QA Failed     → {nombre_real_en_jira}
+      ✅ Done          → {nombre_real_en_jira}
+   ```
+
+   **Si faltan columnas**, mostrar cuáles y bloquear:
+
+   ```
+   ⚠️  Columnas faltantes en el workflow de Jira:
+      ❌ QA Approved — necesaria para /release-to-main
+      ❌ QA Failed   — necesaria para el flujo de rechazo de QA
+
+   El flujo completo requiere estas columnas:
+     To Do → In Progress → QA Review → QA Approved / QA Failed → Done
+
+   Acción requerida:
+     1. Abrí la configuración del board en Jira
+     2. Agregá las columnas faltantes al workflow
+     3. Volvé a ejecutar el bootstrap
+
+   ¿Querés continuar sin las columnas faltantes? (el flujo va a funcionar parcialmente)
+   ```
+
+   Usar **AskUserQuestion** (single_select):
+   - "Continuar sin las columnas faltantes" — marcar como warning, continuar
+   - "Detener — voy a configurar Jira primero" — HALT
+
+5. **Guardar en PROYECTO_PERFIL**:
+   - `jira_identity`: "mcp_cloud"
+   - `jira_statuses`: mapping de cada status requerido al nombre real en Jira (ej: `{"qa_review": "Code Review", "qa_approved": "QA Approved", "qa_failed": "Rejected", ...}`)
+   - `jira_statuses_missing`: lista de statuses faltantes (vacía si están todos)
 
 ---
 
@@ -374,6 +425,8 @@ PROYECTO_PERFIL:
   workspace_name: [del paso 0.0c]
   project_key: [del paso 0.0c]
   jira_identity: [mcp_cloud — del paso 0.0d]
+  jira_statuses: [mapping de statuses requeridos → nombres reales en Jira — del paso 0.0d]
+  jira_statuses_missing: [lista de statuses faltantes — del paso 0.0d]
   dev_branch: [dev | develop | development — auto-detectado de ramas remotas]
   estructura_carpetas: [descripcion breve]
   patron_componentes: [inferido de archivos existentes]
@@ -591,6 +644,8 @@ Crear `.ai-internal/project-profile.md` con TODOS los datos reales del PROYECTO_
 # Tracker CloudId: {cloud_id}
 # Tracker Project Key: {project_key}
 # Jira Identity: {jira_identity}
+# Jira Statuses: {jira_statuses}
+# Jira Statuses Missing: {jira_statuses_missing}
 # Dev Branch: {dev_branch}
 # Idioma técnico: {idioma_tecnico}
 # Idioma tickets: {idioma_tickets}

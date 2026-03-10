@@ -656,13 +656,19 @@ Usar la rama resuelta como `--base` en `gh pr create`.
 
 Si hay ticket ID (de args, branch `feature/<ID>-*`, o prefijo del commit):
 
+### 7.0. Resolver nombre real del status
+
+Leer `Jira Statuses` de `.ai-internal/project-profile.md` para obtener el nombre real del status "QA Review" en este proyecto (puede ser "QA Review", "Code Review", "En QA", etc.).
+
+Si el profile no tiene `Jira Statuses` o está vacío → usar nombres por defecto: "QA Review", "QA", "Code Review", "En QA", "En Revisión".
+
 ### 7.1. Llamar `sdd_transition_jira(ticketId)`
 El MCP tool retorna instrucciones de delegación con los pasos exactos a ejecutar.
 
 ### 7.2. Ejecutar los pasos de delegación
 Seguir los pasos que retorna `sdd_transition_jira`:
 1. Llamar `getTransitionsForJiraIssue` con los params indicados
-2. Buscar la transición que coincida (el MCP tool incluye la lista de nombres válidos en `matchLogic`)
+2. Buscar la transición cuyo nombre coincida con el status real de QA Review (del paso 7.0)
 3. Llamar `transitionJiraIssue` con el ID de la transición encontrada
 
 ### 7.3. Agregar comentario con evidencia
@@ -684,9 +690,9 @@ Listo para QA.
 ⚠️ TRANSICIÓN PENDIENTE: {TICKET_ID}
    Estado actual: {estado_actual}
    Transiciones disponibles: {lista de nombres}
-   Ninguna coincide con QA Review.
+   Ninguna coincide con el status de QA Review ({nombre_real}).
 
-   ❗ Acción requerida: mover manualmente a QA Review en el tracker.
+   ❗ Acción requerida: mover manualmente en el tracker.
 ```
 
 **Si el MCP de Atlassian no está disponible**:
@@ -694,7 +700,7 @@ Listo para QA.
 ⚠️ TRANSICIÓN PENDIENTE: {TICKET_ID}
    MCP de Atlassian no disponible.
 
-   ❗ Acción requerida: mover manualmente a QA Review en el tracker.
+   ❗ Acción requerida: mover manualmente en el tracker.
 ```
 
 **IMPORTANTE**: La falla en la transición NO bloquea el commit/PR (el código ya está subido). Pero SIEMPRE se reporta como acción pendiente.
@@ -1246,16 +1252,22 @@ Si no se encuentra → preguntar al usuario. Guardar como `DEV_BRANCH`.
 
 ## 2. Buscar tickets aprobados por QA
 
-Leer `Tracker Project Key` de `.ai-internal/project-profile.md` → `PROJECT_KEY`.
+Leer de `.ai-internal/project-profile.md`:
+- `Tracker Project Key` → `PROJECT_KEY`
+- `Tracker CloudId` → `CLOUD_ID`
+- `Jira Statuses` → obtener el nombre real del status "QA Approved" y "QA Failed" en este proyecto
 
-Buscar tickets en estado "QA Approved" (o equivalente) via Jira MCP:
+Buscar tickets aprobados via Jira MCP:
 
 Llamar `searchJiraIssuesUsingJql` con:
-- cloudId del profile
-- JQL: `project = {PROJECT_KEY} AND status in ("QA Approved", "QA Aprobado", "Approved", "Aprobado") ORDER BY updated DESC`
+- cloudId: `CLOUD_ID`
+- JQL: `project = {PROJECT_KEY} AND status = "{nombre_real_qa_approved}" ORDER BY updated DESC`
 
-Si no hay resultados, intentar con statuses alternativos:
-- JQL: `project = {PROJECT_KEY} AND status in ("Done", "Ready for Release", "Listo para Release") AND status changed after -7d ORDER BY updated DESC`
+Si `Jira Statuses` no tiene mapping (profile viejo), usar fallback con múltiples nombres:
+- JQL: `project = {PROJECT_KEY} AND status in ("QA Approved", "QA Aprobado", "Approved", "Aprobado", "Ready for Release") ORDER BY updated DESC`
+
+También buscar tickets rechazados para mostrar advertencia:
+- JQL: `project = {PROJECT_KEY} AND status = "{nombre_real_qa_failed}" ORDER BY updated DESC`
 
 ## 3. Mostrar resumen
 
