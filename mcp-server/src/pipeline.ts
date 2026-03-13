@@ -120,6 +120,25 @@ export async function advance(
     };
   }
 
+  // Gate: IMPLEMENTACION requires figma link for frontend/fullstack/mobile projects
+  if (to === PipelineState.IMPLEMENTACION) {
+    const config = await loadProjectConfig();
+    const tipo = (config?.tipo ?? "").toLowerCase();
+    const requiresFigma =
+      tipo.includes("frontend") || tipo.includes("fullstack") || tipo.includes("mobile");
+    if (requiresFigma && !data.figmaLink) {
+      return {
+        ok: false,
+        from,
+        to,
+        error:
+          "⛔ Proyecto " + tipo + " requiere link de Figma antes de implementar. " +
+          "Pedí el link de Figma al usuario con AskUserQuestion y registralo con sdd_register_figma_link. " +
+          "Sin referencia visual no se puede comenzar la implementación.",
+      };
+    }
+  }
+
   // Gate: IMPLEMENTACION requires a feature branch (can't implement on main/dev)
   if (to === PipelineState.IMPLEMENTACION && !data.featureBranch) {
     return {
@@ -284,6 +303,7 @@ export async function advance(
     data.awaitingVerification = false;
     data.sprintValidated = false;
     data.evidenceFilePath = null;
+    data.figmaLink = null;
   }
 
   // Reset per-ticket state when cycling back to TICKETS from COMPLETADO
@@ -296,6 +316,7 @@ export async function advance(
     data.awaitingVerification = false;
     data.sprintValidated = false;
     data.evidenceFilePath = null;
+    data.figmaLink = null;
   }
 
   const logEntry: LogEntry = {
@@ -674,6 +695,54 @@ export async function registerEvidence(
   return { ok: true };
 }
 
+// ─── Figma link registration ─────────────────────────────────────────────────
+
+export interface RegisterFigmaLinkResult {
+  ok: boolean;
+  error?: string;
+}
+
+const FIGMA_URL_PATTERN = /^https:\/\/(www\.)?figma\.com\/(file|design|proto|board)\/.+/i;
+
+export async function registerFigmaLink(
+  url: string,
+): Promise<RegisterFigmaLinkResult> {
+  const data = await loadState();
+
+  if (
+    data.state !== PipelineState.PLAN &&
+    data.state !== PipelineState.TICKETS
+  ) {
+    return {
+      ok: false,
+      error: `Solo se puede registrar link de Figma en estado TICKETS o PLAN. Estado actual: ${data.state}.`,
+    };
+  }
+
+  // Validate it's a real Figma URL
+  if (!FIGMA_URL_PATTERN.test(url.trim())) {
+    return {
+      ok: false,
+      error:
+        "⛔ URL no es un link válido de Figma. " +
+        "Debe empezar con https://figma.com/design/... o https://figma.com/file/... " +
+        "Pedí al usuario el link correcto del diseño en Figma.",
+    };
+  }
+
+  data.figmaLink = url.trim();
+
+  const logEntry: LogEntry = {
+    timestamp: new Date().toISOString(),
+    action: "REGISTER_FIGMA_LINK",
+    detail: `Figma link registered for ticket ${data.activeTicket}: ${url}`,
+  };
+  data.log.push(logEntry);
+
+  await saveState(data);
+  return { ok: true };
+}
+
 // ─── Merge registration ─────────────────────────────────────────────────────
 
 export interface RegisterMergeResult {
@@ -788,6 +857,7 @@ export interface GetStateResult {
   awaitingVerification: boolean;
   sprintValidated: boolean;
   evidenceFilePath: string | null;
+  figmaLink: string | null;
 }
 
 export async function getState(): Promise<GetStateResult> {
@@ -817,5 +887,6 @@ export async function getState(): Promise<GetStateResult> {
     awaitingVerification: data.awaitingVerification ?? false,
     sprintValidated: data.sprintValidated ?? false,
     evidenceFilePath: data.evidenceFilePath ?? null,
+    figmaLink: data.figmaLink ?? null,
   };
 }

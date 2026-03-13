@@ -145,7 +145,7 @@ Mostrar al usuario: "✅ Estructura /docs creada con contenido base. Para docume
 ## 1. Vista general
 
 ```
-Idea → Planificación → Tickets → Plan técnico → Código → Commit/PR
+Idea → Planificación → Tickets → Plan técnico → Código → Commit + merge a dev → QA → Release PR a main
         (OpenSpec)    ({tracker}) (plan-ticket) (develop)  (commit)
 ```
 
@@ -234,7 +234,7 @@ Idea → Planificación → Tickets → Plan técnico → Código → Commit/PR
 | 3 | `/plan-{tipo}-ticket <ID>` | Plan técnico |
 | 4 | `/develop-{tipo} <ID>` | Implementa |
 | 5 | `/evidence <ID>` | Evidencia QA + doc cross-team |
-| 6 | `/commit` | Commit + PR + transición ticket |
+| 6 | `/commit` | Commit + merge a dev + transición ticket |
 | 7 | `/opsx:verify` | Verifica completitud |
 | 8 | `/opsx:archive` | Archiva change |
 
@@ -245,7 +245,7 @@ Idea → Planificación → Tickets → Plan técnico → Código → Commit/PR
 | 2 | `/plan-{tipo}-ticket <ID>` | Plan técnico |
 | 3 | `/develop-{tipo} <ID>` | Implementar |
 | 4 | `/evidence <ID>` | Evidencia QA + doc cross-team |
-| 5 | `/commit <ID>` | Commit + PR + transición |
+| 5 | `/commit <ID>` | Commit + merge a dev + transición |
 
 ### Flujo 3: Exploración
 `/opsx:explore` → `/opsx:new` (capturar insights)
@@ -286,7 +286,7 @@ Idea → Planificación → Tickets → Plan técnico → Código → Commit/PR
 | `/enrich-ticket` | Enriquecer ticket | Adaptado |
 | `/plan-{tipo}-ticket` | Plan técnico | Adaptado |
 | `/develop-{tipo}` | Implementar | Adaptado |
-| `/commit` | Commit + PR + transición | Reusable |
+| `/commit` | Commit + merge a dev + transición | Reusable |
 | `/review-pr` | Review de PR | Reusable |
 | `/test-plan` | Plan de testing | Reusable |
 | `/evidence` | Evidencia QA + doc cross-team | Reusable |
@@ -336,7 +336,7 @@ Comandos que lo usan: `/develop-{tipo}` (referencia de diseño)
 
 ### GitHub (`gh` CLI)
 **Status**: {available | not_found}
-Usado por `/commit` para crear PRs.
+Usado por `/commit` para merge a dev y por `/release-to-main` para PRs a main.
 **Degradación**: Si no disponible, muestra resumen para PR manual.
 
 ---
@@ -639,7 +639,7 @@ echo "Si todo está ✅: el sistema está listo."
 | `.claude/commands/opsx/onboard.md` | OpenSpec: tutorial guiado |
 | `ai-specs/.commands/explain.md` | Modo aprendizaje |
 | `ai-specs/.commands/meta-prompt.md` | Mejora de prompts |
-| `ai-specs/.commands/commit.md` | Commit + PR + transición ticket |
+| `ai-specs/.commands/commit.md` | Commit + merge a dev + transición ticket |
 | `ai-specs/.commands/update-docs.md` | Actualizar documentación |
 | `ai-specs/.commands/review-pr.md` | Review de pull requests |
 | `ai-specs/.commands/test-plan.md` | Generar plan de testing |

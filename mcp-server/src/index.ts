@@ -16,6 +16,7 @@ import {
   confirmImplementation,
   confirmSprint,
   registerEvidence,
+  registerFigmaLink,
 } from "./pipeline.js";
 import type { MergeType } from "./types.js";
 import { buildTransitionInstructions, buildCommentInstructions } from "./jira.js";
@@ -168,7 +169,32 @@ server.tool(
   },
 );
 
-// ─── Tool 7: sdd_register_screenshot ────────────────────────────────────────
+// ─── Tool 7: sdd_register_figma_link ─────────────────────────────────────────
+
+server.tool(
+  "sdd_register_figma_link",
+  "Registra el link de Figma del diseño para el ticket activo. " +
+    "OBLIGATORIO para proyectos frontend/fullstack/mobile — sdd_advance(IMPLEMENTACION) fallará sin link de Figma. " +
+    "ANTES de llamar: pedir al usuario el link de Figma con AskUserQuestion. " +
+    "El link DEBE ser una URL válida de Figma (https://figma.com/design/... o https://figma.com/file/...). " +
+    "VIOLACIÓN: inventar o adivinar un link de Figma. Siempre pedirlo al usuario.",
+  {
+    url: z.string().describe("URL de Figma del diseño (ej: https://www.figma.com/design/abc123/MiDiseño)"),
+  },
+  async ({ url }) => {
+    const result = await registerFigmaLink(url);
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify(result, null, 2),
+        },
+      ],
+    };
+  },
+);
+
+// ─── Tool 8: sdd_register_screenshot ────────────────────────────────────────
 
 server.tool(
   "sdd_register_screenshot",

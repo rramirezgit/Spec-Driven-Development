@@ -53,6 +53,8 @@ export interface PipelineData {
   sprintValidated?: boolean;
   /** Path to the evidence file for the active ticket */
   evidenceFilePath?: string | null;
+  /** Figma link registered for the active ticket (required for frontend/fullstack) */
+  figmaLink?: string | null;
 }
 
 export interface ProjectConfig {
@@ -132,5 +134,6 @@ export function defaultPipelineData(): PipelineData {
     awaitingVerification: false,
     sprintValidated: false,
     evidenceFilePath: null,
+    figmaLink: null,
   };
 }

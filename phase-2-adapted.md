@@ -775,8 +775,18 @@ Secuencia obligatoria:
 Ramas protegidas (main, dev, master, develop) son **RECHAZADAS por el server**.
 El nombre debe seguir el patrón `feature/`, `hotfix/`, o `bugfix/`.
 
+**⛔ GATE DE FIGMA (enforced por el MCP server para frontend/fullstack/mobile)**:
+`sdd_advance(IMPLEMENTACION)` fallará si no hay link de Figma registrado con `sdd_register_figma_link`.
+Secuencia obligatoria para proyectos con UI:
+1. Pedir al usuario el link de Figma con AskUserQuestion: "¿Cuál es el link de Figma para este ticket?"
+2. **ESPERAR respuesta del usuario** — NUNCA inventar o adivinar un link
+3. Registrar: `sdd_register_figma_link(url)`
+4. Solo entonces: `sdd_advance(IMPLEMENTACION)`
+
+Para proyectos backend-only: el Figma gate no aplica, se avanza directo.
+
 Ofrecer implementar con `/develop-{tipo}`.
-Después: `sdd_register_branch(rama)` + `sdd_advance(IMPLEMENTACION)`.
+Después: `sdd_register_branch(rama)` + (si frontend) `sdd_register_figma_link(url)` + `sdd_advance(IMPLEMENTACION)`.
 
 ## IMPLEMENTACION → verificar y generar evidencia
 
@@ -795,7 +805,7 @@ Secuencia obligatoria:
 El server **verifica que el archivo existe en disco** — no se puede falsear.
 Secuencia: generar `/evidence` → `sdd_register_evidence("docs/evidence/{TICKET_ID}.md")`
 
-## EVIDENCIA → screenshot + commit + PR (obligatorio)
+## EVIDENCIA → screenshot + commit + merge a dev (obligatorio)
 Mostrar evidencia generada.
 
 **⛔ GATE DE SCREENSHOT (enforced por el MCP server para frontend/fullstack/mobile)**:
@@ -810,7 +820,7 @@ Secuencia obligatoria para proyectos con UI:
 
 Para proyectos backend-only: el screenshot gate no aplica, se avanza directo.
 
-**Esto NO es opcional** — el commit y PR son parte del ciclo del ticket.
+**Esto NO es opcional** — el commit y merge a dev son parte del ciclo del ticket.
 Leer y ejecutar `/commit`. Después: `sdd_advance(COMMIT)`.
 
 ## COMMIT → merge + transicionar ticket
@@ -915,7 +925,7 @@ Alternativa: {qué puede hacer el usuario}
 | `/enrich-ticket` | Enriquecer ticket |
 | `/plan-{tipo}-ticket` | Plan técnico |
 | `/develop-{tipo}` | Implementar código |
-| `/commit` | Commit + PR + transición ticket |
+| `/commit` | Commit + merge a dev + transición ticket |
 | `/review-pr` | Review de PR |
 | `/test-plan` | Plan de testing |
 | `/evidence` | Evidencia + doc cross-team |
@@ -945,7 +955,7 @@ Alternativa: {qué puede hacer el usuario}
 - **Saltear la exploración del codebase** — Antes de crear artefactos o enriquecer tickets, explorar a fondo el código relevante
 - **Trabajar en tickets sin sprint activo** — SIEMPRE validar Sprint Gate antes de `sdd_set_active_ticket`
 - **Trabajar en múltiples tickets a la vez** — UN ticket, ciclo completo, después el siguiente
-- **Saltear evidencia, commit o PR** — El ciclo IMPLEMENTACION → EVIDENCIA → COMMIT → COMPLETADO es obligatorio e ininterrumpible
+- **Saltear evidencia, commit o merge** — El ciclo IMPLEMENTACION → EVIDENCIA → COMMIT → COMPLETADO es obligatorio e ininterrumpible
 - **Avanzar sin verificar que funciona** — Después de implementar, el usuario DEBE confirmar que funciona antes de generar evidencia
 - **Implementar en main/master/develop** — Cada ticket se implementa en su propia rama `feature/{ID}-{slug}`
 
@@ -956,9 +966,9 @@ Alternativa: {qué puede hacer el usuario}
 - AskUserQuestion después de CADA paso
 - Incluir "Quiero hacer otra cosa" en estados que no son IDLE
 - Respuestas cortas entre pasos — el foco es el progreso
-- **Ciclo completo por ticket**: PLAN → IMPLEMENTACION → verificación → EVIDENCIA → COMMIT+PR → transición Jira → COMPLETADO
+- **Ciclo completo por ticket**: PLAN → IMPLEMENTACION → verificación → EVIDENCIA → COMMIT + merge a dev → transición Jira → COMPLETADO
 - **Verificar antes de evidencia**: preguntar al usuario si funciona correctamente
-- **Evidencia + commit + PR en cada ticket**: sin excepciones, no es opcional
+- **Evidencia + commit + merge a dev en cada ticket**: sin excepciones, no es opcional
 - **Una rama por ticket**: `feature/{ID}-{slug}` — creada al inicio de `/develop-{tipo}`, PR al final con `/commit`
 ```
 ---

@@ -549,12 +549,18 @@ $ARGUMENTS
 
 ```markdown
 # Role
-Senior engineer. Create clear commits and PRs aligned with project standards.
+Senior engineer. Create clear commits, merge to dev, and transition tickets aligned with project standards.
 
 # Arguments
-- Empty → commit all relevant changes + PR
+- Empty → commit all relevant changes + merge directo a dev
 - Ticket IDs / feature names → commit ONLY those changes
-- "no PR" / "only commit" / "dry run" / "just the message" → no-git mode: output message only
+- "dry run" / "just the message" → no-git mode: output message only
+
+# REGLA CRÍTICA: NO crear PR para feature branches
+Feature branches (feature/*) se mergean DIRECTO a dev (git merge, sin PR).
+Los PR SOLO existen para:
+- Release: dev → main (via /release-to-main)
+- Hotfix: hotfix/* → main
 
 # Process
 
@@ -710,6 +716,9 @@ git diff {DEV_BRANCH}...{CURRENT_BRANCH} --stat
 
 # Repo URL para links
 gh repo view --json url -q .url 2>/dev/null || git remote get-url origin 2>/dev/null | sed 's/\.git$//' | sed 's|git@github.com:|https://github.com/|'
+
+# Figma link (del pipeline state)
+# Obtener con sdd_get_state → figmaLink
 ```
 
 **Si existe evidencia** (`docs/evidence/{TICKET_ID}.md`): leer el archivo para extraer:
@@ -721,36 +730,51 @@ gh repo view --json url -q .url 2>/dev/null || git remote get-url origin 2>/dev/
 
 **Si NO existe evidencia**: construir un resumen básico a partir del diff y el commit message.
 
+**Determinar tipo de proyecto** para elegir template: leer `Tipo` de `.ai-internal/project-profile.md`.
+
+---
+
+#### TEMPLATE BACKEND (tipo contiene "backend")
+
 Llamar `sdd_comment_jira(ticketId, body)` con:
 
 ```
 ✅ Desarrollo completado — mergeado a {DEV_BRANCH}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📋 Resumen del cambio
+📋 Resumen
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-{resumen de qué se hizo y por qué — extraído de la evidencia o del commit message}
+{resumen conciso de qué se hizo y por qué}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📁 Archivos modificados ({N})
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-{tabla de archivos: ruta | tipo de cambio | descripción breve}
+{por cada archivo: ruta | tipo de cambio (nuevo/modificado/eliminado) | descripción breve}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🧪 Plan de pruebas para QA
+🔌 Endpoints afectados
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+{por cada endpoint nuevo o modificado:}
+{METHOD} {ruta} — {descripción breve del cambio}
+
+{si no hay endpoints afectados: "N/A — cambio interno sin impacto en API"}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🧪 Plan de pruebas
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 {por cada paso de verificación:}
 ☐ {paso}: {acción a realizar} → Resultado esperado: {qué debe pasar}
 
 {si hay casos edge:}
-⚠️ Casos edge a verificar:
+⚠️ Casos edge:
 ☐ {caso edge 1}
 ☐ {caso edge 2}
 
-{si hay notas para QA (ambiente, datos de prueba, dependencias):}
+{si hay notas (ambiente, datos de prueba, dependencias):}
 📝 Notas: {notas}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -758,13 +782,71 @@ Llamar `sdd_comment_jira(ticketId, body)` con:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 📝 Evidencia: {GH_REPO_URL}/blob/{DEV_BRANCH}/docs/evidence/{TICKET_ID}.md
-{si tiene screenshot:} 📸 Screenshot: {GH_REPO_URL}/blob/{DEV_BRANCH}/docs/evidence/screenshots/{TICKET_ID}.png
 🔀 Branch: {CURRENT_BRANCH} → {DEV_BRANCH}
-
-Pendiente: deploy a dev para QA.
 ```
 
+---
+
+#### TEMPLATE FRONTEND / FULLSTACK / MOBILE (tipo contiene "frontend", "fullstack" o "mobile")
+
+Llamar `sdd_comment_jira(ticketId, body)` con:
+
+```
+✅ Desarrollo completado — mergeado a {DEV_BRANCH}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📋 Resumen
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+{resumen conciso de qué se hizo y por qué}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🎨 Diseño
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🔗 Figma: {FIGMA_LINK}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📁 Archivos modificados ({N})
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+{por cada archivo: ruta | tipo de cambio (nuevo/modificado/eliminado) | descripción breve}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🖥️ Pantallas a verificar
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+{por cada pantalla/vista afectada:}
+• {nombre de la pantalla/ruta} — {qué cambió visualmente}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🧪 Plan de pruebas
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+{por cada paso de verificación:}
+☐ {paso}: {acción a realizar} → Resultado esperado: {qué debe pasar}
+
+{si hay casos edge:}
+⚠️ Casos edge:
+☐ {caso edge 1}
+☐ {caso edge 2}
+
+{si hay notas (ambiente, datos de prueba, dependencias):}
+📝 Notas: {notas}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📎 Links
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📝 Evidencia: {GH_REPO_URL}/blob/{DEV_BRANCH}/docs/evidence/{TICKET_ID}.md
+📸 Screenshot: {GH_REPO_URL}/blob/{DEV_BRANCH}/docs/evidence/screenshots/{TICKET_ID}.png
+🔀 Branch: {CURRENT_BRANCH} → {DEV_BRANCH}
+```
+
+---
+
 > **Nota**: El comentario debe ser autocontenido — QA no debería necesitar abrir otros archivos para saber qué probar. Los links son complementarios para evidencia detallada.
+> **FIGMA_LINK**: se obtiene del pipeline state (campo `figmaLink` retornado por `sdd_get_state`). Si no hay link, omitir la sección Diseño.
 
 ### 7.4. Si la transición falla
 
@@ -804,7 +886,8 @@ Archivos commiteados, scope, merge a dev, estado de transición del ticket, esta
 - If push rejected: suggest pull/rebase, never force-push
 - La transición a QA Review es obligatoria — si falla, reportar como acción pendiente
 - Evidence is recommended but not blocking — dev decides
-- Idioma del commit, PR y comentarios: según `AGENTS.md` § Language
+- Idioma del commit y comentarios: según `AGENTS.md` § Language
+- NUNCA crear PR para feature branches — merge directo a dev
 ```
 
 ---
@@ -1141,26 +1224,10 @@ Actualizar o crear `docs/components/{modulo}.md` usando el **component template*
 
 Agregar entrada en `docs/README.md` sección Changelog si hay archivos nuevos.
 
-## 6. Comentar en ticket (si MCP disponible, skip si `--docs-only`)
+## 6. NO comentar en ticket desde /evidence
 
-Agregar comentario en el ticket con links a GitHub:
-```
-✅ Evidencia generada
-
-📋 [Evidencia QA]({GH_REPO_URL}/blob/{GH_BRANCH}/docs/evidence/{TICKET_ID}.md)
-🔀 [Pull Request #{number}]({GH_PR_URL}) (si existe, si no: "PR pendiente")
-📖 [Doc técnica]({GH_REPO_URL}/blob/{GH_BRANCH}/docs/{api|components}/{modulo}.md)
-📸 [Screenshot]({GH_REPO_URL}/blob/{GH_BRANCH}/docs/evidence/screenshots/{TICKET_ID}.png) (solo si se capturó/proporcionó)
-
-Archivos modificados: {N}
-Tests: {pasaron/no hay}
-Listo para QA.
-```
-
-> Los links usan la URL completa de GitHub para que QA pueda hacer click directo desde Jira.
-> Si GH_REPO_URL no disponible: usar paths relativos como fallback.
-
-Si MCP no disponible: mostrar el comentario para copiar manualmente.
+> El comentario a Jira se hace ÚNICAMENTE desde `/commit` (sección 7.3 del commit.md).
+> `/evidence` solo genera archivos locales. El comentario completo para QA se deja al hacer commit+merge.
 
 ## 7. Preview y confirmación
 
@@ -1173,7 +1240,6 @@ Mostrar al dev:
 - `docs/evidence/screenshots/{TICKET_ID}.png` — screenshot (si se capturó/proporcionó)
 - `docs/{api|components}/{modulo}.md` — creado/actualizado
 - `docs/README.md` — actualizado si hay archivos nuevos
-- Comentario en ticket (si MCP disponible y no es --docs-only)
 
 # Rules
 - **Idioma**: TODA la evidencia y documentación cross-team se escribe en el idioma definido en `AGENTS.md` § Language para docs. Si no hay AGENTS.md, usar español. Esto incluye: títulos, descripciones, resúmenes, notas para QA, comentarios en tickets.
