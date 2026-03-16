@@ -1,0 +1,179 @@
+---
+description: Documentation standards — structure, update process, language rules.
+alwaysApply: true
+---
+
+# Documentation Standards — __SDD_NOMBRE__
+
+## Rule #1: Language
+- Code comments, function descriptions: **__SDD_IDIOMA_TECNICO__**.
+- ALL documentation in `docs/` (including evidence, API docs, component docs, READMEs): **__SDD_IDIOMA_TICKETS__**.
+- PRs (título y descripción): **__SDD_IDIOMA_TICKETS__**.
+- Commits: **__SDD_IDIOMA_TICKETS__**.
+
+No exceptions — applies to new files and updating existing ones.
+
+## When to Update
+
+| Change type | Files to update |
+|-------------|----------------|
+| New UI component / pattern | `ai-specs/specs/ui-design-system.mdc` |
+| New __SDD_FRAMEWORK__ pattern | `ai-specs/specs/__SDD_TIPO__-standards.mdc` |
+| New shared component | `ai-specs/specs/ui-design-system.mdc` custom components |
+| New endpoint consumed | `CLAUDE.md` key files |
+| Architecture / structure change | `ai-specs/specs/__SDD_TIPO__-standards.mdc` |
+| New dependency | `CLAUDE.md` + relevant spec |
+
+## AI Learning Loop
+
+When user provides feedback or corrections:
+1. Identify which spec the feedback relates to
+2. Propose specific update: "Based on feedback, I suggest updating [file] section [X] to say [Y]. Approve?"
+3. Wait for explicit approval
+4. Apply and confirm: "Updated [file] — [change made]"
+
+### Anti-patterns
+- Never modify specs without approval
+- Never make changes beyond the feedback scope
+- Never update multiple unrelated specs simultaneously
+
+## /docs Directory Standards
+
+### Structure
+```
+docs/
+├── README.md                # Índice + changelog
+├── arquitectura.md          # Stack (high-level), servicios, diagramas
+├── api/
+│   ├── README.md           # Índice de API + auth + convenciones
+│   └── {modulo}.md         # Endpoints + DTOs por módulo
+├── components/             # (solo frontend)
+│   ├── README.md           # Índice de componentes
+│   └── {modulo}.md         # Componentes + props + estados por módulo
+├── evidence/
+│   ├── README.md           # Convenciones de evidencia
+│   └── {TICKET-ID}.md     # Evidencia por ticket (inmutable)
+├── setup.md                # Instalación + troubleshooting
+├── flujos.md               # Flujos principales + placeholders diagramas
+├── decisiones.md           # ADRs
+├── despliegue.md           # CI/CD + ambientes + rollback
+└── assets/
+    ├── README.md           # Convenciones de diagramas
+    └── *.svg               # Diagramas exportados
+```
+
+### Content Ownership (evitar duplicación)
+
+| Contenido | Source of truth | docs/ hace... |
+|-----------|----------------|---------------|
+| Stack tecnológico | `CLAUDE.md` | Cross-reference: "Ver CLAUDE.md" |
+| Patrones y convenciones | `ai-specs/specs/__SDD_TIPO__-standards.mdc` | Cross-reference |
+| Env vars detalladas | `ai-specs/specs/__SDD_TIPO__-standards.mdc §12` | Cross-reference + troubleshooting adicional |
+| Endpoints por módulo | `docs/api/{modulo}.md` | **Source of truth** (detalle para frontend) |
+| Componentes por módulo | `docs/components/{modulo}.md` | **Source of truth** (detalle para backend) |
+| Evidencia QA | `docs/evidence/{TICKET-ID}.md` | **Source of truth** |
+| Flujos del sistema | `docs/flujos.md` | **Source of truth** (con diagramas) |
+| ADRs | `docs/decisiones.md` | **Source of truth** |
+
+### Naming conventions
+- API docs: `docs/api/{modulo}.md` — kebab-case (ej: `user-management.md`)
+- Component docs: `docs/components/{modulo}.md` — kebab-case
+- Evidence: `docs/evidence/{TICKET-ID}.md` — ID exacto del ticket
+- Assets: `docs/assets/{tipo}-{descripcion}.svg` (ej: `flujo-autenticacion.svg`)
+
+### Update rules
+- Every file has `> Última actualización: {DATE}` after title
+- When updating: only modify affected sections, never rewrite unrelated content
+- Mark recent updates: `> 🆕 Actualizado por {TICKET_ID} ({DATE})`
+- API module docs are living documents — grow as endpoints are added
+- Evidence files are immutable after creation (snapshot of completion)
+
+## Reference Templates
+
+### Endpoint template (for docs/api/{modulo}.md)
+
+```
+### {METHOD} {ruta}
+
+**Descripción**: {qué hace}
+**Auth**: {tipo de auth, header esperado}
+
+**Headers**:
+| Header | Requerido | Descripción |
+
+**Query params / Request body**:
+| Param/Campo | Tipo | Requerido | Default | Descripción |
+
+**Request body ejemplo**:
+(JSON basado en DTO/schema real)
+
+**Response (200)**:
+(JSON basado en modelo/response type real)
+
+**Errores**:
+| Código | Causa | Response body |
+
+**Notas de implementación**:
+- {reglas de negocio}
+
+**Ejemplo de uso (frontend)**:
+(código con el http client del proyecto)
+```
+
+### Component template (for docs/components/{modulo}.md)
+
+```
+## {NombreComponente}
+
+**Ubicación**: `{ruta}`
+**Descripción**: {qué hace}
+
+**Props**:
+| Prop | Tipo | Requerido | Default | Descripción |
+
+**Datos que consume**:
+| Endpoint | Hook/Service | Campos usados |
+
+**Estados**:
+| Estado | Trigger | Comportamiento visual |
+
+**Datos que necesita del backend**: {si aplica}
+```
+
+### Evidence template (for docs/evidence/{TICKET-ID}.md)
+
+```
+# {TICKET_ID}: {Título}
+
+> Última actualización: {FECHA}
+> Autor: {git config user.name}
+> Branch: `{branch}`
+> PR: {URL si existe}
+
+## Resumen
+{2-3 oraciones}
+
+## Archivos modificados
+| Archivo | Tipo de cambio | Descripción |
+
+## Evidencia de funcionamiento
+
+### Tests
+{resultado o "[Sin tests — verificación manual requerida]"}
+
+### Verificación manual
+1. {Prerrequisito}
+2. {Acción}
+3. {Resultado esperado}
+
+### Casos edge a verificar
+- {caso}
+
+## Impacto en otros equipos
+{cross-team doc reference}
+
+## Notas para QA
+- Ambiente: {dev/staging}
+- Datos de prueba: {descripción}
+- Dependencias: {tickets/servicios}
+```

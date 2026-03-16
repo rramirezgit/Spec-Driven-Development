@@ -1,11 +1,11 @@
 ---
 name: "Bootstrap: Setup AI Workflow"
-description: Configura el sistema completo de flujos AI en este proyecto (V4.4)
+description: Configura el sistema completo de flujos AI en este proyecto (V4.5)
 category: Setup
 tags: [bootstrap, setup, workflow]
 ---
 
-# Bootstrap AI Workflow V4.4
+# Bootstrap AI Workflow V4.5
 
 Sos el orquestador del bootstrap. Tu trabajo es ejecutar las fases en orden, una a la vez, cargando el archivo correspondiente.
 
@@ -24,7 +24,7 @@ test -f .bootstrap-meta.json && grep -o '"content_hash"[[:space:]]*:[[:space:]]*
 Determinar `UPGRADE_PENDING`:
 
 1. **Tier 1 — Archivo explícito**: Si `.ai-internal/.upgrade-pending` existe → `UPGRADE_PENDING=true` (leer `from_version`, `to_version`, `trigger`, `from_hash`, `to_hash` del JSON)
-2. **Tier 2 — Versión diferente**: Si no existe `.upgrade-pending` pero sí `.bootstrap-meta.json`: comparar la versión de este archivo (`bootstrap_version`) con la versión de este bootstrap (V4.4). Si son distintas → `UPGRADE_PENDING=true` (fallback)
+2. **Tier 2 — Versión diferente**: Si no existe `.upgrade-pending` pero sí `.bootstrap-meta.json`: comparar la versión de este archivo (`bootstrap_version`) con la versión de este bootstrap (V4.5). Si son distintas → `UPGRADE_PENDING=true` (fallback)
 3. **Tier 3 — Hash ausente**: Si la versión es igual PERO `content_hash` está vacío o no existe en `.bootstrap-meta.json` → `UPGRADE_PENDING=true` (el proyecto fue bootstrapped antes de la detección por hash; forzar upgrade para computar el hash inicial)
 4. Si no existe `.bootstrap-meta.json` → `UPGRADE_PENDING=false` (instalación nueva, flujo normal)
 
@@ -85,7 +85,7 @@ echo "=== CHANGELOG ==="
 head -35 .ai-internal/phases/phase-0-detect.md
 ```
 
-Parsear las líneas que empiezan con `> -` del bloque `Changelog V{from} → V{to}` para extraer los cambios relevantes. Si hay múltiples bloques de changelog (ej: V3→V4, V4→V4.1, V4.1→V4.3, V4.3→V4.4), incluir TODOS los que apliquen entre `from_version` y `to_version`.
+Parsear las líneas que empiezan con `> -` del bloque `Changelog V{from} → V{to}` para extraer los cambios relevantes. Si hay múltiples bloques de changelog (ej: V3→V4, V4→V4.1, V4.1→V4.3, V4.3→V4.5), incluir TODOS los que apliquen entre `from_version` y `to_version`.
 
 ### 0b.3 — Detectar archivos modificados manualmente + gaps de infraestructura
 
@@ -128,7 +128,7 @@ test -f ai-specs/specs/base-standards.mdc && echo "BASE_STANDARDS=EXISTS" || ech
 test -f .ai-internal/pipeline-tracker.md && echo "PIPELINE_TRACKER_LEGACY=EXISTS" || echo "PIPELINE_TRACKER_LEGACY=NOT_FOUND"
 test -f .ai-internal/pipeline-state.json && echo "PIPELINE_STATE_JSON=EXISTS" || echo "PIPELINE_STATE_JSON=MISSING"
 
-# Jira MCP (V4.3+) + Jira columns (V4.4+)
+# Jira MCP (V4.3+) + Jira columns (V4.5+)
 echo ""
 echo "=== JIRA MCP ==="
 # El MCP de Atlassian se valida en el paso 0.0c/0.0d — aquí solo verificamos que siga funcional
@@ -148,7 +148,7 @@ Construir dos listas:
 | `DOCS_STRUCTURE` | `docs/` no existe o le faltan archivos base | V4.1 |
 | `PLAYBOOK` | `ai-specs/AI-WORKFLOW-PLAYBOOK.md` no existe | V4 |
 | `OPENSPEC_SKILLS` | `.claude/skills/openspec-*/` no existen | V4 |
-| `DOC_STANDARDS` | `ai-specs/specs/documentation-standards.mdc` no existe | V4.1 |
+| `DOC_STANDARDS` | _(ya no es gap — se regenera siempre desde template)_ | V4.5 |
 | `BASE_STANDARDS` | `ai-specs/specs/base-standards.mdc` no existe | V4 |
 | `PIPELINE_MIGRATE` | `pipeline-tracker.md` existe (legacy) y `pipeline-state.json` no | pre-V4.3 |
 | `JIRA_MCP` | MCP de Atlassian no conectado (verificar config) | V4.3 |
@@ -173,6 +173,7 @@ Archivos que se regeneran:
   ✏️  ai-specs/.commands/plan-{tipo}-ticket.md
   ✏️  ai-specs/.commands/enrich-ticket.md
   ✏️  .claude/commands/create-{tracker}-tickets.md
+  ✏️  ai-specs/specs/documentation-standards.mdc
   📝 .bootstrap-meta.json (versión actualizada)
 
 {si hay GAPS_INFRAESTRUCTURA, mostrar esta sección:}
@@ -182,7 +183,6 @@ Componentes nuevos que se crean (no existían en V{from_version}):
   {si DOCS_STRUCTURE:} 🆕 docs/ (estructura base con contenido)
   {si PLAYBOOK:}      🆕 ai-specs/AI-WORKFLOW-PLAYBOOK.md (guía completa)
   {si OPENSPEC_SKILLS:} 🆕 .claude/skills/openspec-*/ (via openspec init)
-  {si DOC_STANDARDS:} 🆕 ai-specs/specs/documentation-standards.mdc
   {si BASE_STANDARDS:} 🆕 ai-specs/specs/base-standards.mdc
   {si PIPELINE_MIGRATE:} 🔄 pipeline-tracker.md → pipeline-state.json (migración de estado)
   {si JIRA_MCP:}         ⚠️ MCP Atlassian no conectado (verificar configuración)
@@ -233,14 +233,26 @@ Estos son idénticos en todos los proyectos → siempre se sobreescriben sin pre
 
 #### Paso C: Re-ejecutar Fase 2 (adaptados)
 
-Leer `.ai-internal/phases/phase-2-adapted.md` y usar los datos del `project-profile.md` existente para regenerar:
-- `.claude/commands/menu.md`
+**Primero**: Generar `project-vars.sh` si no existe (proyectos pre-V4.5 no lo tienen):
+
+```bash
+if [ ! -f .ai-internal/project-vars.sh ]; then
+  echo "Generando project-vars.sh desde project-profile.md..."
+fi
+```
+
+Si no existe: leer las instrucciones de generación de `project-vars.sh` en `.ai-internal/phases/phase-0-detect.md` (sección "GUARDAR ESTADO") y ejecutarlas usando los datos del `project-profile.md` existente.
+
+**Después**: Leer `.ai-internal/phases/phase-2-adapted.md` y usar los datos del `project-profile.md` existente para regenerar:
+- `.claude/commands/menu.md` — **IMPORTANTE: este archivo se genera desde template con `sed`, NO por Claude. Seguir las instrucciones de phase-2-adapted.md al pie de la letra.**
 - `ai-specs/.commands/develop-{tipo}.md`
 - `ai-specs/.commands/plan-{tipo}-ticket.md`
 - `ai-specs/.commands/enrich-ticket.md`
 - `.claude/commands/create-{tracker}-tickets.md`
+- `ai-specs/specs/documentation-standards.mdc` — **template-based: siempre regenerar con sed**
 - `ai-specs/specs/base-standards.mdc` (si gap `BASE_STANDARDS`)
-- `ai-specs/specs/documentation-standards.mdc` (si gap `DOC_STANDARDS`)
+
+**Ejecutar la validación 5.1 de phase-2-adapted.md** después de regenerar todos los archivos. Si la validación falla, corregir antes de continuar.
 
 **NO re-preguntar datos del proyecto** — usar el profile existente.
 
@@ -393,11 +405,11 @@ Si `JIRA_MCP=CONNECTED`: no hacer nada (ya está funcional).
 #### Paso E: Actualizar metadata
 
 Actualizar `.bootstrap-meta.json`:
-- `bootstrap_version` → nueva versión (4.4)
+- `bootstrap_version` → nueva versión (4.5)
 - `previous_version` → versión anterior
 - `content_hash` → computar el hash actual ejecutando:
   ```bash
-  cat .ai-internal/phases/phase-*.md .claude/commands/bootstrap.md .ai-internal/mcp-server/src/*.ts .ai-internal/mcp-server/package.json .ai-internal/mcp-server/tsconfig.json 2>/dev/null | shasum -a 256 | cut -d' ' -f1
+  cat .ai-internal/phases/phase-*.md .claude/commands/bootstrap.md .ai-internal/mcp-server/src/*.ts .ai-internal/mcp-server/package.json .ai-internal/mcp-server/tsconfig.json .ai-internal/templates/* 2>/dev/null | shasum -a 256 | cut -d' ' -f1
   ```
 - Mantener todos los demás campos intactos (`project_name`, `project_type`, `framework`, `tracker`, `mcps_detected`, etc.)
 - Si faltan campos nuevos (ej: `mcps_detected` no existía en versiones anteriores), agregarlos con los valores del `project-profile.md`
@@ -429,6 +441,7 @@ Archivos regenerados:
   ✅ ai-specs/.commands/plan-{tipo}-ticket.md
   ✅ ai-specs/.commands/enrich-ticket.md
   ✅ .claude/commands/create-{tracker}-tickets.md
+  ✅ ai-specs/specs/documentation-standards.mdc
   ✅ .bootstrap-meta.json (V{to_version})
 
 {si hubo gaps rellenados:}
@@ -497,7 +510,7 @@ Basándote en el estado:
 Mostrá:
 
 ```
-🔧 AI Workflow Bootstrap V4.4
+🔧 AI Workflow Bootstrap V4.5
 ==============================
 
 Estado:

@@ -23,10 +23,15 @@ FILES=(
   "mcp-server/src/pipeline.ts|.ai-internal/mcp-server/src/pipeline.ts"
   "mcp-server/src/jira.ts|.ai-internal/mcp-server/src/jira.ts"
   "mcp-server/src/index.ts|.ai-internal/mcp-server/src/index.ts"
+  "menu-template.md|.ai-internal/templates/menu-template.md"
+  "enrich-ticket-template.md|.ai-internal/templates/enrich-ticket-template.md"
+  "plan-ticket-template.md|.ai-internal/templates/plan-ticket-template.md"
+  "create-tickets-template.md|.ai-internal/templates/create-tickets-template.md"
+  "doc-standards-template.mdc|.ai-internal/templates/doc-standards-template.mdc"
 )
 
 echo ""
-echo "🔧 Spec-Driven Development — Bootstrap V4.4"
+echo "🔧 Spec-Driven Development — Bootstrap V4.5"
 echo "============================================="
 echo ""
 
@@ -88,6 +93,7 @@ fi
 # ── Crear directorios ────────────────────────────
 mkdir -p .ai-internal/phases
 mkdir -p .ai-internal/mcp-server/src
+mkdir -p .ai-internal/templates
 mkdir -p .claude/commands
 
 # Agregar .ai-internal/ a .gitignore
@@ -190,16 +196,11 @@ if [ -f .claude/commands/bootstrap.md ]; then
 fi
 
 # Computar SHA-256 de TODOS los archivos descargados (content fingerprint)
+# IMPORTANTE: usar el MISMO comando que bootstrap.md y phase-3-finalize.md
+# para que el hash almacenado coincida con el computado en la próxima ejecución
 NEW_HASH=""
 if [ "$DOWNLOADED" -gt 0 ]; then
-  HASH_INPUT=""
-  for ENTRY in "${FILES[@]}"; do
-    DEST="${ENTRY##*|}"
-    if [ -f "$DEST" ]; then
-      HASH_INPUT="${HASH_INPUT}$(cat "$DEST")"
-    fi
-  done
-  NEW_HASH=$(printf '%s' "$HASH_INPUT" | shasum -a 256 | cut -d' ' -f1)
+  NEW_HASH=$(cat .ai-internal/phases/phase-*.md .claude/commands/bootstrap.md .ai-internal/mcp-server/src/*.ts .ai-internal/mcp-server/package.json .ai-internal/mcp-server/tsconfig.json .ai-internal/templates/* 2>/dev/null | shasum -a 256 | cut -d' ' -f1)
 fi
 
 # Leer versión y hash almacenados

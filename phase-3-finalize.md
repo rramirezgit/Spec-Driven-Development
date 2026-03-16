@@ -23,7 +23,7 @@ Usando el `PROYECTO_PERFIL`, generar archivos base con contenido real (no dirs v
 # {nombre} — Documentación técnica
 
 > Última actualización: {FECHA_HOY}
-> Generado con Bootstrap V4.4
+> Generado con Bootstrap V4.5
 
 ## Índice
 
@@ -406,8 +406,8 @@ Ver BOOTSTRAP-PROMPT-V4.md
 ---
 
 ## 10. Bootstrap prompt
-**Archivo**: `ai-specs/BOOTSTRAP-PROMPT-V4.4.md`
-**Versión**: V4.4
+**Archivo**: `ai-specs/BOOTSTRAP-PROMPT-V4.5.md`
+**Versión**: V4.5
 **Uso**: Correr `/init` en Claude Code, luego pegar el prompt.
 El prompt lee el codebase automáticamente y solo pregunta lo que no puede inferir.
 Soporta re-ejecución segura con backups y protección de archivos editados.
@@ -481,7 +481,7 @@ Crear `.bootstrap-meta.json` con estos valores (reemplazar TODOS los placeholder
 
 ```json
 {
-  "bootstrap_version": "4.4",
+  "bootstrap_version": "4.5",
   "content_hash": "{content_hash_computado}",
   "created_at": "{fecha_actual_ISO8601}",
   "openspec_version": "{version_openspec}",
@@ -502,7 +502,7 @@ Crear `.bootstrap-meta.json` con estos valores (reemplazar TODOS los placeholder
 Para obtener los valores dinámicos:
 - `{content_hash_computado}`: computar SHA-256 de todos los archivos fuente del bootstrap ejecutando:
   ```bash
-  cat .ai-internal/phases/phase-*.md .claude/commands/bootstrap.md .ai-internal/mcp-server/src/*.ts .ai-internal/mcp-server/package.json .ai-internal/mcp-server/tsconfig.json 2>/dev/null | shasum -a 256 | cut -d' ' -f1
+  cat .ai-internal/phases/phase-*.md .claude/commands/bootstrap.md .ai-internal/mcp-server/src/*.ts .ai-internal/mcp-server/package.json .ai-internal/mcp-server/tsconfig.json .ai-internal/templates/* 2>/dev/null | shasum -a 256 | cut -d' ' -f1
   ```
   Este hash permite detectar upgrades incluso cuando la versión no cambia (fixes sin bump).
 - `{fecha_actual_ISO8601}`: usar `new Date().toISOString()` o equivalente (formato: `2024-01-15T12:00:00.000Z`)
@@ -604,7 +604,7 @@ echo "Si todo está ✅: el sistema está listo."
 - [ ] `openspec/config.yaml` tiene contexto completo (sin `{word_word}`)
 - [ ] `ai-specs/specs/{tipo}-standards.mdc` documenta patrones reales del codebase
 - [ ] El nombre del agente (`{tipo}-developer.md`) coincide con el tipo del proyecto
-- [ ] `.bootstrap-meta.json` existe con versión `4.4`
+- [ ] `.bootstrap-meta.json` existe con versión `4.5`
 - [ ] No hay MCP tools hardcoded con prefijos obsoletos
 - [ ] `.mcp.json` existe con `sdd-pipeline` configurado
 - [ ] `.ai-internal/mcp-server/dist/index.js` existe (MCP server compilado)
@@ -681,7 +681,7 @@ echo "Si todo está ✅: el sistema está listo."
 Al terminar la verificación:
 
 ```
-✅ Bootstrap V4.4 completado!
+✅ Bootstrap V4.5 completado!
 
 Resumen:
   Fase 0-2: Detección y perfil

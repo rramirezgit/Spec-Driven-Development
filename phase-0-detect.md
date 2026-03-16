@@ -1,5 +1,19 @@
-# Bootstrap Prompt V4.4 — AI Workflow Setup
+# Bootstrap Prompt V4.5 — AI Workflow Setup
 
+> **Changelog V4.4 → V4.5**:
+> - **5 archivos ahora son templates descargables** — se generan con `sed` (reemplazo determinístico), NO por Claude:
+>   - `menu-template.md` → `.claude/commands/menu.md`
+>   - `enrich-ticket-template.md` → `ai-specs/.commands/enrich-ticket.md`
+>   - `plan-ticket-template.md` → `ai-specs/.commands/plan-{tipo}-ticket.md`
+>   - `create-tickets-template.md` → `.claude/commands/create-{tracker}-tickets.md`
+>   - `doc-standards-template.mdc` → `ai-specs/specs/documentation-standards.mdc`
+> - Templates en `.ai-internal/templates/`, descargados por `install-bootstrap.sh`
+> - **`project-vars.sh`** — archivo centralizado con variables SDD generado en Fase 0, usado por sed en Fase 5
+> - **Validación estricta post-generación** — markers obligatorios + longitud mínima + `__SDD_` placeholder check para todos los template-based
+> - Validación detecta: versión vieja del menu, archivos truncados/resumidos, placeholders sin reemplazar, markers faltantes
+> - Si la validación falla: el bootstrap se detiene y muestra qué corregir antes de continuar
+> - Anti-pattern detection: busca "NO ejecuta subcomandos" (firma de la versión vieja) para forzar regeneración
+>
 > **Changelog V4.3 → V4.4**:
 > - Flujo git: merge directo a dev (sin PR) — PR solo para release dev→main
 > - 5 columnas Jira: To Do → In Progress → QA Review → QA Approved/Failed → Done
@@ -702,6 +716,51 @@ Crear `.ai-internal/project-profile.md` con TODOS los datos reales del PROYECTO_
 ```
 
 > Reemplazá TODOS los `{...}` con datos reales antes de escribir.
+
+Después de guardar el project-profile, generar el archivo de variables para sed:
+
+```bash
+# Generar project-vars.sh desde project-profile.md
+# Este archivo se usa en Fase 5 para reemplazar placeholders en templates con sed
+
+NOMBRE=$(grep "^# Proyecto:" .ai-internal/project-profile.md | sed 's/^# Proyecto: //')
+TIPO=$(grep "^# Tipo:" .ai-internal/project-profile.md | sed 's/^# Tipo: //')
+FRAMEWORK=$(grep "^# Framework:" .ai-internal/project-profile.md | sed 's/^# Framework: //' | awk '{print $1}')
+TRACKER=$(grep "^# Tracker:" .ai-internal/project-profile.md | sed 's/^# Tracker: //')
+CLOUD_ID=$(grep "^# Tracker CloudId:" .ai-internal/project-profile.md | sed 's/^# Tracker CloudId: //')
+PROJECT_KEY=$(grep "^# Tracker Project Key:" .ai-internal/project-profile.md | sed 's/^# Tracker Project Key: //')
+IDIOMA_TECNICO=$(grep "^# Idioma técnico:" .ai-internal/project-profile.md | sed 's/^# Idioma técnico: //')
+IDIOMA_TICKETS=$(grep "^# Idioma tickets:" .ai-internal/project-profile.md | sed 's/^# Idioma tickets: //')
+
+# Criterio específico del proyecto (para enrich-ticket)
+# Se genera como una línea que describe qué verificar según el tipo de proyecto
+if [ "$TIPO" = "frontend" ] || [ "$TIPO" = "fullstack" ]; then
+  CRITERIO_PROYECTO="Diseño/Figma referenciado si aplica"
+elif [ "$TIPO" = "backend" ]; then
+  CRITERIO_PROYECTO="Contratos de API documentados"
+elif [ "$TIPO" = "mobile" ]; then
+  CRITERIO_PROYECTO="Plataformas target especificadas (iOS/Android)"
+else
+  CRITERIO_PROYECTO="Requisitos técnicos completos"
+fi
+
+cat > .ai-internal/project-vars.sh << VARSEOF
+# Auto-generated from project-profile.md — do not edit manually
+# Used by phase-2 templates for sed replacement
+
+SDD_NOMBRE="$NOMBRE"
+SDD_TIPO="$TIPO"
+SDD_FRAMEWORK="$FRAMEWORK"
+SDD_TRACKER="$TRACKER"
+SDD_CLOUD_ID="$CLOUD_ID"
+SDD_PROJECT_KEY="$PROJECT_KEY"
+SDD_IDIOMA_TECNICO="$IDIOMA_TECNICO"
+SDD_IDIOMA_TICKETS="$IDIOMA_TICKETS"
+SDD_CRITERIO_PROYECTO="$CRITERIO_PROYECTO"
+VARSEOF
+
+echo "✅ project-vars.sh generado"
+```
 
 Mostrá:
 ```
