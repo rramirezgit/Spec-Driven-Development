@@ -28,6 +28,26 @@ FILES=(
   "plan-ticket-template.md|.ai-internal/templates/plan-ticket-template.md"
   "create-tickets-template.md|.ai-internal/templates/create-tickets-template.md"
   "doc-standards-template.mdc|.ai-internal/templates/doc-standards-template.mdc"
+  "reusables/opsx/new.md|.ai-internal/reusables/opsx/new.md"
+  "reusables/opsx/ff.md|.ai-internal/reusables/opsx/ff.md"
+  "reusables/opsx/continue.md|.ai-internal/reusables/opsx/continue.md"
+  "reusables/opsx/apply.md|.ai-internal/reusables/opsx/apply.md"
+  "reusables/opsx/verify.md|.ai-internal/reusables/opsx/verify.md"
+  "reusables/opsx/archive.md|.ai-internal/reusables/opsx/archive.md"
+  "reusables/opsx/explore.md|.ai-internal/reusables/opsx/explore.md"
+  "reusables/opsx/sync.md|.ai-internal/reusables/opsx/sync.md"
+  "reusables/opsx/bulk-archive.md|.ai-internal/reusables/opsx/bulk-archive.md"
+  "reusables/opsx/onboard.md|.ai-internal/reusables/opsx/onboard.md"
+  "reusables/commands/explain.md|.ai-internal/reusables/commands/explain.md"
+  "reusables/commands/meta-prompt.md|.ai-internal/reusables/commands/meta-prompt.md"
+  "reusables/commands/commit.md|.ai-internal/reusables/commands/commit.md"
+  "reusables/commands/update-docs.md|.ai-internal/reusables/commands/update-docs.md"
+  "reusables/commands/review-pr.md|.ai-internal/reusables/commands/review-pr.md"
+  "reusables/commands/test-plan.md|.ai-internal/reusables/commands/test-plan.md"
+  "reusables/commands/evidence.md|.ai-internal/reusables/commands/evidence.md"
+  "reusables/commands/generate-docs.md|.ai-internal/reusables/commands/generate-docs.md"
+  "reusables/commands/release-to-main.md|.ai-internal/reusables/commands/release-to-main.md"
+  "reusables/agents/product-strategy-analyst.md|.ai-internal/reusables/agents/product-strategy-analyst.md"
 )
 
 echo ""
@@ -94,6 +114,9 @@ fi
 mkdir -p .ai-internal/phases
 mkdir -p .ai-internal/mcp-server/src
 mkdir -p .ai-internal/templates
+mkdir -p .ai-internal/reusables/opsx
+mkdir -p .ai-internal/reusables/commands
+mkdir -p .ai-internal/reusables/agents
 mkdir -p .claude/commands
 
 # Agregar .ai-internal/ a .gitignore
@@ -200,7 +223,7 @@ fi
 # para que el hash almacenado coincida con el computado en la próxima ejecución
 NEW_HASH=""
 if [ "$DOWNLOADED" -gt 0 ]; then
-  NEW_HASH=$(cat .ai-internal/phases/phase-*.md .claude/commands/bootstrap.md .ai-internal/mcp-server/src/*.ts .ai-internal/mcp-server/package.json .ai-internal/mcp-server/tsconfig.json .ai-internal/templates/* 2>/dev/null | shasum -a 256 | cut -d' ' -f1)
+  NEW_HASH=$(cat .ai-internal/phases/phase-*.md .claude/commands/bootstrap.md .ai-internal/mcp-server/src/*.ts .ai-internal/mcp-server/package.json .ai-internal/mcp-server/tsconfig.json .ai-internal/templates/* .ai-internal/reusables/opsx/*.md .ai-internal/reusables/commands/*.md .ai-internal/reusables/agents/*.md 2>/dev/null | shasum -a 256 | cut -d' ' -f1)
 fi
 
 # Leer versión y hash almacenados

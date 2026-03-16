@@ -502,7 +502,7 @@ Crear `.bootstrap-meta.json` con estos valores (reemplazar TODOS los placeholder
 Para obtener los valores dinámicos:
 - `{content_hash_computado}`: computar SHA-256 de todos los archivos fuente del bootstrap ejecutando:
   ```bash
-  cat .ai-internal/phases/phase-*.md .claude/commands/bootstrap.md .ai-internal/mcp-server/src/*.ts .ai-internal/mcp-server/package.json .ai-internal/mcp-server/tsconfig.json .ai-internal/templates/* 2>/dev/null | shasum -a 256 | cut -d' ' -f1
+  cat .ai-internal/phases/phase-*.md .claude/commands/bootstrap.md .ai-internal/mcp-server/src/*.ts .ai-internal/mcp-server/package.json .ai-internal/mcp-server/tsconfig.json .ai-internal/templates/* .ai-internal/reusables/opsx/*.md .ai-internal/reusables/commands/*.md .ai-internal/reusables/agents/*.md 2>/dev/null | shasum -a 256 | cut -d' ' -f1
   ```
   Este hash permite detectar upgrades incluso cuando la versión no cambia (fixes sin bump).
 - `{fecha_actual_ISO8601}`: usar `new Date().toISOString()` o equivalente (formato: `2024-01-15T12:00:00.000Z`)
