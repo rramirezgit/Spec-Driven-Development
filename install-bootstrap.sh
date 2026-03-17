@@ -48,10 +48,13 @@ FILES=(
   "reusables/commands/generate-docs.md|.ai-internal/reusables/commands/generate-docs.md"
   "reusables/commands/release-to-main.md|.ai-internal/reusables/commands/release-to-main.md"
   "reusables/agents/product-strategy-analyst.md|.ai-internal/reusables/agents/product-strategy-analyst.md"
+  "hooks/pre-compact-marker.sh|.ai-internal/hooks/pre-compact-marker.sh"
+  "hooks/post-compact-reminder.sh|.ai-internal/hooks/post-compact-reminder.sh"
+  "hooks/guard-dangerous-ops.sh|.ai-internal/hooks/guard-dangerous-ops.sh"
 )
 
 echo ""
-echo "🔧 Spec-Driven Development — Bootstrap V4.5"
+echo "🔧 Spec-Driven Development — Bootstrap V4.6"
 echo "============================================="
 echo ""
 
@@ -117,6 +120,7 @@ mkdir -p .ai-internal/templates
 mkdir -p .ai-internal/reusables/opsx
 mkdir -p .ai-internal/reusables/commands
 mkdir -p .ai-internal/reusables/agents
+mkdir -p .ai-internal/hooks
 mkdir -p .claude/commands
 
 # Agregar .ai-internal/ a .gitignore
@@ -183,6 +187,63 @@ if [ "$FAILED" -gt 0 ]; then
   exit 1
 fi
 
+# ── Configurar hooks de protección ───────────────
+echo "🛡️  Configurando hooks de protección..."
+chmod +x .ai-internal/hooks/*.sh 2>/dev/null
+
+# Merge hooks config into .claude/settings.local.json
+SETTINGS_FILE=".claude/settings.local.json"
+HOOKS_CONFIG='{
+  "hooks": {
+    "PreCompact": [
+      {
+        "matcher": "",
+        "hooks": [{"type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.ai-internal/hooks/pre-compact-marker.sh"}]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [{"type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.ai-internal/hooks/post-compact-reminder.sh"}]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [{"type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.ai-internal/hooks/guard-dangerous-ops.sh"}]
+      },
+      {
+        "matcher": "mcp__.*[Aa]tlassian.*transition|mcp__.*[Aa]tlassian.*edit",
+        "hooks": [{"type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.ai-internal/hooks/guard-dangerous-ops.sh"}]
+      }
+    ]
+  }
+}'
+
+if command -v jq >/dev/null 2>&1; then
+  if [ -f "$SETTINGS_FILE" ]; then
+    # Merge: preserve existing permissions, add hooks
+    EXISTING=$(cat "$SETTINGS_FILE")
+    echo "$EXISTING" | jq --argjson hooks "$(echo "$HOOKS_CONFIG" | jq '.hooks')" '. + {hooks: $hooks}' > "$SETTINGS_FILE"
+  else
+    echo "$HOOKS_CONFIG" | jq '.' > "$SETTINGS_FILE"
+  fi
+  echo "  ✅ Hooks configurados en $SETTINGS_FILE"
+else
+  # No jq — write manually if file doesn't have hooks yet
+  if [ -f "$SETTINGS_FILE" ]; then
+    if ! grep -q '"hooks"' "$SETTINGS_FILE" 2>/dev/null; then
+      echo "  ⚠️  jq no disponible. Agregá hooks manualmente a $SETTINGS_FILE"
+      echo "     Hooks descargados en .ai-internal/hooks/"
+    else
+      echo "  ✅ Hooks ya configurados"
+    fi
+  else
+    echo "$HOOKS_CONFIG" > "$SETTINGS_FILE"
+    echo "  ✅ Hooks configurados en $SETTINGS_FILE"
+  fi
+fi
+
 # ── Compilar MCP server ─────────────────────────
 echo "📦 Compilando MCP server del pipeline..."
 if [ -f .ai-internal/mcp-server/package.json ]; then
@@ -223,7 +284,7 @@ fi
 # para que el hash almacenado coincida con el computado en la próxima ejecución
 NEW_HASH=""
 if [ "$DOWNLOADED" -gt 0 ]; then
-  NEW_HASH=$(cat .ai-internal/phases/phase-*.md .claude/commands/bootstrap.md .ai-internal/mcp-server/src/*.ts .ai-internal/mcp-server/package.json .ai-internal/mcp-server/tsconfig.json .ai-internal/templates/* .ai-internal/reusables/opsx/*.md .ai-internal/reusables/commands/*.md .ai-internal/reusables/agents/*.md 2>/dev/null | shasum -a 256 | cut -d' ' -f1)
+  NEW_HASH=$(cat .ai-internal/phases/phase-*.md .claude/commands/bootstrap.md .ai-internal/mcp-server/src/*.ts .ai-internal/mcp-server/package.json .ai-internal/mcp-server/tsconfig.json .ai-internal/templates/* .ai-internal/reusables/opsx/*.md .ai-internal/reusables/commands/*.md .ai-internal/reusables/agents/*.md .ai-internal/hooks/*.sh 2>/dev/null | shasum -a 256 | cut -d' ' -f1)
 fi
 
 # Leer versión y hash almacenados

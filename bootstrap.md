@@ -1,11 +1,11 @@
 ---
 name: "Bootstrap: Setup AI Workflow"
-description: Configura el sistema completo de flujos AI en este proyecto (V4.5)
+description: Configura el sistema completo de flujos AI en este proyecto (V4.6)
 category: Setup
 tags: [bootstrap, setup, workflow]
 ---
 
-# Bootstrap AI Workflow V4.5
+# Bootstrap AI Workflow V4.6
 
 Sos el orquestador del bootstrap. Tu trabajo es ejecutar las fases en orden, una a la vez, cargando el archivo correspondiente.
 
@@ -24,7 +24,7 @@ test -f .bootstrap-meta.json && grep -o '"content_hash"[[:space:]]*:[[:space:]]*
 Determinar `UPGRADE_PENDING`:
 
 1. **Tier 1 — Archivo explícito**: Si `.ai-internal/.upgrade-pending` existe → `UPGRADE_PENDING=true` (leer `from_version`, `to_version`, `trigger`, `from_hash`, `to_hash` del JSON)
-2. **Tier 2 — Versión diferente**: Si no existe `.upgrade-pending` pero sí `.bootstrap-meta.json`: comparar la versión de este archivo (`bootstrap_version`) con la versión de este bootstrap (V4.5). Si son distintas → `UPGRADE_PENDING=true` (fallback)
+2. **Tier 2 — Versión diferente**: Si no existe `.upgrade-pending` pero sí `.bootstrap-meta.json`: comparar la versión de este archivo (`bootstrap_version`) con la versión de este bootstrap (V4.6). Si son distintas → `UPGRADE_PENDING=true` (fallback)
 3. **Tier 3 — Hash ausente**: Si la versión es igual PERO `content_hash` está vacío o no existe en `.bootstrap-meta.json` → `UPGRADE_PENDING=true` (el proyecto fue bootstrapped antes de la detección por hash; forzar upgrade para computar el hash inicial)
 4. Si no existe `.bootstrap-meta.json` → `UPGRADE_PENDING=false` (instalación nueva, flujo normal)
 
@@ -85,7 +85,7 @@ echo "=== CHANGELOG ==="
 head -35 .ai-internal/phases/phase-0-detect.md
 ```
 
-Parsear las líneas que empiezan con `> -` del bloque `Changelog V{from} → V{to}` para extraer los cambios relevantes. Si hay múltiples bloques de changelog (ej: V3→V4, V4→V4.1, V4.1→V4.3, V4.3→V4.5), incluir TODOS los que apliquen entre `from_version` y `to_version`.
+Parsear las líneas que empiezan con `> -` del bloque `Changelog V{from} → V{to}` para extraer los cambios relevantes. Si hay múltiples bloques de changelog (ej: V3→V4, V4→V4.1, V4.1→V4.3, V4.3→V4.6), incluir TODOS los que apliquen entre `from_version` y `to_version`.
 
 ### 0b.3 — Detectar archivos modificados manualmente + gaps de infraestructura
 
@@ -128,7 +128,11 @@ test -f ai-specs/specs/base-standards.mdc && echo "BASE_STANDARDS=EXISTS" || ech
 test -f .ai-internal/pipeline-tracker.md && echo "PIPELINE_TRACKER_LEGACY=EXISTS" || echo "PIPELINE_TRACKER_LEGACY=NOT_FOUND"
 test -f .ai-internal/pipeline-state.json && echo "PIPELINE_STATE_JSON=EXISTS" || echo "PIPELINE_STATE_JSON=MISSING"
 
-# Jira MCP (V4.3+) + Jira columns (V4.5+)
+# Hooks de protección (V4.6+)
+test -f .ai-internal/hooks/guard-dangerous-ops.sh && echo "HOOKS_SCRIPTS=EXISTS" || echo "HOOKS_SCRIPTS=MISSING"
+grep -q '"hooks"' .claude/settings.local.json 2>/dev/null && echo "HOOKS_CONFIGURED=true" || echo "HOOKS_CONFIGURED=false"
+
+# Jira MCP (V4.3+) + Jira columns (V4.6+)
 echo ""
 echo "=== JIRA MCP ==="
 # El MCP de Atlassian se valida en el paso 0.0c/0.0d — aquí solo verificamos que siga funcional
@@ -148,9 +152,10 @@ Construir dos listas:
 | `DOCS_STRUCTURE` | `docs/` no existe o le faltan archivos base | V4.1 |
 | `PLAYBOOK` | `ai-specs/AI-WORKFLOW-PLAYBOOK.md` no existe | V4 |
 | `OPENSPEC_SKILLS` | `.claude/skills/openspec-*/` no existen | V4 |
-| `DOC_STANDARDS` | _(ya no es gap — se regenera siempre desde template)_ | V4.5 |
+| `DOC_STANDARDS` | _(ya no es gap — se regenera siempre desde template)_ | V4.6 |
 | `BASE_STANDARDS` | `ai-specs/specs/base-standards.mdc` no existe | V4 |
 | `PIPELINE_MIGRATE` | `pipeline-tracker.md` existe (legacy) y `pipeline-state.json` no | pre-V4.3 |
+| `HOOKS` | Hooks de protección no configurados | V4.6 |
 | `JIRA_MCP` | MCP de Atlassian no conectado (verificar config) | V4.3 |
 
 ### 0b.4 — Pedir confirmacion al usuario
@@ -185,6 +190,7 @@ Componentes nuevos que se crean (no existían en V{from_version}):
   {si OPENSPEC_SKILLS:} 🆕 .claude/skills/openspec-*/ (via openspec init)
   {si BASE_STANDARDS:} 🆕 ai-specs/specs/base-standards.mdc
   {si PIPELINE_MIGRATE:} 🔄 pipeline-tracker.md → pipeline-state.json (migración de estado)
+  {si HOOKS:}            🛡️ Hooks de protección (.ai-internal/hooks/ + settings)
   {si JIRA_MCP:}         ⚠️ MCP Atlassian no conectado (verificar configuración)
 
 Archivos que NO se tocan:
@@ -233,7 +239,7 @@ Estos son idénticos en todos los proyectos → siempre se sobreescriben sin pre
 
 #### Paso C: Re-ejecutar Fase 2 (adaptados)
 
-**Primero**: Generar `project-vars.sh` si no existe (proyectos pre-V4.5 no lo tienen):
+**Primero**: Generar `project-vars.sh` si no existe (proyectos pre-V4.6 no lo tienen):
 
 ```bash
 if [ ! -f .ai-internal/project-vars.sh ]; then
@@ -402,14 +408,63 @@ Mostrar advertencia pero **no bloquear** el upgrade:
 
 Si `JIRA_MCP=CONNECTED`: no hacer nada (ya está funcional).
 
+##### D.8 — Gap `HOOKS`: Configurar hooks de protección
+
+Si `HOOKS_SCRIPTS=EXISTS` y `HOOKS_CONFIGURED=false`:
+
+```bash
+chmod +x .ai-internal/hooks/*.sh
+```
+
+Leer `.claude/settings.local.json` existente y agregar la configuración de hooks:
+
+```json
+{
+  "hooks": {
+    "PreCompact": [
+      {
+        "matcher": "",
+        "hooks": [{"type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.ai-internal/hooks/pre-compact-marker.sh"}]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": "",
+        "hooks": [{"type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.ai-internal/hooks/post-compact-reminder.sh"}]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [{"type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.ai-internal/hooks/guard-dangerous-ops.sh"}]
+      },
+      {
+        "matcher": "mcp__.*[Aa]tlassian.*transition|mcp__.*[Aa]tlassian.*edit",
+        "hooks": [{"type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.ai-internal/hooks/guard-dangerous-ops.sh"}]
+      }
+    ]
+  }
+}
+```
+
+Preservar los campos existentes de `.claude/settings.local.json` (especialmente `permissions`). Solo agregar/sobreescribir la sección `hooks`.
+
+Si `HOOKS_SCRIPTS=MISSING`: los hooks no se descargaron. Mostrar:
+```
+⚠️ Hook scripts no encontrados en .ai-internal/hooks/
+   Re-ejecutá install-bootstrap.sh para descargarlos.
+```
+
+Si `HOOKS_CONFIGURED=true`: no hacer nada (ya configurados).
+
 #### Paso E: Actualizar metadata
 
 Actualizar `.bootstrap-meta.json`:
-- `bootstrap_version` → nueva versión (4.5)
+- `bootstrap_version` → nueva versión (4.6)
 - `previous_version` → versión anterior
 - `content_hash` → computar el hash actual ejecutando:
   ```bash
-  cat .ai-internal/phases/phase-*.md .claude/commands/bootstrap.md .ai-internal/mcp-server/src/*.ts .ai-internal/mcp-server/package.json .ai-internal/mcp-server/tsconfig.json .ai-internal/templates/* .ai-internal/reusables/opsx/*.md .ai-internal/reusables/commands/*.md .ai-internal/reusables/agents/*.md 2>/dev/null | shasum -a 256 | cut -d' ' -f1
+  cat .ai-internal/phases/phase-*.md .claude/commands/bootstrap.md .ai-internal/mcp-server/src/*.ts .ai-internal/mcp-server/package.json .ai-internal/mcp-server/tsconfig.json .ai-internal/templates/* .ai-internal/reusables/opsx/*.md .ai-internal/reusables/commands/*.md .ai-internal/reusables/agents/*.md .ai-internal/hooks/*.sh 2>/dev/null | shasum -a 256 | cut -d' ' -f1
   ```
 - Mantener todos los demás campos intactos (`project_name`, `project_type`, `framework`, `tracker`, `mcps_detected`, etc.)
 - Si faltan campos nuevos (ej: `mcps_detected` no existía en versiones anteriores), agregarlos con los valores del `project-profile.md`
@@ -510,7 +565,7 @@ Basándote en el estado:
 Mostrá:
 
 ```
-🔧 AI Workflow Bootstrap V4.5
+🔧 AI Workflow Bootstrap V4.6
 ==============================
 
 Estado:

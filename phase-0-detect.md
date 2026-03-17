@@ -1,5 +1,15 @@
-# Bootstrap Prompt V4.5 — AI Workflow Setup
+# Bootstrap Prompt V4.6 — AI Workflow Setup
 
+> **Changelog V4.5 → V4.6**:
+> - **Hooks de protección anti-compactación** — 3 scripts que previenen que Claude actúe autónomamente después de compactación:
+>   - `pre-compact-marker.sh` — PreCompact: escribe marker cuando se compacta la conversación
+>   - `post-compact-reminder.sh` — UserPromptSubmit: inyecta directiva STOP obligatoria post-compactación
+>   - `guard-dangerous-ops.sh` — PreToolUse: bloquea `git push`, `git merge` a branches protegidas, operaciones git destructivas, y transiciones/ediciones de Jira vía MCP
+> - Hooks se descargan a `.ai-internal/hooks/`, se configuran en `.claude/settings.local.json`
+> - `install-bootstrap.sh` configura hooks automáticamente (merge con jq si disponible)
+> - Gap `HOOKS` en upgrade: configura hooks en proyectos pre-V4.6
+> - **20 archivos reusables ahora son descargables** — phase-1-reusables.md reducido de 1616 a 191 líneas
+>
 > **Changelog V4.4 → V4.5**:
 > - **5 archivos ahora son templates descargables** — se generan con `sed` (reemplazo determinístico), NO por Claude:
 >   - `menu-template.md` → `.claude/commands/menu.md`
