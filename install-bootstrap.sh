@@ -72,7 +72,25 @@ else
   echo "✅ openspec $(openspec --version 2>/dev/null)"
 fi
 
-if [ ! -f package.json ] && [ ! -f go.mod ] && [ ! -f requirements.txt ] && [ ! -f Cargo.toml ] && [ ! -f pom.xml ] && [ ! -f build.gradle ]; then
+PROJECT_DETECTED=false
+# Check root-level manifests
+for MANIFEST in package.json go.mod requirements.txt Cargo.toml pom.xml build.gradle composer.json pubspec.yaml Gemfile; do
+  [ -f "$MANIFEST" ] && PROJECT_DETECTED=true && break
+done
+# Check for monorepo: manifests in immediate subdirectories
+if [ "$PROJECT_DETECTED" = false ]; then
+  for SUB in */; do
+    for MANIFEST in package.json go.mod requirements.txt Cargo.toml pom.xml build.gradle composer.json pubspec.yaml Gemfile; do
+      [ -f "${SUB}${MANIFEST}" ] && PROJECT_DETECTED=true && break 2
+    done
+  done
+fi
+# Fallback: .git/ or Makefile/Dockerfile at root
+if [ "$PROJECT_DETECTED" = false ]; then
+  [ -d .git ] || [ -f Makefile ] || [ -f Dockerfile ] && PROJECT_DETECTED=true
+fi
+
+if [ "$PROJECT_DETECTED" = false ]; then
   echo "❌ No parece un proyecto. Ejecutá desde la raíz."
   ERRORS=$((ERRORS + 1))
 else
