@@ -57,6 +57,15 @@ export interface PipelineData {
   figmaLink?: string | null;
 }
 
+export interface SubprojectConfig {
+  path: string;
+  tipo: string;
+  framework: string;
+  uiLibrary?: string;
+  orm?: string;
+  testing?: string;
+}
+
 export interface ProjectConfig {
   nombre: string;
   tipo: string;
@@ -65,6 +74,8 @@ export interface ProjectConfig {
   projectKey: string;
   idioma: string;
   jiraQaStatus: string;
+  /** Present when tipo is "monorepo-fullstack" — describes each subdirectory */
+  subprojects?: SubprojectConfig[];
 }
 
 export const VALID_TRANSITIONS: Record<PipelineState, PipelineState[]> = {
@@ -108,7 +119,9 @@ export const NEXT_ACTIONS: Record<PipelineState, string> = {
   [PipelineState.COMPLETADO]: "Preguntar al usuario si quiere continuar (sdd_confirm_next requerido)",
 };
 
-/** Maps each state to the recommended command */
+/** Maps each state to the recommended command.
+ *  For monorepo-fullstack projects, {tipo} resolves to "frontend" or "backend"
+ *  depending on which part the ticket affects. If both, run backend first then frontend. */
 export const NEXT_COMMANDS: Record<PipelineState, string> = {
   [PipelineState.IDLE]: "/menu",
   [PipelineState.ARTEFACTOS]: "/create-{tracker}-tickets",

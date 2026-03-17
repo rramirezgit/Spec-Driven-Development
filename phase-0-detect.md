@@ -1,5 +1,17 @@
 # Bootstrap Prompt V4.6 — AI Workflow Setup
 
+> **Changelog V4.6 → V4.7**:
+> - **Soporte monorepo-fullstack** — Proyectos con front y back en subdirectorios separados (ej: `app-front/` + `app-back/`)
+>   - Paso 0.1c nuevo: detección automática de subdirectorios con stacks independientes
+>   - Si detecta front+back → spawns 2 agents en paralelo para analizar cada subdirectorio
+>   - `project-profile.md` extendido con sección `## Subprojects` (path, framework, UI lib, ORM, testing por subproject)
+>   - Phase 2 genera archivos duales: `frontend-developer.md` + `backend-developer.md`, `develop-frontend.md` + `develop-backend.md`, `frontend-standards.mdc` + `backend-standards.mdc`
+>   - `plan-ticket-template.md` se genera 2 veces con datos de cada subproject
+>   - `CLAUDE.md` incluye ambos stacks con comandos separados
+>   - MCP server: `ProjectConfig` extendido con `subprojects?: SubprojectConfig[]`
+> - **Hook de Jira relajado** — `guard-dangerous-ops.sh` ya no bloquea transiciones de Jira (el sistema de permisos de Claude Code ya cubre esto). Solo bloquea operaciones bulk/destructivas (bulkEdit, deleteIssue)
+> - Matcher de hooks en `settings.local.json` actualizado para no capturar transitions
+>
 > **Changelog V4.5 → V4.6**:
 > - **Hooks de protección anti-compactación** — 3 scripts que previenen que Claude actúe autónomamente después de compactación:
 >   - `pre-compact-marker.sh` — PreCompact: escribe marker cuando se compacta la conversación
@@ -381,6 +393,96 @@ ESTADO_CONFIG:
 
 ---
 
+### 0.1c — Detectar estructura monorepo (front + back en subdirectorios)
+
+> **Por qué**: Si el proyecto tiene frontend y backend en carpetas separadas (ej: `app-front/` y `app-back/`),
+> necesitamos analizar cada subdirectorio independientemente y generar agents/standards para ambos.
+
+```bash
+echo "=== MONOREPO DETECTION ==="
+
+# Buscar subdirectorios que tengan su propio package.json, requirements.txt, go.mod, etc.
+SUBPROJECTS=""
+for dir in */; do
+  dir_name="${dir%/}"
+  # Ignorar directorios de infraestructura/config
+  case "$dir_name" in
+    node_modules|.git|.ai-internal|ai-specs|docs|openspec|.claude|.bootstrap-backup|dist|build|coverage) continue ;;
+  esac
+
+  if [ -f "$dir/package.json" ] || [ -f "$dir/requirements.txt" ] || [ -f "$dir/go.mod" ] || [ -f "$dir/Cargo.toml" ] || [ -f "$dir/pom.xml" ]; then
+    # Detectar tipo de cada subdirectorio
+    SUBTYPE="unknown"
+    if [ -f "$dir/next.config.js" ] || [ -f "$dir/next.config.ts" ] || [ -f "$dir/next.config.mjs" ]; then
+      SUBTYPE="frontend:nextjs"
+    elif [ -f "$dir/vite.config.ts" ] || [ -f "$dir/vite.config.js" ]; then
+      SUBTYPE="frontend:vite"
+    elif [ -f "$dir/expo.json" ] || [ -f "$dir/app.json" ]; then
+      SUBTYPE="mobile:expo"
+    elif [ -f "$dir/nest-cli.json" ]; then
+      SUBTYPE="backend:nestjs"
+    elif [ -f "$dir/manage.py" ]; then
+      SUBTYPE="backend:django"
+    elif [ -f "$dir/artisan" ]; then
+      SUBTYPE="backend:laravel"
+    elif [ -f "$dir/go.mod" ]; then
+      SUBTYPE="backend:go"
+    elif [ -f "$dir/Cargo.toml" ]; then
+      SUBTYPE="backend:rust"
+    elif [ -f "$dir/package.json" ]; then
+      # Heurístico: si tiene react/vue/angular → frontend, si tiene express/fastify/koa → backend
+      if grep -q '"react"\|"vue"\|"@angular/core"\|"next"\|"nuxt"\|"svelte"' "$dir/package.json" 2>/dev/null; then
+        SUBTYPE="frontend:react"
+      elif grep -q '"express"\|"fastify"\|"koa"\|"@nestjs/core"\|"hapi"' "$dir/package.json" 2>/dev/null; then
+        SUBTYPE="backend:node"
+      fi
+    fi
+    echo "SUBPROJECT=$dir_name|$SUBTYPE"
+    SUBPROJECTS="$SUBPROJECTS $dir_name"
+  fi
+done
+
+# Contar subproyectos detectados
+SUBPROJECT_COUNT=$(echo "$SUBPROJECTS" | wc -w | tr -d ' ')
+echo "SUBPROJECT_COUNT=$SUBPROJECT_COUNT"
+```
+
+Construí internamente:
+
+```
+MONOREPO_DETECTION:
+  subproject_count: [0 | 1 | 2+]
+  subprojects: [lista de {path, tipo_detectado}]
+  es_monorepo: [true si subproject_count >= 2 Y al menos uno es frontend Y al menos uno es backend]
+```
+
+**Si `es_monorepo == true`**:
+- Marcar `tipo: monorepo-fullstack`
+- Para cada subproyecto, usar **Agent tool** (subagent_type=Explore) en paralelo para analizar cada subdirectorio:
+
+  ```
+  Agent 1 (frontend): "Analizá el subdirectorio {path_front}/:
+    - Lee {path_front}/package.json completo
+    - Detectá: framework, versión, UI library, state management, HTTP client, testing, form lib, validation lib
+    - Explorá la estructura de carpetas (src/, app/, components/, etc.)
+    - Leé archivos clave: tsconfig.json, theme config, auth store, un ejemplo de hook/component
+    - Retorná un resumen estructurado con todos los datos detectados"
+
+  Agent 2 (backend): "Analizá el subdirectorio {path_back}/:
+    - Lee {path_back}/package.json (o equivalente) completo
+    - Detectá: framework, versión, ORM, database, auth method, testing, validation lib
+    - Explorá la estructura de carpetas (src/, controllers/, services/, etc.)
+    - Leé archivos clave: main/app entry, un controller/service ejemplo, config de DB
+    - Retorná un resumen estructurado con todos los datos detectados"
+  ```
+
+- Los resultados de ambos agents se usan para construir el perfil extendido (paso 0.5)
+- **IMPORTANTE**: Los pasos 0.2, 0.3 y 0.4 se ejecutan igualmente para la raíz, pero los datos de cada subdirectorio vienen de los agents
+
+**Si `es_monorepo == false`**: continuar con el flujo normal (paso 0.2).
+
+---
+
 ### 0.2 — Exploración automática del codebase
 
 Ejecutá estos comandos en secuencia y procesá la salida:
@@ -390,9 +492,10 @@ Ejecutá estos comandos en secuencia y procesá la salida:
 ls -la
 
 # Package.json (fuente principal de verdad para el stack)
+# En monorepo: puede haber un package.json raíz con workspaces, o no haber ninguno
 cat package.json 2>/dev/null || cat build.gradle 2>/dev/null || cat pom.xml 2>/dev/null || cat Cargo.toml 2>/dev/null || cat requirements.txt 2>/dev/null || cat go.mod 2>/dev/null
 
-# Estructura src
+# Estructura src (en monorepo, esto estará en los subdirectorios — los agents ya lo analizaron)
 ls src/ 2>/dev/null || ls app/ 2>/dev/null || ls lib/ 2>/dev/null || ls internal/ 2>/dev/null
 
 # Archivos de configuración clave
@@ -410,7 +513,7 @@ ls docs/api/ 2>/dev/null | head -10
 # Detectar rama de desarrollo
 git branch -r --list 'origin/dev' 'origin/develop' 'origin/development' 2>/dev/null | sed 's|origin/||' | head -1 | xargs echo "DEV_BRANCH=" || echo "DEV_BRANCH=not_found"
 
-# Detectar tipo de proyecto
+# Detectar tipo de proyecto (en monorepo, estos checks son para la raíz — pueden no matchear)
 test -f next.config.js -o -f next.config.ts && echo "NEXTJS"
 test -f vite.config.ts -o -f vite.config.js && echo "VITE"
 test -f expo.json -o -f app.json && echo "EXPO"
@@ -468,7 +571,7 @@ Con toda la información recopilada, construí internamente este perfil:
 ```
 PROYECTO_PERFIL:
   nombre: [inferir del package.json "name" o nombre de carpeta raíz]
-  tipo: [frontend | backend | fullstack | mobile | monorepo]
+  tipo: [frontend | backend | fullstack | mobile | monorepo | monorepo-fullstack]
   plataforma: [web | mobile | api | mixed]
   framework_principal: [nombre + versión]
   lenguaje: [TypeScript | JavaScript | Python | Go | Java | Rust | etc]
@@ -601,8 +704,8 @@ Antes de crear un solo archivo, mostrá este resumen:
 🔍 PERFIL DEL PROYECTO DETECTADO
 
 Proyecto:    [nombre]
-Tipo:        [frontend | backend | fullstack | mobile]
-Framework:   [nombre + versión]
+Tipo:        [frontend | backend | fullstack | mobile | monorepo-fullstack]
+Framework:   [nombre + versión] (o "ver subprojects" si monorepo)
 Lenguaje:    [TypeScript/JavaScript/Python/etc]
 UI Library:  [nombre o "N/A"]
 Backend:     [tipo + env var URL]
@@ -647,6 +750,16 @@ Adaptados al proyecto:
   - ai-specs/specs/documentation-standards.mdc [SKIP si protegido]
   - ai-specs/specs/[tipo]-standards.mdc [SKIP si protegido]
   [+ ai-specs/specs/ui-design-system.mdc si es frontend con design system]
+
+  {Si monorepo-fullstack — archivos ADICIONALES:}
+  - ai-specs/.agents/frontend-developer.md [SKIP si protegido]
+  - ai-specs/.agents/backend-developer.md [SKIP si protegido]
+  - ai-specs/.commands/develop-frontend.md
+  - ai-specs/.commands/develop-backend.md
+  - ai-specs/.commands/plan-frontend-ticket.md
+  - ai-specs/.commands/plan-backend-ticket.md
+  - ai-specs/specs/frontend-standards.mdc [SKIP si protegido]
+  - ai-specs/specs/backend-standards.mdc [SKIP si protegido]
 
 Generados por openspec init (post-creación):
   - .claude/skills/openspec-*/ (10 skills — generados por openspec init)
@@ -723,6 +836,37 @@ Crear `.ai-internal/project-profile.md` con TODOS los datos reales del PROYECTO_
 # OpenSpec version: {version}
 # Es re-ejecución: {bool}
 # Archivos protegidos: {lista}
+
+{Si tipo == monorepo-fullstack, agregar sección de subprojects:}
+
+## Subprojects
+
+### frontend
+**Path**: {path_del_subdirectorio_frontend}
+**Framework**: {framework_frontend} {version}
+**UI Library**: {ui_library}
+**HTTP Client**: {http_client}
+**Server State**: {server_state}
+**Auth State**: {auth_state}
+**Form Lib**: {form_lib}
+**Validation Lib**: {validation_lib}
+**Testing**: {testing_frontend}
+**Estructura carpetas**: {breve}
+**Patrón componentes**: {patron}
+**Patrón hooks**: {patron}
+**Env vars**: {lista_frontend}
+
+### backend
+**Path**: {path_del_subdirectorio_backend}
+**Framework**: {framework_backend} {version}
+**ORM**: {orm}
+**Database**: {database}
+**Auth Method**: {auth_method}
+**Validation Lib**: {validation_lib_back}
+**Testing**: {testing_backend}
+**Estructura carpetas**: {breve}
+**Patrón API**: {patron}
+**Env vars**: {lista_backend}
 ```
 
 > Reemplazá TODOS los `{...}` con datos reales antes de escribir.
@@ -744,8 +888,8 @@ IDIOMA_TICKETS=$(grep "^# Idioma tickets:" .ai-internal/project-profile.md | sed
 
 # Criterio específico del proyecto (para enrich-ticket)
 # Se genera como una línea que describe qué verificar según el tipo de proyecto
-if [ "$TIPO" = "frontend" ] || [ "$TIPO" = "fullstack" ]; then
-  CRITERIO_PROYECTO="Diseño/Figma referenciado si aplica"
+if [ "$TIPO" = "frontend" ] || [ "$TIPO" = "fullstack" ] || [ "$TIPO" = "monorepo-fullstack" ]; then
+  CRITERIO_PROYECTO="Diseño/Figma referenciado si aplica, contratos de API documentados"
 elif [ "$TIPO" = "backend" ]; then
   CRITERIO_PROYECTO="Contratos de API documentados"
 elif [ "$TIPO" = "mobile" ]; then

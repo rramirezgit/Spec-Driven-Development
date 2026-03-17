@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { ProjectConfig } from "./types.js";
+import type { ProjectConfig, SubprojectConfig } from "./types.js";
 
 // Resolve project root from the compiled JS location:
 // dist/config.js → dist/ → mcp-server/ → .ai-internal/ → PROJECT_ROOT
@@ -77,15 +77,60 @@ function parseProfile(content: string): ProjectConfig {
     }
   }
 
+  const tipo = get("Tipo", "tipo", "Type", "type", "Project Type");
+
+  // Parse subprojects for monorepo-fullstack
+  let subprojects: SubprojectConfig[] | undefined;
+  if (tipo === "monorepo-fullstack") {
+    subprojects = parseSubprojects(content);
+  }
+
   return {
     nombre: get("Nombre", "nombre", "Project Name", "project_name"),
-    tipo: get("Tipo", "tipo", "Type", "type", "Project Type"),
+    tipo,
     tracker: get("Tracker", "tracker"),
     cloudId: get("CloudId", "cloudId", "cloud_id", "Tracker CloudId"),
     projectKey: get("Tracker Project Key", "project_key", "Project Key"),
     idioma: get("Idioma", "idioma", "Language", "language"),
     jiraQaStatus,
+    subprojects,
   };
+}
+
+function parseSubprojects(content: string): SubprojectConfig[] {
+  const subprojects: SubprojectConfig[] = [];
+
+  // Match "### frontend" or "### backend" sections under "## Subprojects"
+  const subprojectsSection = content.match(/## Subprojects([\s\S]*?)(?=\n## [^#]|$)/i);
+  if (!subprojectsSection) return subprojects;
+
+  const sectionContent = subprojectsSection[1];
+  const subSections = sectionContent.split(/### /).filter(Boolean);
+
+  for (const sub of subSections) {
+    const lines = sub.trim().split("\n");
+    const name = lines[0]?.trim().toLowerCase();
+    if (!name) continue;
+
+    const getField = (key: string): string => {
+      for (const line of lines) {
+        const match = line.match(new RegExp(`\\*\\*${key}\\*\\*:\\s*(.+)`, "i"));
+        if (match?.[1]) return match[1].trim();
+      }
+      return "";
+    };
+
+    subprojects.push({
+      path: getField("Path") || name,
+      tipo: name === "frontend" || name === "front" ? "frontend" : name === "backend" || name === "back" ? "backend" : name,
+      framework: getField("Framework"),
+      uiLibrary: getField("UI Library") || undefined,
+      orm: getField("ORM") || undefined,
+      testing: getField("Testing") || undefined,
+    });
+  }
+
+  return subprojects;
 }
 
 export interface ConfigValidation {

@@ -36,6 +36,11 @@ Al generar archivos que referencian MCP tools (create-tickets, enrich-ticket, co
 
 ### `CLAUDE.md`
 
+> **Si el tipo es `monorepo-fullstack`**: el CLAUDE.md incluye AMBOS stacks en secciones separadas.
+> La sección Architecture tiene subsecciones `### Frontend ({path_front}/)` y `### Backend ({path_back}/)`.
+> Los comandos de desarrollo incluyen los de ambos subdirectorios (ej: `cd {path_front} && npm run dev`, `cd {path_back} && npm run start:dev`).
+> La sección "Adding a New Resource" tiene dos subsecciones: una para el frontend y otra para el backend.
+
 Generá este archivo con los valores reales del proyecto detectado:
 
 ```markdown
@@ -171,6 +176,25 @@ rules:
 ### `ai-specs/.agents/{tipo}-developer.md`
 
 > Nombrá el archivo según el tipo detectado: `frontend-developer.md` | `backend-developer.md` | `fullstack-developer.md` | `mobile-developer.md`
+>
+> **Si el tipo es `monorepo-fullstack`**: generá **DOS** archivos de agent — uno para frontend y otro para backend.
+> Cada agent es especialista en su subdirectorio y stack. Los datos de cada uno vienen de la sección `## Subprojects` del `project-profile.md`.
+
+**Para tipo `monorepo-fullstack`**, generar:
+
+1. **`ai-specs/.agents/frontend-developer.md`** — usando los datos de `### frontend` del profile:
+   - `{framework}` = framework del subproject frontend
+   - Las secciones de expertise cubren: Data Layer, Components, Routing, State, Forms, Styling
+   - El campo `description` incluye el path del subdirectorio: "Expert {framework} architect for {nombre} ({path_front}/)"
+   - Agregar al Role: "Trabaja exclusivamente en el subdirectorio `{path_front}/`."
+
+2. **`ai-specs/.agents/backend-developer.md`** — usando los datos de `### backend` del profile:
+   - `{framework}` = framework del subproject backend
+   - Las secciones de expertise cubren: Data Layer/ORM, Controllers/Services, Auth, Validation, Error Handling
+   - El campo `description` incluye el path del subdirectorio: "Expert {framework} architect for {nombre} ({path_back}/)"
+   - Agregar al Role: "Trabaja exclusivamente en el subdirectorio `{path_back}/`."
+
+**Para otros tipos**, generar UN solo archivo como siempre:
 
 ```markdown
 ---
@@ -230,6 +254,20 @@ Senior {framework} architect. Plans production-ready features following establis
 ---
 
 ### `ai-specs/.commands/develop-{tipo}.md`
+
+> **Si el tipo es `monorepo-fullstack`**: generá **DOS** archivos de develop command:
+> - `ai-specs/.commands/develop-frontend.md` — especializado en el subdirectorio frontend
+> - `ai-specs/.commands/develop-backend.md` — especializado en el subdirectorio backend
+>
+> Cada archivo sigue la misma estructura pero con el stack y patrones de su subdirectorio.
+> En el paso "1. Load context", cada uno lee sus propios standards:
+> - Frontend: `ai-specs/specs/frontend-standards.mdc`
+> - Backend: `ai-specs/specs/backend-standards.mdc`
+>
+> En el paso "0. Crear rama", la rama es compartida (un ticket puede tocar front y back).
+> El develop-frontend trabaja solo en `{path_front}/` y el develop-backend solo en `{path_back}/`.
+>
+> **Para tickets que tocan ambos**: el usuario ejecuta primero `/develop-backend {ID}` y luego `/develop-frontend {ID}` (o viceversa), ambos en la misma rama feature.
 
 ```markdown
 # Role
@@ -346,6 +384,10 @@ echo "enrich-ticket.md generado ($ENRICH_LINES líneas)"
 
 > **⚠️ ESTE ARCHIVO SE GENERA DESDE UN TEMPLATE DESCARGABLE — NO SE GENERA POR CLAUDE.**
 > Template en `.ai-internal/templates/plan-ticket-template.md`.
+>
+> **Si el tipo es `monorepo-fullstack`**: generá **DOS** archivos de plan:
+> - `plan-frontend-ticket.md` (con SDD_TIPO=frontend y SDD_FRAMEWORK del subproject frontend)
+> - `plan-backend-ticket.md` (con SDD_TIPO=backend y SDD_FRAMEWORK del subproject backend)
 
 #### Proceso de generación (determinístico):
 
@@ -365,14 +407,32 @@ Si `PLAN_TEMPLATE=MISSING`: DETENER con error "Template de plan-ticket no encont
 ```bash
 source .ai-internal/project-vars.sh
 
-TIPO_LOWER=$(echo "$SDD_TIPO" | tr '[:upper:]' '[:lower:]')
-echo "Generando plan-${TIPO_LOWER}-ticket.md desde template..."
+if [ "$SDD_TIPO" = "monorepo-fullstack" ]; then
+  # Generar dos archivos de plan — uno para frontend, otro para backend
+  # Los frameworks de cada subproject se leen del project-profile.md
+  FRONT_FRAMEWORK=$(grep -A5 "### frontend" .ai-internal/project-profile.md | grep "Framework" | sed 's/.*\*\*Framework\*\*: //' | awk '{print $1}')
+  BACK_FRAMEWORK=$(grep -A5 "### backend" .ai-internal/project-profile.md | grep "Framework" | sed 's/.*\*\*Framework\*\*: //' | awk '{print $1}')
 
-sed "s/__SDD_FRAMEWORK__/$SDD_FRAMEWORK/g; s/__SDD_NOMBRE__/$SDD_NOMBRE/g; s/__SDD_TIPO__/$SDD_TIPO/g; s/__SDD_IDIOMA_TECNICO__/$SDD_IDIOMA_TECNICO/g" \
-    .ai-internal/templates/plan-ticket-template.md > "ai-specs/.commands/plan-${TIPO_LOWER}-ticket.md"
+  echo "Generando plan-frontend-ticket.md desde template..."
+  sed "s/__SDD_FRAMEWORK__/$FRONT_FRAMEWORK/g; s/__SDD_NOMBRE__/$SDD_NOMBRE/g; s/__SDD_TIPO__/frontend/g; s/__SDD_IDIOMA_TECNICO__/$SDD_IDIOMA_TECNICO/g" \
+      .ai-internal/templates/plan-ticket-template.md > "ai-specs/.commands/plan-frontend-ticket.md"
 
-PLAN_LINES=$(wc -l < "ai-specs/.commands/plan-${TIPO_LOWER}-ticket.md")
-echo "plan-${TIPO_LOWER}-ticket.md generado ($PLAN_LINES líneas)"
+  echo "Generando plan-backend-ticket.md desde template..."
+  sed "s/__SDD_FRAMEWORK__/$BACK_FRAMEWORK/g; s/__SDD_NOMBRE__/$SDD_NOMBRE/g; s/__SDD_TIPO__/backend/g; s/__SDD_IDIOMA_TECNICO__/$SDD_IDIOMA_TECNICO/g" \
+      .ai-internal/templates/plan-ticket-template.md > "ai-specs/.commands/plan-backend-ticket.md"
+
+  echo "plan-frontend-ticket.md generado ($(wc -l < ai-specs/.commands/plan-frontend-ticket.md) líneas)"
+  echo "plan-backend-ticket.md generado ($(wc -l < ai-specs/.commands/plan-backend-ticket.md) líneas)"
+else
+  TIPO_LOWER=$(echo "$SDD_TIPO" | tr '[:upper:]' '[:lower:]')
+  echo "Generando plan-${TIPO_LOWER}-ticket.md desde template..."
+
+  sed "s/__SDD_FRAMEWORK__/$SDD_FRAMEWORK/g; s/__SDD_NOMBRE__/$SDD_NOMBRE/g; s/__SDD_TIPO__/$SDD_TIPO/g; s/__SDD_IDIOMA_TECNICO__/$SDD_IDIOMA_TECNICO/g" \
+      .ai-internal/templates/plan-ticket-template.md > "ai-specs/.commands/plan-${TIPO_LOWER}-ticket.md"
+
+  PLAN_LINES=$(wc -l < "ai-specs/.commands/plan-${TIPO_LOWER}-ticket.md")
+  echo "plan-${TIPO_LOWER}-ticket.md generado ($PLAN_LINES líneas)"
+fi
 ```
 
 **NO modificar el archivo después de generarlo.** El template es la fuente de verdad.
@@ -579,6 +639,12 @@ echo "documentation-standards.mdc generado ($DOC_LINES líneas)"
 ### `ai-specs/specs/{tipo}-standards.mdc`
 
 > Nombrá según el tipo detectado: `frontend-standards.mdc` | `backend-standards.mdc` | `mobile-standards.mdc`
+>
+> **Si el tipo es `monorepo-fullstack`**: generá **DOS** archivos de standards:
+> - `ai-specs/specs/frontend-standards.mdc` — con los datos del subproject frontend, globs apuntando a `{path_front}/**`
+> - `ai-specs/specs/backend-standards.mdc` — con los datos del subproject backend, globs apuntando a `{path_back}/**`
+>
+> Cada archivo documenta el stack, estructura, patrones y convenciones de su subdirectorio específico.
 
 ```markdown
 ---
@@ -786,7 +852,7 @@ fi
 echo ""
 echo "--- Validación archivos adaptados ---"
 
-# develop-{tipo}.md: debe tener secciones clave
+# develop-{tipo}.md: debe tener secciones clave (monorepo-fullstack tiene 2)
 DEVELOP_FILE=$(ls ai-specs/.commands/develop-*.md 2>/dev/null | head -1)
 if [ -n "$DEVELOP_FILE" ]; then
   for MARKER in "Load context" "Implementation plan" "Implement following" "Feedback loop" "git checkout -b feature"; do

@@ -32,9 +32,11 @@ if [ "$TOOL_NAME" = "Bash" ]; then
   fi
 fi
 
-# ─── Guard 2: Jira transitions via MCP ──────────────────
-if echo "$TOOL_NAME" | grep -qiE 'atlassian.*transition|atlassian.*editJiraIssue'; then
-  echo "🛑 Transición/edición de Jira bloqueada por SDD guardrail. Pedí confirmación al usuario antes de modificar tickets." >&2
+# ─── Guard 2: Jira bulk edits via MCP (transitions allowed) ──────────────────
+# Jira transitions are allowed — Claude Code's own permission system handles approval.
+# Only block bulk edit operations that could affect multiple tickets at once.
+if echo "$TOOL_NAME" | grep -qiE 'atlassian.*bulkEdit|atlassian.*deleteIssue'; then
+  echo "🛑 Operación masiva/destructiva de Jira bloqueada por SDD guardrail. Pedí confirmación al usuario." >&2
   exit 2
 fi
 
