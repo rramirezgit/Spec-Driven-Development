@@ -77,6 +77,18 @@ function parseProfile(content: string): ProjectConfig {
     }
   }
 
+  // Extract Notion QA status from Notion Statuses JSON (if present)
+  const notionStatusesRaw = get("Notion Statuses", "notion_statuses");
+  let notionQaStatus = "";
+  if (notionStatusesRaw) {
+    try {
+      const statuses = JSON.parse(notionStatusesRaw);
+      notionQaStatus = statuses.qa_review || "";
+    } catch {
+      // Not valid JSON — ignore
+    }
+  }
+
   const tipo = get("Tipo", "tipo", "Type", "type", "Project Type");
 
   // Parse subprojects for monorepo-fullstack
@@ -85,14 +97,22 @@ function parseProfile(content: string): ProjectConfig {
     subprojects = parseSubprojects(content);
   }
 
+  const tracker = get("Tracker", "tracker");
+
   return {
     nombre: get("Nombre", "nombre", "Project Name", "project_name"),
     tipo,
-    tracker: get("Tracker", "tracker"),
-    cloudId: get("CloudId", "cloudId", "cloud_id", "Tracker CloudId"),
-    projectKey: get("Tracker Project Key", "project_key", "Project Key"),
+    tracker,
+    // Jira-specific
+    cloudId: get("CloudId", "cloudId", "cloud_id", "Tracker CloudId") || undefined,
+    projectKey: get("Tracker Project Key", "project_key", "Project Key") || undefined,
+    jiraQaStatus: jiraQaStatus || undefined,
+    // Notion-specific
+    notionDatabaseId: get("Notion Database ID", "notion_database_id") || undefined,
+    notionStatusProperty: get("Notion Status Property", "notion_status_property") || undefined,
+    notionQaStatus: notionQaStatus || undefined,
+    // Common
     idioma: get("Idioma", "idioma", "Language", "language"),
-    jiraQaStatus,
     subprojects,
   };
 }
@@ -170,21 +190,42 @@ export async function validateConfig(): Promise<ConfigValidation> {
     );
   }
 
-  if (
-    !config.cloudId ||
-    config.cloudId.toLowerCase().includes("pendiente") ||
-    config.cloudId.toLowerCase().includes("todo") ||
-    config.cloudId === "N/A"
-  ) {
-    errors.push(
-      "CloudId del tracker no configurado. Sin cloudId no se puede interactuar con el tracker. Configuralo en .ai-internal/project-profile.md.",
-    );
-  }
+  // Tracker-specific validation
+  if (config.tracker === "jira") {
+    if (
+      !config.cloudId ||
+      config.cloudId.toLowerCase().includes("pendiente") ||
+      config.cloudId.toLowerCase().includes("todo") ||
+      config.cloudId === "N/A"
+    ) {
+      errors.push(
+        "CloudId del tracker no configurado. Sin cloudId no se puede interactuar con Jira. Configuralo en .ai-internal/project-profile.md.",
+      );
+    }
 
-  if (!config.projectKey) {
-    warnings.push(
-      "Project Key del tracker no configurado en el perfil. Algunos comandos pueden no funcionar correctamente.",
-    );
+    if (!config.projectKey) {
+      warnings.push(
+        "Project Key del tracker no configurado en el perfil. Algunos comandos pueden no funcionar correctamente.",
+      );
+    }
+  } else if (config.tracker === "notion") {
+    if (!config.notionDatabaseId) {
+      errors.push(
+        "Notion Database ID no configurado. Sin database ID no se puede interactuar con Notion. Configuralo en .ai-internal/project-profile.md.",
+      );
+    }
+  } else if (config.tracker) {
+    // Unknown tracker — validate as jira (backwards compat)
+    if (
+      !config.cloudId ||
+      config.cloudId.toLowerCase().includes("pendiente") ||
+      config.cloudId.toLowerCase().includes("todo") ||
+      config.cloudId === "N/A"
+    ) {
+      errors.push(
+        "CloudId del tracker no configurado. Sin cloudId no se puede interactuar con el tracker. Configuralo en .ai-internal/project-profile.md.",
+      );
+    }
   }
 
   if (!config.idioma) {

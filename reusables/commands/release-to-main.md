@@ -20,9 +20,14 @@ Si no se encuentra → preguntar al usuario. Guardar como `DEV_BRANCH`.
 ## 2. Buscar tickets aprobados por QA
 
 Leer de `.ai-internal/project-profile.md`:
+- `Tracker` → tipo de tracker (jira, notion)
 - `Tracker Project Key` → `PROJECT_KEY`
-- `Tracker CloudId` → `CLOUD_ID`
-- `Jira Statuses` → obtener el nombre real del status "QA Approved" y "QA Failed" en este proyecto
+- `Tracker CloudId` → `CLOUD_ID` (solo Jira)
+- Statuses → obtener el nombre real del status "QA Approved" y "QA Failed" en este proyecto
+
+**Si tracker=jira**:
+
+Leer `Jira Statuses` del profile.
 
 Buscar tickets aprobados via Jira MCP:
 
@@ -35,6 +40,16 @@ Si `Jira Statuses` no tiene mapping (profile viejo), usar fallback con múltiple
 
 También buscar tickets rechazados para mostrar advertencia:
 - JQL: `project = {PROJECT_KEY} AND status = "{nombre_real_qa_failed}" ORDER BY updated DESC`
+
+**Si tracker=notion**:
+
+Leer `Notion Statuses` y `Notion Status Property` del profile.
+
+Consultar la database de Notion filtrando por la propiedad de status = nombre real de "QA Approved" (de `Notion Statuses` en el profile).
+Usar `API-query-data-source` con `data_source_id: "{notion_database_id}"` y filter: `{ "property": "{status_property}", "status": { "equals": "{nombre_real_qa_approved}" } }`
+
+Para tickets rechazados:
+Filtrar por status = nombre real de "QA Failed".
 
 ## 3. Mostrar resumen
 
@@ -118,7 +133,9 @@ Crear el PR:
   ## Tickets incluidos
 
   {por cada ticket aprobado:}
-  - [{TICKET-ID}]({jira_url}) — {título} | [Evidencia]({GH_REPO_URL}/blob/{DEV_BRANCH}/docs/evidence/{TICKET-ID}.md) {si tiene screenshot: "| [Screenshot]({GH_REPO_URL}/blob/{DEV_BRANCH}/docs/evidence/screenshots/{TICKET-ID}.png?raw=true)"}
+  - [{TICKET-ID}]({ticket_url}) — {título} | [Evidencia]({GH_REPO_URL}/blob/{DEV_BRANCH}/docs/evidence/{TICKET-ID}.md) {si tiene screenshot: "| [Screenshot]({GH_REPO_URL}/blob/{DEV_BRANCH}/docs/evidence/screenshots/{TICKET-ID}.png?raw=true)"}
+  > **Si tracker=jira**: `{ticket_url}` = URL de Jira issue
+  > **Si tracker=notion**: `{ticket_url}` = URL de Notion page (`https://notion.so/{page_id}`)
   {si el ticket NO tiene evidencia: marcar con ⚠️ en vez de link}
 
   ## QA

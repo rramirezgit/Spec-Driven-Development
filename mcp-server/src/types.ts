@@ -69,11 +69,17 @@ export interface SubprojectConfig {
 export interface ProjectConfig {
   nombre: string;
   tipo: string;
-  tracker: string;
-  cloudId: string;
-  projectKey: string;
+  tracker: "jira" | "notion" | string;
+  // Jira-specific (optional — only required when tracker=jira)
+  cloudId?: string;
+  projectKey?: string;
+  jiraQaStatus?: string;
+  // Notion-specific (optional — only required when tracker=notion)
+  notionDatabaseId?: string;
+  notionStatusProperty?: string;
+  notionQaStatus?: string;
+  // Common
   idioma: string;
-  jiraQaStatus: string;
   /** Present when tipo is "monorepo-fullstack" — describes each subdirectory */
   subprojects?: SubprojectConfig[];
 }

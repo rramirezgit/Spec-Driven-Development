@@ -19,7 +19,10 @@ import {
   registerFigmaLink,
 } from "./pipeline.js";
 import type { MergeType } from "./types.js";
-import { buildTransitionInstructions, buildCommentInstructions } from "./jira.js";
+import {
+  buildTransitionInstructions,
+  buildCommentInstructions,
+} from "./tracker.js";
 
 const server = new McpServer({
   name: "sdd-pipeline",
@@ -349,85 +352,109 @@ server.tool(
   },
 );
 
-// ─── Tool 13: sdd_transition_jira ────────────────────────────────────────────
+// ─── Tool 13: sdd_transition_ticket (+ alias sdd_transition_jira) ────────────
 
-const VALID_STATES_FOR_JIRA_TRANSITION = [
+const VALID_STATES_FOR_TICKET_TRANSITION = [
   PipelineState.COMMIT,
   PipelineState.COMPLETADO,
 ];
 
-server.tool(
-  "sdd_transition_jira",
-  "Genera instrucciones para transicionar un ticket a QA Review usando el MCP de Atlassian. SOLO válido en estado COMMIT o COMPLETADO — requiere haber pasado por evidencia y commit primero.",
-  {
-    ticketId: z.string().describe("ID del ticket a transicionar (ej: AUTH-45)"),
-  },
-  async ({ ticketId }) => {
-    const data = await loadState();
-    if (!VALID_STATES_FOR_JIRA_TRANSITION.includes(data.state)) {
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: JSON.stringify({
-              ok: false,
-              error: `No se puede transicionar a QA desde el estado ${data.state}. Se requiere completar el ciclo: IMPLEMENTACION → EVIDENCIA → COMMIT antes de transicionar. Estados válidos: [${VALID_STATES_FOR_JIRA_TRANSITION.join(", ")}].`,
-            }, null, 2),
-          },
-        ],
-      };
-    }
-    const result = await buildTransitionInstructions(ticketId);
+const transitionTicketHandler = async ({ ticketId }: { ticketId: string }) => {
+  const data = await loadState();
+  if (!VALID_STATES_FOR_TICKET_TRANSITION.includes(data.state)) {
     return {
       content: [
         {
           type: "text" as const,
-          text: JSON.stringify(result, null, 2),
+          text: JSON.stringify({
+            ok: false,
+            error: `No se puede transicionar a QA desde el estado ${data.state}. Se requiere completar el ciclo: IMPLEMENTACION → EVIDENCIA → COMMIT antes de transicionar. Estados válidos: [${VALID_STATES_FOR_TICKET_TRANSITION.join(", ")}].`,
+          }, null, 2),
         },
       ],
     };
-  },
+  }
+  const result = await buildTransitionInstructions(ticketId);
+  return {
+    content: [
+      {
+        type: "text" as const,
+        text: JSON.stringify(result, null, 2),
+      },
+    ],
+  };
+};
+
+const transitionTicketSchema = {
+  ticketId: z.string().describe("ID del ticket a transicionar (ej: AUTH-45, PROJ-1)"),
+};
+
+server.tool(
+  "sdd_transition_ticket",
+  "Genera instrucciones para transicionar un ticket a QA Review usando el MCP del tracker configurado (Jira o Notion). SOLO válido en estado COMMIT o COMPLETADO.",
+  transitionTicketSchema,
+  transitionTicketHandler,
 );
 
-// ─── Tool 14: sdd_comment_jira ──────────────────────────────────────────────
+// Backwards-compat alias for projects already bootstrapped with sdd_transition_jira
+server.tool(
+  "sdd_transition_jira",
+  "Alias de sdd_transition_ticket — genera instrucciones para transicionar un ticket a QA Review. SOLO válido en estado COMMIT o COMPLETADO.",
+  transitionTicketSchema,
+  transitionTicketHandler,
+);
 
-const VALID_STATES_FOR_JIRA_COMMENT = [
+// ─── Tool 14: sdd_comment_ticket (+ alias sdd_comment_jira) ─────────────────
+
+const VALID_STATES_FOR_TICKET_COMMENT = [
   PipelineState.COMMIT,
   PipelineState.COMPLETADO,
 ];
 
-server.tool(
-  "sdd_comment_jira",
-  "Genera instrucciones para agregar un comentario a un ticket usando el MCP de Atlassian. SOLO válido en estado COMMIT o COMPLETADO.",
-  {
-    ticketId: z.string().describe("ID del ticket (ej: AUTH-45)"),
-    body: z.string().describe("Contenido del comentario"),
-  },
-  async ({ ticketId, body }) => {
-    const data = await loadState();
-    if (!VALID_STATES_FOR_JIRA_COMMENT.includes(data.state)) {
-      return {
-        content: [
-          {
-            type: "text" as const,
-            text: JSON.stringify({
-              ok: false,
-              error: `No se puede comentar en Jira desde el estado ${data.state}. Se requiere completar el ciclo: IMPLEMENTACION → EVIDENCIA → COMMIT antes de comentar. Estados válidos: [${VALID_STATES_FOR_JIRA_COMMENT.join(", ")}].`,
-            }, null, 2),
-          },
-        ],
-      };
-    }
-    const result = await buildCommentInstructions(ticketId, body);
+const commentTicketHandler = async ({ ticketId, body }: { ticketId: string; body: string }) => {
+  const data = await loadState();
+  if (!VALID_STATES_FOR_TICKET_COMMENT.includes(data.state)) {
     return {
       content: [
         {
           type: "text" as const,
-          text: JSON.stringify(result, null, 2),
+          text: JSON.stringify({
+            ok: false,
+            error: `No se puede comentar en el tracker desde el estado ${data.state}. Se requiere completar el ciclo: IMPLEMENTACION → EVIDENCIA → COMMIT antes de comentar. Estados válidos: [${VALID_STATES_FOR_TICKET_COMMENT.join(", ")}].`,
+          }, null, 2),
         },
       ],
     };
-  },
+  }
+  const result = await buildCommentInstructions(ticketId, body);
+  return {
+    content: [
+      {
+        type: "text" as const,
+        text: JSON.stringify(result, null, 2),
+      },
+    ],
+  };
+};
+
+const commentTicketSchema = {
+  ticketId: z.string().describe("ID del ticket (ej: AUTH-45, PROJ-1)"),
+  body: z.string().describe("Contenido del comentario"),
+};
+
+server.tool(
+  "sdd_comment_ticket",
+  "Genera instrucciones para agregar un comentario a un ticket usando el MCP del tracker configurado (Jira o Notion). SOLO válido en estado COMMIT o COMPLETADO.",
+  commentTicketSchema,
+  commentTicketHandler,
+);
+
+// Backwards-compat alias for projects already bootstrapped with sdd_comment_jira
+server.tool(
+  "sdd_comment_jira",
+  "Alias de sdd_comment_ticket — genera instrucciones para comentar un ticket. SOLO válido en estado COMMIT o COMPLETADO.",
+  commentTicketSchema,
+  commentTicketHandler,
 );
 
 // ─── Start server ────────────────────────────────────────────────────────────

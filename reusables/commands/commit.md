@@ -139,15 +139,19 @@ Si hay ticket ID (de args, branch `feature/<ID>-*`, o prefijo del commit):
 
 ### 7.0. Resolver nombre real del status
 
-Leer `Jira Statuses` de `.ai-internal/project-profile.md` para obtener el nombre real del status "QA Review" en este proyecto (puede ser "QA Review", "Code Review", "En QA", "En Revisión", etc.).
+Leer tracker del profile (`.ai-internal/project-profile.md`).
 
-Si el profile no tiene `Jira Statuses` o está vacío → usar nombres por defecto: "QA Review", "QA", "Code Review", "En QA", "En Revisión".
+**Si tracker=jira**: leer `Jira Statuses` para obtener el nombre real del status "QA Review" en este proyecto (puede ser "QA Review", "Code Review", "En QA", "En Revisión", etc.).
 
-### 7.1. Llamar `sdd_transition_jira(ticketId)`
+**Si tracker=notion**: leer `Notion Statuses` y `Notion Status Property` para obtener el nombre real del status "QA Review" en este proyecto.
+
+Si el profile no tiene statuses configurados o están vacíos → usar nombres por defecto: "QA Review", "QA", "Code Review", "En QA", "En Revisión".
+
+### 7.1. Llamar `sdd_transition_ticket(ticketId)`
 El MCP tool retorna instrucciones de delegación con los pasos exactos a ejecutar.
 
 ### 7.2. Ejecutar los pasos de delegación
-Seguir los pasos que retorna `sdd_transition_jira`:
+Seguir los pasos que retorna `sdd_transition_ticket`:
 1. Llamar `getTransitionsForJiraIssue` con los params indicados
 2. Buscar la transición cuyo nombre coincida con el status real de QA Review (del paso 7.0)
 3. Llamar `transitionJiraIssue` con el ID de la transición encontrada
@@ -186,7 +190,7 @@ gh repo view --json url -q .url 2>/dev/null || git remote get-url origin 2>/dev/
 
 #### TEMPLATE BACKEND (tipo contiene "backend")
 
-Llamar `sdd_comment_jira(ticketId, body)` con:
+Llamar `sdd_comment_ticket(ticketId, body)` con:
 
 ```
 ✅ Desarrollo completado — mergeado a {DEV_BRANCH}
@@ -239,7 +243,7 @@ Llamar `sdd_comment_jira(ticketId, body)` con:
 
 #### TEMPLATE FRONTEND / FULLSTACK / MOBILE (tipo contiene "frontend", "fullstack" o "mobile")
 
-Llamar `sdd_comment_jira(ticketId, body)` con:
+Llamar `sdd_comment_ticket(ticketId, body)` con:
 
 ```
 ✅ Desarrollo completado — mergeado a {DEV_BRANCH}
@@ -310,10 +314,10 @@ Llamar `sdd_comment_jira(ticketId, body)` con:
    ❗ Acción requerida: mover manualmente en el tracker.
 ```
 
-**Si el MCP de Atlassian no está disponible**:
+**Si el MCP del tracker no está disponible**:
 ```
 ⚠️ TRANSICIÓN PENDIENTE: {TICKET_ID}
-   MCP de Atlassian no disponible.
+   MCP del tracker no disponible.
 
    ❗ Acción requerida: mover manualmente en el tracker.
 ```

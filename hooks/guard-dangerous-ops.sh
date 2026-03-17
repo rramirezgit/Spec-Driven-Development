@@ -35,8 +35,8 @@ fi
 # ─── Guard 2: Jira bulk edits via MCP (transitions allowed) ──────────────────
 # Jira transitions are allowed — Claude Code's own permission system handles approval.
 # Only block bulk edit operations that could affect multiple tickets at once.
-if echo "$TOOL_NAME" | grep -qiE 'atlassian.*bulkEdit|atlassian.*deleteIssue'; then
-  echo "🛑 Operación masiva/destructiva de Jira bloqueada por SDD guardrail. Pedí confirmación al usuario." >&2
+if echo "$TOOL_NAME" | grep -qiE 'atlassian.*bulkEdit|atlassian.*deleteIssue|notion.*delete'; then
+  echo "🛑 Operación masiva/destructiva de tracker bloqueada por SDD guardrail. Pedí confirmación al usuario." >&2
   exit 2
 fi
 

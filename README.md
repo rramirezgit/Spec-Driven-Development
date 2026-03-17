@@ -1,4 +1,4 @@
-# Spec-Driven Development — Bootstrap V4.4
+# Spec-Driven Development — Bootstrap V4.8
 
 Sistema de flujos de trabajo asistidos por IA para Claude Code.
 Incluye un MCP server que controla el pipeline de forma programatica (state machine en codigo, no en prompts).
@@ -15,15 +15,30 @@ Incluye un MCP server que controla el pipeline de forma programatica (state mach
 | **Claude Code** | `npm i -g @anthropic-ai/claude-code` | IDE con IA |
 | **openspec-cli** | `npm i -g openspec-cli` | Gestion de specs y changes |
 | **gh CLI** | `brew install gh && gh auth login` | Descargar desde este repo privado |
-| **MCP Atlassian** | Configurar en Claude Code (Settings → MCP Servers) | **Obligatorio** — auto-detecta cloudId y project key |
+| **MCP Atlassian** | Configurar en Claude Code (Settings → MCP Servers) | **Obligatorio si tracker=Jira** — auto-detecta cloudId y project key |
+| **MCP Notion** | Configurar en Claude Code (Settings → MCP Servers) | **Obligatorio si tracker=Notion** — auto-detecta database y propiedades |
 
-### Nota sobre Jira
+### Nota sobre trackers
 
-La interaccion con Jira (transiciones, comentarios) se delega al MCP de Atlassian que ya esta configurado y autenticado en Claude Code. No se necesitan variables de entorno adicionales (`JIRA_API_TOKEN`/`JIRA_EMAIL` ya no son necesarias).
+El sistema soporta **Jira** y **Notion** como trackers de tickets. Durante el bootstrap se detecta automaticamente cual MCP esta disponible:
+- Si solo hay Atlassian → tracker=jira (automatico)
+- Si solo hay Notion → tracker=notion (automatico)
+- Si ambos estan disponibles → se pregunta al usuario
+
+La interaccion con el tracker (transiciones, comentarios) se delega al MCP correspondiente. No se necesitan variables de entorno adicionales.
+
+#### Jira
+Las transiciones y comentarios se delegan al MCP de Atlassian. El bootstrap verifica columnas del workflow automaticamente.
+
+#### Notion
+Los tickets son paginas en una database de Notion. La database debe tener:
+- Una propiedad **Unique ID** (genera IDs auto-incrementales como PROJ-1, PROJ-2)
+- Una propiedad **Status** (o Select) con valores equivalentes a: To Do, In Progress, QA Review, Done
+- Sprint Gate se desactiva automaticamente (Notion no tiene sprints nativos)
 
 ---
 
-## Flujo de desarrollo (V4.4)
+## Flujo de desarrollo (V4.8)
 
 ```
 Ticket (To Do) → Crear rama feature/{ID}-slug
@@ -38,7 +53,9 @@ Ticket (To Do) → Crear rama feature/{ID}-slug
                 → Merge PR → tickets a Done
 ```
 
-### Columnas Jira requeridas (5)
+### Statuses del tracker
+
+#### Jira — Columnas requeridas (5)
 
 | Columna | Aliases aceptados | Proposito |
 |---------|-------------------|-----------|
@@ -49,6 +66,17 @@ Ticket (To Do) → Crear rama feature/{ID}-slug
 | **Done** | Hecho, Closed, Cerrado, Completado | Post-merge a main |
 
 El bootstrap verifica automaticamente que el board tenga estas columnas (paso 0.0d).
+
+#### Notion — Statuses requeridos (4)
+
+| Status | Aliases aceptados | Proposito |
+|--------|-------------------|-----------|
+| **To Do** | Not started, Backlog, Por Hacer | Estado inicial |
+| **In Progress** | En Progreso, Doing | Developer trabajando |
+| **QA Review** | In review, En QA, Review | `/commit` transiciona aqui |
+| **Done** | Complete, Hecho, Cerrado | Post-merge a main |
+
+Sprint Gate no aplica para Notion (se bypasea automaticamente).
 
 ### Ramas
 
@@ -83,7 +111,7 @@ El installer descarga todo, compila el MCP server, y `/bootstrap` genera el `.mc
 
 ---
 
-## Actualizar proyecto existente (cualquier version → V4.4)
+## Actualizar proyecto existente (cualquier version → V4.8)
 
 Para proyectos que **ya hicieron bootstrap con cualquier version anterior** (incluyendo versiones pre-MCP que usaban `pipeline-tracker.md`):
 
@@ -109,6 +137,18 @@ El bootstrap detecta automaticamente el upgrade y entra en **Modo Upgrade**:
 - **Archivos editados manualmente**: backup antes de sobreescribir
 
 > **Nota**: `migrate-to-mcp.sh` esta **deprecado** — el upgrade automatico de `/bootstrap` ahora cubre todo lo que hacia ese script (y mas). Usa `install-bootstrap.sh` + `/bootstrap` en su lugar.
+
+### Que cambia en V4.8
+
+| Cambio | Impacto |
+|--------|---------|
+| Soporte Notion como tracker | Notion puede usarse como alternativa a Jira para gestionar tickets |
+| Deteccion automatica de tracker | Bootstrap detecta MCPs disponibles (Atlassian/Notion) y elige automaticamente |
+| MCP server: tracker abstraction | `tracker.ts` delega a `jira.ts` o `notion.ts` segun config |
+| Tools renombrados | `sdd_transition_jira`/`sdd_comment_jira` → `sdd_transition_ticket`/`sdd_comment_ticket` (aliases backwards-compat) |
+| Template Notion | `create-tickets-template-notion.md` para crear tickets en databases de Notion |
+| Sprint Gate Notion | Se desactiva automaticamente (Notion no tiene sprints nativos) |
+| Guard hooks | Bloquea operaciones destructivas de Notion (`notion.*delete`) |
 
 ### Que cambia en V4.4
 
@@ -189,8 +229,8 @@ El MCP server expone 7 herramientas que Claude llama como cualquier otro MCP too
 | `sdd_advance` | Transiciona estado. Rechaza transiciones ilegales. Requiere activeTicket para PLAN/IMPLEMENTACION. |
 | `sdd_register_tickets` | Registra tickets creados en el pipeline. Solo en ARTEFACTOS o TICKETS. |
 | `sdd_set_active_ticket` | Marca ticket activo (valida que existe en la lista). Solo en TICKETS o PLAN. |
-| `sdd_transition_jira` | Genera instrucciones para transicionar ticket a QA Review. Usa nombres de columna custom del perfil. **Solo en COMMIT o COMPLETADO**. |
-| `sdd_comment_jira` | Genera instrucciones para comentar ticket con evidencia completa. **Solo en COMMIT o COMPLETADO**. |
+| `sdd_transition_ticket` | Genera instrucciones para transicionar ticket a QA Review via el tracker configurado (Jira o Notion). **Solo en COMMIT o COMPLETADO**. |
+| `sdd_comment_ticket` | Genera instrucciones para comentar ticket con evidencia completa via el tracker configurado. **Solo en COMMIT o COMPLETADO**. |
 
 ### Transiciones validas (enforced en codigo)
 
@@ -248,10 +288,12 @@ Spec-Driven-Development/
     ├── tsconfig.json
     └── src/
         ├── types.ts           # Enums, interfaces, transiciones validas
-        ├── config.ts          # Carga y validacion de project-profile + Jira statuses
+        ├── config.ts          # Carga y validacion de project-profile + tracker statuses
         ├── pipeline.ts        # State machine (load, save, advance)
+        ├── tracker.ts         # Abstraccion tracker — delega a jira.ts o notion.ts
         ├── jira.ts            # Delegacion a MCP Atlassian (transiciones custom)
-        └── index.ts           # Server MCP con 7 tools
+        ├── notion.ts          # Delegacion a MCP Notion (status + comments)
+        └── index.ts           # Server MCP con tools (+ aliases backwards-compat)
 ```
 
 ## Que se instala en el proyecto

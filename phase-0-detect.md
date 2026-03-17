@@ -1,5 +1,16 @@
 # Bootstrap Prompt V4.6 — AI Workflow Setup
 
+> **Changelog V4.7 → V4.8**:
+> - **Soporte Notion como tracker alternativo** — Notion puede usarse en vez de Jira para gestionar tickets
+>   - Paso 0.0b: detección de MCP Notion (`notion` en `claude mcp list`)
+>   - Nuevo paso 0.0b2: elección de tracker — auto-detecta si solo hay uno, pregunta si hay ambos
+>   - Paso 0.0c: condicional — Jira (flujo existente) o Notion (buscar database, detectar unique_id)
+>   - Paso 0.0d: condicional — Jira (verificar columnas workflow) o Notion (verificar propiedades database)
+>   - Paso 0.5: campos Notion en project-profile.md (Notion Database ID, Status Property, Statuses)
+>   - `project-vars.sh`: nueva variable `SDD_NOTION_DATABASE_ID`
+>   - Sprint Gate automáticamente desactivado para Notion (no tiene sprints nativos)
+>   - MCP server: `sdd_transition_ticket` / `sdd_comment_ticket` reemplazan `sdd_transition_jira` / `sdd_comment_jira` (con aliases backwards-compat)
+>
 > **Changelog V4.6 → V4.7**:
 > - **Soporte monorepo-fullstack** — Proyectos con front y back en subdirectorios separados (ej: `app-front/` + `app-back/`)
 >   - Paso 0.1c nuevo: detección automática de subdirectorios con stacks independientes
@@ -185,6 +196,9 @@ echo "=== MCP DETECTION ==="
 # Jira / Atlassian
 (claude mcp list 2>/dev/null || echo "") | grep -i "atlassian\|jira" && echo "MCP_ATLASSIAN=available" || echo "MCP_ATLASSIAN=not_found"
 
+# Notion
+(claude mcp list 2>/dev/null || echo "") | grep -i "notion" && echo "MCP_NOTION=available" || echo "MCP_NOTION=not_found"
+
 # GitHub
 (claude mcp list 2>/dev/null || echo "") | grep -i "github" && echo "MCP_GITHUB=available" || echo "MCP_GITHUB=not_found"
 
@@ -203,6 +217,7 @@ Construí internamente:
 ```
 MCPS_DISPONIBLES:
   atlassian: [available | not_found]
+  notion: [available | not_found]
   github: [available | not_found]
   figma: [available | not_found]
   playwright: [available | not_found]
@@ -210,6 +225,7 @@ MCPS_DISPONIBLES:
 
   # Nombres reales de tools MCP detectados (para usar en comandos)
   atlassian_prefix: [el prefijo real detectado, ej: "mcp__atlassian__" o "Atlassian:"]
+  notion_prefix: [el prefijo real detectado, ej: "mcp__notion__" o "Notion:"]
   github_prefix: [el prefijo real]
   figma_prefix: [el prefijo real]
 ```
@@ -218,7 +234,40 @@ MCPS_DISPONIBLES:
 
 ---
 
-### 0.0c — Obtener cloudId y proyecto de Jira via MCP
+### 0.0b2 — Elección de tracker
+
+Determinar qué tracker usar basándose en los MCPs disponibles:
+
+- **Si solo MCP_ATLASSIAN=available** (y MCP_NOTION=not_found) → `TRACKER=jira` (automático)
+- **Si solo MCP_NOTION=available** (y MCP_ATLASSIAN=not_found) → `TRACKER=notion` (automático)
+- **Si ambos disponibles** → Usá **AskUserQuestion** (single_select):
+  "¿Qué tracker usás para gestionar tickets?"
+  Opciones: "Jira (Atlassian)" / "Notion"
+- **Si ninguno disponible** → BLOQUEAR:
+  ```
+  ❌ No se detectó ningún tracker configurado.
+
+  Necesitás al menos uno:
+    - MCP de Atlassian (para Jira) — configurar en Claude Code Settings → MCP Servers
+    - MCP de Notion — configurar en Claude Code Settings → MCP Servers
+
+  Configurá al menos un tracker y volvé a ejecutar el bootstrap.
+  ```
+
+Guardar el resultado como `TRACKER` (será "jira" o "notion").
+
+Mostrar:
+```
+✅ Tracker seleccionado: {TRACKER}
+```
+
+---
+
+### 0.0c — Configurar tracker (condicional Jira / Notion)
+
+**Si TRACKER=jira**:
+
+> El siguiente bloque solo se ejecuta para proyectos que usan Jira.
 
 **Si MCP_ATLASSIAN=not_found → BLOQUEAR inmediatamente** y mostrar:
 
@@ -275,7 +324,65 @@ Mostrar confirmación:
 
 ---
 
-### 0.0d — Verificar autenticación y columnas del workflow en Jira
+**Si TRACKER=notion**:
+
+> El siguiente bloque solo se ejecuta para proyectos que usan Notion.
+
+1. **Buscar databases del workspace** — Llamar `API-post-search` (usando el `notion_prefix` detectado en 0.0b) con filter `{value: "database", property: "object"}`:
+   → Retorna lista de databases con `id`, `title`, `properties`
+
+   - **Si 1 database** → usarla automáticamente
+   - **Si N databases** → Usá **AskUserQuestion** (single_select): "¿Cuál database de Notion usás para tickets?" con opciones mostrando el título de cada database
+   - **Si 0 databases o error** → BLOQUEAR:
+     ```
+     ❌ No se encontraron databases en Notion.
+     Verificá la configuración y permisos del MCP de Notion.
+     ```
+
+2. **Verificar propiedad unique_id** — De las propiedades de la database seleccionada, buscar una con type `unique_id`:
+   - **Si existe** → guardar el nombre de la propiedad (ej: "ID", "Task ID")
+   - **Si no existe** → BLOQUEAR:
+     ```
+     ❌ La database de Notion no tiene una propiedad de tipo "Unique ID".
+
+     Esta propiedad es necesaria para generar IDs auto-incrementales (ej: PROJ-1, PROJ-2).
+
+     Acción requerida:
+       1. Abrí la database en Notion
+       2. Agregá una propiedad de tipo "Unique ID"
+       3. Volvé a ejecutar el bootstrap
+     ```
+
+3. **Detectar propiedad de status** — Buscar una propiedad con type `status` o `select` que tenga valores equivalentes a estados de workflow:
+   - Guardar el nombre de la propiedad (ej: "Status", "Estado")
+   - Si no se encuentra → usar "Status" como default y advertir
+
+4. **Guardar en PROYECTO_PERFIL**:
+   - `tracker`: "notion"
+   - `notion_database_id`: {el id de la database}
+   - `notion_database_name`: {el título de la database}
+   - `notion_status_property`: {el nombre de la propiedad de status}
+   - `notion_unique_id_property`: {el nombre de la propiedad unique_id}
+
+Mostrar confirmación:
+```
+✅ Notion detectado automáticamente:
+   Database: {notion_database_name} (ID: {notion_database_id})
+   Status property: {notion_status_property}
+   Unique ID property: {notion_unique_id_property}
+```
+
+---
+
+### 0.0d — Verificar workflow del tracker (condicional Jira / Notion)
+
+**Si TRACKER=jira**: ejecutar el flujo de verificación de columnas Jira existente (abajo).
+
+**Si TRACKER=notion**: ejecutar verificación de propiedades Notion (al final de esta sección).
+
+---
+
+**Verificación Jira** (solo si TRACKER=jira):
 
 > **Por qué**: El flujo depende de columnas específicas en Jira para transicionar tickets automáticamente. Si faltan columnas, `/commit` y `/release-to-main` no van a funcionar.
 
@@ -342,6 +449,44 @@ Mostrar confirmación:
    - `jira_identity`: "mcp_cloud"
    - `jira_statuses`: mapping de cada status requerido al nombre real en Jira (ej: `{"qa_review": "Code Review", "qa_approved": "QA Approved", "qa_failed": "Rejected", ...}`)
    - `jira_statuses_missing`: lista de statuses faltantes (vacía si están todos)
+
+---
+
+**Verificación Notion** (solo si TRACKER=notion):
+
+1. **Obtener propiedades de la database** — Usar la database seleccionada en 0.0c para listar sus propiedades.
+
+2. **Verificar statuses** — De la propiedad de status detectada, verificar que tenga valores equivalentes a:
+
+   | Status requerido | Equivalentes aceptados | Usado por |
+   |-----------------|----------------------|-----------|
+   | **To Do** | Backlog, Open, Abierto, Por Hacer, Not started | Estado inicial |
+   | **In Progress** | En Progreso, En Desarrollo, Doing | Developer trabajando |
+   | **QA Review** | QA, En QA, Code Review, En Revisión, In review | `/commit` transiciona aquí |
+   | **Done** | Hecho, Closed, Cerrado, Completado, Complete | Post-merge a main |
+
+   > **Nota**: Para Notion no se requieren QA Approved / QA Failed como columnas separadas — se puede manejar con un solo status "Done" o agregando opciones adicionales si el usuario las tiene.
+
+3. **Matching** — Para cada status requerido, buscar si alguno de los valores de la propiedad coincide (case-insensitive).
+
+4. **Mostrar resultado**:
+
+   ```
+   ✅ MCP Notion autenticado y funcional:
+      Database: {notion_database_name}
+
+   📋 Propiedades del workflow:
+      ✅ To Do         → {nombre_real_en_notion}
+      ✅ In Progress   → {nombre_real_en_notion}
+      ✅ QA Review     → {nombre_real_en_notion}
+      ✅ Done          → {nombre_real_en_notion}
+   ```
+
+   **Si faltan statuses**, mostrar cuáles y ofrecer continuar con warning (mismo pattern que Jira).
+
+5. **Guardar en PROYECTO_PERFIL**:
+   - `notion_statuses`: mapping de cada status requerido al nombre real en Notion (ej: `{"qa_review": "In review", "done": "Complete", ...}`)
+   - `notion_statuses_missing`: lista de statuses faltantes (vacía si están todos)
 
 ---
 
@@ -590,6 +735,13 @@ PROYECTO_PERFIL:
   jira_identity: [mcp_cloud — del paso 0.0d]
   jira_statuses: [mapping de statuses requeridos → nombres reales en Jira — del paso 0.0d]
   jira_statuses_missing: [lista de statuses faltantes — del paso 0.0d]
+  # Notion-specific (if tracker=notion)
+  notion_database_id: [del paso 0.0c — solo si tracker=notion]
+  notion_database_name: [del paso 0.0c]
+  notion_status_property: [del paso 0.0c]
+  notion_unique_id_property: [del paso 0.0c]
+  notion_statuses: [mapping de statuses requeridos → nombres reales en Notion — del paso 0.0d]
+  notion_statuses_missing: [lista de statuses faltantes — del paso 0.0d]
   dev_branch: [dev | develop | development — auto-detectado de ramas remotas]
   estructura_carpetas: [descripcion breve]
   patron_componentes: [inferido de archivos existentes]
@@ -819,6 +971,9 @@ Crear `.ai-internal/project-profile.md` con TODOS los datos reales del PROYECTO_
 # Jira Identity: {jira_identity}
 # Jira Statuses: {jira_statuses}
 # Jira Statuses Missing: {jira_statuses_missing}
+# Notion Database ID: {notion_database_id}
+# Notion Status Property: {notion_status_property}
+# Notion Statuses: {notion_statuses}
 # Dev Branch: {dev_branch}
 # Idioma técnico: {idioma_tecnico}
 # Idioma tickets: {idioma_tickets}
@@ -883,6 +1038,7 @@ FRAMEWORK=$(grep "^# Framework:" .ai-internal/project-profile.md | sed 's/^# Fra
 TRACKER=$(grep "^# Tracker:" .ai-internal/project-profile.md | sed 's/^# Tracker: //')
 CLOUD_ID=$(grep "^# Tracker CloudId:" .ai-internal/project-profile.md | sed 's/^# Tracker CloudId: //')
 PROJECT_KEY=$(grep "^# Tracker Project Key:" .ai-internal/project-profile.md | sed 's/^# Tracker Project Key: //')
+NOTION_DB_ID=$(grep "^# Notion Database ID:" .ai-internal/project-profile.md | sed 's/^# Notion Database ID: //')
 IDIOMA_TECNICO=$(grep "^# Idioma técnico:" .ai-internal/project-profile.md | sed 's/^# Idioma técnico: //')
 IDIOMA_TICKETS=$(grep "^# Idioma tickets:" .ai-internal/project-profile.md | sed 's/^# Idioma tickets: //')
 
@@ -908,6 +1064,7 @@ SDD_FRAMEWORK="$FRAMEWORK"
 SDD_TRACKER="$TRACKER"
 SDD_CLOUD_ID="$CLOUD_ID"
 SDD_PROJECT_KEY="$PROJECT_KEY"
+SDD_NOTION_DATABASE_ID="$NOTION_DB_ID"
 SDD_IDIOMA_TECNICO="$IDIOMA_TECNICO"
 SDD_IDIOMA_TICKETS="$IDIOMA_TICKETS"
 SDD_CRITERIO_PROYECTO="$CRITERIO_PROYECTO"

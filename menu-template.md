@@ -23,6 +23,8 @@ Usás herramientas MCP del server `sdd-pipeline` para controlar el pipeline de f
 
 **Todo ticket debe estar en un sprint activo antes de poder trabajar en él** (aplica solo a proyectos Scrum).
 
+> **Si tracker=notion**: Sprint Gate no aplica — Notion no tiene sprints nativos. Llamar `sdd_confirm_sprint(kanban=true)` automáticamente para bypass.
+
 Cuando se identifica un ticket para trabajar (en Opción 2, en estado TICKETS, o en cualquier momento antes de `sdd_set_active_ticket`):
 
 1. Llamar `getJiraIssue` (con el `atlassian_prefix` detectado) pasando el ticket ID y `fields: ["sprint", "summary"]`
@@ -157,6 +159,7 @@ Leer y ejecutar `/test-plan`. **HALT después.**
 ### Opción 6: Modo sprint
 Preguntar: "¿IDs de tickets separados por coma, o busco el sprint activo?"
 Si busca sprint activo → `searchJiraIssuesUsingJql` con `project = {project_key} AND sprint in openSprints()`.
+> **Si tracker=notion**: En vez de JQL, usar query en la database de Notion con filter por status = "In Progress" o similar. Notion no tiene sprints nativos.
 Lanzar subagentes en paralelo (máximo 5) — **SOLO planificación** (enrich + plan técnico), **NUNCA implementación**.
 **HALT después**. Mostrar resumen de tickets planificados y ofrecer empezar a implementar **de a uno**.
 
@@ -165,6 +168,7 @@ Lanzar subagentes en paralelo (máximo 5) — **SOLO planificación** (enrich + 
 ### Opción 7: Release a main
 Leer y ejecutar `/release-to-main`. **HALT después.**
 (No afecta el pipeline — release es atómico.)
+> **Si tracker=notion**: En vez de JQL, consultar la database de Notion filtrando por la propiedad de status = nombre real de "QA Approved" (del project-profile). Si la database no tiene status "QA Approved", buscar status = "Done" o el equivalente configurado.
 
 # Estados del pipeline (cuando NO es IDLE)
 
@@ -198,6 +202,7 @@ Secuencia obligatoria:
    - Si `sprint.state == "active"` → `sdd_confirm_sprint()`
    - Si no hay sprint (Kanban) → `sdd_confirm_sprint(kanban=true)`
    - Si Scrum sin sprint activo → BLOQUEAR, informar al usuario
+   > **Si tracker=notion**: saltar verificación de sprint. Llamar directamente `sdd_confirm_sprint(kanban=true)`.
 3. Solo entonces: `sdd_set_active_ticket(ID)` + leer `/plan-__SDD_TIPO__-ticket` + `sdd_advance(PLAN)`
 
 > **Regla**: Se selecciona UN ticket. No se pueden seleccionar múltiples para trabajar en paralelo.
@@ -274,7 +279,7 @@ Además valida que el tipo de merge sea correcto:
 Secuencia obligatoria:
 1. Hacer el merge (git merge a dev para features, gh pr create para hotfix)
 2. `sdd_register_merge({ type: "direct", targetBranch: "dev" })` (o "pr"/"main" para hotfix)
-3. Llamar `sdd_transition_jira(ticketId)` para mover a QA Review
+3. Llamar `sdd_transition_ticket(ticketId)` para mover a QA Review
 4. Solo entonces: `sdd_advance(COMPLETADO)`
 
 **REGLA**: Feature branches NUNCA llevan PR. Los PR solo existen en:
@@ -378,8 +383,8 @@ Alternativa: {qué puede hacer el usuario}
 | `sdd_advance` | Transiciona estado. Rechaza transiciones ilegales. |
 | `sdd_register_tickets` | Registra tickets creados en el pipeline. |
 | `sdd_set_active_ticket` | Marca ticket activo (valida que existe). |
-| `sdd_transition_jira` | Genera instrucciones para transicionar ticket a QA Review via MCP Atlassian. Claude ejecuta los pasos. |
-| `sdd_comment_jira` | Genera instrucciones para agregar comentario a ticket via MCP Atlassian. Claude ejecuta los pasos. |
+| `sdd_transition_ticket` | Genera instrucciones para transicionar ticket a QA Review via MCP del tracker configurado (Jira o Notion). Claude ejecuta los pasos. |
+| `sdd_comment_ticket` | Genera instrucciones para agregar comentario a ticket via MCP del tracker configurado (Jira o Notion). Claude ejecuta los pasos. |
 
 # Guardrails
 

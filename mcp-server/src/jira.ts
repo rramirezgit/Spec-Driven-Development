@@ -1,4 +1,5 @@
 import { loadProjectConfig } from "./config.js";
+import type { TrackerDelegation } from "./tracker.js";
 
 /**
  * Default QA transition names to search for (case-insensitive).
@@ -20,33 +21,13 @@ const DEFAULT_QA_TRANSITION_NAMES = [
   "revisión de código",
 ];
 
-export interface JiraDelegation {
-  ok: boolean;
-  action: "DELEGATE_TO_ATLASSIAN_MCP";
-  error?: string;
-  cloudId?: string;
-  ticketId?: string;
-  steps: JiraDelegationStep[];
-}
-
-export interface JiraDelegationStep {
-  step: number;
-  description: string;
-  tool: string;
-  params: Record<string, string>;
-  matchLogic?: string;
-}
-
 /**
  * Returns structured instructions for Claude to execute the QA transition
  * using the Atlassian MCP tools (which are already authenticated).
- *
- * This replaces the old direct REST API approach that required
- * JIRA_API_TOKEN and JIRA_EMAIL environment variables.
  */
 export async function buildTransitionInstructions(
   ticketId: string,
-): Promise<JiraDelegation> {
+): Promise<TrackerDelegation> {
   const config = await loadProjectConfig();
 
   if (!config || !config.cloudId) {
@@ -104,7 +85,7 @@ export async function buildTransitionInstructions(
 export async function buildCommentInstructions(
   ticketId: string,
   commentBody: string,
-): Promise<JiraDelegation> {
+): Promise<TrackerDelegation> {
   const config = await loadProjectConfig();
 
   if (!config || !config.cloudId) {

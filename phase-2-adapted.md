@@ -441,19 +441,31 @@ fi
 
 ### `.claude/commands/create-{tracker}-tickets.md`
 
-> Si usa Jira → `create-jira-tickets.md`. Si usa Linear → `create-linear-tickets.md`.
+> Si usa Jira → `create-jira-tickets.md`. Si usa Notion → `create-notion-tickets.md`.
 
 > **⚠️ ESTE ARCHIVO SE GENERA DESDE UN TEMPLATE DESCARGABLE — NO SE GENERA POR CLAUDE.**
-> Template en `.ai-internal/templates/create-tickets-template.md`.
+> Template Jira: `.ai-internal/templates/create-tickets-template.md`
+> Template Notion: `.ai-internal/templates/create-tickets-template-notion.md`
 
 #### Proceso de generación (determinístico):
 
 ```bash
-# Verificar template
-if [ ! -f .ai-internal/templates/create-tickets-template.md ]; then
-  echo "TICKETS_TEMPLATE=MISSING"
+source .ai-internal/project-vars.sh
+
+TRACKER_LOWER=$(echo "$SDD_TRACKER" | tr '[:upper:]' '[:lower:]')
+
+# Elegir template según tracker
+if [ "$TRACKER_LOWER" = "notion" ]; then
+  TICKETS_TEMPLATE=".ai-internal/templates/create-tickets-template-notion.md"
 else
-  echo "TICKETS_TEMPLATE=OK"
+  TICKETS_TEMPLATE=".ai-internal/templates/create-tickets-template.md"
+fi
+
+# Verificar template
+if [ ! -f "$TICKETS_TEMPLATE" ]; then
+  echo "TICKETS_TEMPLATE=MISSING ($TICKETS_TEMPLATE)"
+else
+  echo "TICKETS_TEMPLATE=OK ($TICKETS_TEMPLATE)"
 fi
 ```
 
@@ -462,13 +474,10 @@ Si `TICKETS_TEMPLATE=MISSING`: DETENER con error "Template de create-tickets no 
 **Leer los valores del project-vars.sh y generar**:
 
 ```bash
-source .ai-internal/project-vars.sh
-
-TRACKER_LOWER=$(echo "$SDD_TRACKER" | tr '[:upper:]' '[:lower:]')
 echo "Generando create-${TRACKER_LOWER}-tickets.md desde template..."
 
-sed "s/__SDD_IDIOMA_TICKETS__/$SDD_IDIOMA_TICKETS/g; s/__SDD_TRACKER__/$SDD_TRACKER/g; s/__SDD_CLOUD_ID__/$SDD_CLOUD_ID/g; s/__SDD_PROJECT_KEY__/$SDD_PROJECT_KEY/g" \
-    .ai-internal/templates/create-tickets-template.md > ".claude/commands/create-${TRACKER_LOWER}-tickets.md"
+sed "s/__SDD_IDIOMA_TICKETS__/$SDD_IDIOMA_TICKETS/g; s/__SDD_TRACKER__/$SDD_TRACKER/g; s/__SDD_CLOUD_ID__/$SDD_CLOUD_ID/g; s/__SDD_PROJECT_KEY__/$SDD_PROJECT_KEY/g; s/__SDD_NOTION_DATABASE_ID__/$SDD_NOTION_DATABASE_ID/g" \
+    "$TICKETS_TEMPLATE" > ".claude/commands/create-${TRACKER_LOWER}-tickets.md"
 
 TICKETS_LINES=$(wc -l < ".claude/commands/create-${TRACKER_LOWER}-tickets.md")
 echo "create-${TRACKER_LOWER}-tickets.md generado ($TICKETS_LINES líneas)"

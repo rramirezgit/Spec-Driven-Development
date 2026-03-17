@@ -118,7 +118,7 @@ Agregar sección al final de `docs/evidence/{TICKET_ID}.md`:
 ![Screenshot {TICKET_ID}]({GH_REPO_URL}/blob/{GH_BRANCH}/docs/evidence/screenshots/{TICKET_ID}.png?raw=true)
 ```
 
-> Usa la URL absoluta de GitHub con `?raw=true` para que la imagen se renderice tanto en GitHub como en Jira/Confluence cuando se comparte el link.
+> Usa la URL absoluta de GitHub con `?raw=true` para que la imagen se renderice tanto en GitHub como en Jira/Confluence/Notion cuando se comparte el link.
 > Fallback si no hay GH_REPO_URL: usar path relativo `./screenshots/{TICKET_ID}.png`.
 
 ## 4. Generar/actualizar documentación cross-team (siempre)
@@ -148,7 +148,7 @@ Agregar entrada en `docs/README.md` sección Changelog si hay archivos nuevos.
 
 ## 6. NO comentar en ticket desde /evidence
 
-> El comentario a Jira se hace ÚNICAMENTE desde `/commit` (sección 7.3 del commit.md).
+> El comentario al tracker se hace ÚNICAMENTE desde `/commit` (sección 7.3 del commit.md).
 > `/evidence` solo genera archivos locales. El comentario completo para QA se deja al hacer commit+merge.
 
 ## 7. Preview y confirmación

@@ -22,11 +22,14 @@ FILES=(
   "mcp-server/src/config.ts|.ai-internal/mcp-server/src/config.ts"
   "mcp-server/src/pipeline.ts|.ai-internal/mcp-server/src/pipeline.ts"
   "mcp-server/src/jira.ts|.ai-internal/mcp-server/src/jira.ts"
+  "mcp-server/src/notion.ts|.ai-internal/mcp-server/src/notion.ts"
+  "mcp-server/src/tracker.ts|.ai-internal/mcp-server/src/tracker.ts"
   "mcp-server/src/index.ts|.ai-internal/mcp-server/src/index.ts"
   "menu-template.md|.ai-internal/templates/menu-template.md"
   "enrich-ticket-template.md|.ai-internal/templates/enrich-ticket-template.md"
   "plan-ticket-template.md|.ai-internal/templates/plan-ticket-template.md"
   "create-tickets-template.md|.ai-internal/templates/create-tickets-template.md"
+  "create-tickets-template-notion.md|.ai-internal/templates/create-tickets-template-notion.md"
   "doc-standards-template.mdc|.ai-internal/templates/doc-standards-template.mdc"
   "reusables/opsx/new.md|.ai-internal/reusables/opsx/new.md"
   "reusables/opsx/ff.md|.ai-internal/reusables/opsx/ff.md"
@@ -54,7 +57,7 @@ FILES=(
 )
 
 echo ""
-echo "🔧 Spec-Driven Development — Bootstrap V4.6"
+echo "🔧 Spec-Driven Development — Bootstrap V4.8"
 echo "============================================="
 echo ""
 
@@ -213,7 +216,7 @@ HOOKS_CONFIG='{
         "hooks": [{"type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.ai-internal/hooks/guard-dangerous-ops.sh"}]
       },
       {
-        "matcher": "mcp__.*[Aa]tlassian.*transition|mcp__.*[Aa]tlassian.*edit",
+        "matcher": "mcp__.*[Aa]tlassian.*transition|mcp__.*[Aa]tlassian.*edit|mcp__.*[Nn]otion.*delete",
         "hooks": [{"type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.ai-internal/hooks/guard-dangerous-ops.sh"}]
       }
     ]

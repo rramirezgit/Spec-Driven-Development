@@ -1,11 +1,11 @@
 ---
 name: "Bootstrap: Setup AI Workflow"
-description: Configura el sistema completo de flujos AI en este proyecto (V4.7)
+description: Configura el sistema completo de flujos AI en este proyecto (V4.8)
 category: Setup
 tags: [bootstrap, setup, workflow]
 ---
 
-# Bootstrap AI Workflow V4.7
+# Bootstrap AI Workflow V4.8
 
 Sos el orquestador del bootstrap. Tu trabajo es ejecutar las fases en orden, una a la vez, cargando el archivo correspondiente.
 
@@ -24,7 +24,7 @@ test -f .bootstrap-meta.json && grep -o '"content_hash"[[:space:]]*:[[:space:]]*
 Determinar `UPGRADE_PENDING`:
 
 1. **Tier 1 — Archivo explícito**: Si `.ai-internal/.upgrade-pending` existe → `UPGRADE_PENDING=true` (leer `from_version`, `to_version`, `trigger`, `from_hash`, `to_hash` del JSON)
-2. **Tier 2 — Versión diferente**: Si no existe `.upgrade-pending` pero sí `.bootstrap-meta.json`: comparar la versión de este archivo (`bootstrap_version`) con la versión de este bootstrap (V4.7). Si son distintas → `UPGRADE_PENDING=true` (fallback)
+2. **Tier 2 — Versión diferente**: Si no existe `.upgrade-pending` pero sí `.bootstrap-meta.json`: comparar la versión de este archivo (`bootstrap_version`) con la versión de este bootstrap (V4.8). Si son distintas → `UPGRADE_PENDING=true` (fallback)
 3. **Tier 3 — Hash ausente**: Si la versión es igual PERO `content_hash` está vacío o no existe en `.bootstrap-meta.json` → `UPGRADE_PENDING=true` (el proyecto fue bootstrapped antes de la detección por hash; forzar upgrade para computar el hash inicial)
 4. Si no existe `.bootstrap-meta.json` → `UPGRADE_PENDING=false` (instalación nueva, flujo normal)
 
@@ -134,9 +134,15 @@ grep -q '"hooks"' .claude/settings.local.json 2>/dev/null && echo "HOOKS_CONFIGU
 
 # Jira MCP (V4.3+) + Jira columns (V4.6+)
 echo ""
-echo "=== JIRA MCP ==="
-# El MCP de Atlassian se valida en el paso 0.0c/0.0d — aquí solo verificamos que siga funcional
-(claude mcp list 2>/dev/null || echo "") | grep -i "atlassian\|jira" && echo "JIRA_MCP=CONNECTED" || echo "JIRA_MCP=NOT_CONNECTED"
+echo "=== TRACKER MCP ==="
+# Verificar MCP del tracker configurado
+TRACKER_TYPE=$(grep "^# Tracker:" .ai-internal/project-profile.md 2>/dev/null | sed 's/^# Tracker: //')
+echo "TRACKER_TYPE=$TRACKER_TYPE"
+if [ "$TRACKER_TYPE" = "notion" ]; then
+  (claude mcp list 2>/dev/null || echo "") | grep -i "notion" && echo "TRACKER_MCP=CONNECTED" || echo "TRACKER_MCP=NOT_CONNECTED"
+else
+  (claude mcp list 2>/dev/null || echo "") | grep -i "atlassian\|jira" && echo "TRACKER_MCP=CONNECTED" || echo "TRACKER_MCP=NOT_CONNECTED"
+fi
 ```
 
 Construir dos listas:
@@ -156,7 +162,7 @@ Construir dos listas:
 | `BASE_STANDARDS` | `ai-specs/specs/base-standards.mdc` no existe | V4 |
 | `PIPELINE_MIGRATE` | `pipeline-tracker.md` existe (legacy) y `pipeline-state.json` no | pre-V4.3 |
 | `HOOKS` | Hooks de protección no configurados | V4.6 |
-| `JIRA_MCP` | MCP de Atlassian no conectado (verificar config) | V4.3 |
+| `TRACKER_MCP` | MCP del tracker (Atlassian o Notion) no conectado (verificar config) | V4.3 |
 
 ### 0b.4 — Pedir confirmacion al usuario
 
@@ -191,7 +197,7 @@ Componentes nuevos que se crean (no existían en V{from_version}):
   {si BASE_STANDARDS:} 🆕 ai-specs/specs/base-standards.mdc
   {si PIPELINE_MIGRATE:} 🔄 pipeline-tracker.md → pipeline-state.json (migración de estado)
   {si HOOKS:}            🛡️ Hooks de protección (.ai-internal/hooks/ + settings)
-  {si JIRA_MCP:}         ⚠️ MCP Atlassian no conectado (verificar configuración)
+  {si TRACKER_MCP:}       ⚠️ MCP del tracker no conectado (verificar configuración)
 
 Archivos que NO se tocan:
   🔒 .ai-internal/project-profile.md
@@ -388,25 +394,25 @@ Si no existe `pipeline-tracker.md` ni `pipeline-state.json`: crear estado IDLE:
 }
 ```
 
-##### D.7 — Gap `JIRA_MCP`: Verificar MCP Atlassian conectado
+##### D.7 — Gap `TRACKER_MCP`: Verificar MCP del tracker conectado
 
-Si `JIRA_MCP=NOT_CONNECTED`:
+Si `TRACKER_MCP=NOT_CONNECTED`:
 
 Mostrar advertencia pero **no bloquear** el upgrade:
 
 ```
-⚠️ MCP de Atlassian no detectado.
+⚠️ MCP del tracker no detectado.
    Sin el MCP no se pueden crear ni gestionar tickets desde Claude Code.
 
    Para configurarlo:
    1. Abrí Claude Code Settings → MCP Servers
-   2. Agregá el MCP de Atlassian
+   2. Agregá el MCP correspondiente (Atlassian para Jira, Notion para Notion)
    3. Autenticá con tu cuenta
 
    El upgrade continúa normalmente — configurá el MCP cuando puedas.
 ```
 
-Si `JIRA_MCP=CONNECTED`: no hacer nada (ya está funcional).
+Si `TRACKER_MCP=CONNECTED`: no hacer nada (ya está funcional).
 
 ##### D.8 — Gap `HOOKS`: Configurar hooks de protección
 
@@ -460,7 +466,7 @@ Si `HOOKS_CONFIGURED=true`: no hacer nada (ya configurados).
 #### Paso E: Actualizar metadata
 
 Actualizar `.bootstrap-meta.json`:
-- `bootstrap_version` → nueva versión (4.7)
+- `bootstrap_version` → nueva versión (4.8)
 - `previous_version` → versión anterior
 - `content_hash` → computar el hash actual ejecutando:
   ```bash
@@ -565,7 +571,7 @@ Basándote en el estado:
 Mostrá:
 
 ```
-🔧 AI Workflow Bootstrap V4.7
+🔧 AI Workflow Bootstrap V4.8
 ==============================
 
 Estado:
