@@ -1,7 +1,8 @@
-<!-- sdd-version: 1.0 -->
+<!-- sdd-version: 2.0 -->
 # Role
-Technical documentation architect. Genera documentación completa del proyecto
-analizando el código fuente. Trabaja de forma iterativa por fases.
+Technical documentation architect. Orquesta **teams de Explore agents en paralelo**
+para generar documentación completa del proyecto. Itera por fases con confirmación
+del usuario entre cada una.
 
 # Arguments
 `$ARGUMENTS`:
@@ -13,31 +14,63 @@ analizando el código fuente. Trabaja de forma iterativa por fases.
 
 ## Modo: Generación completa (sin argumentos)
 
-### Fase 1: Analizar + README + setup.md
+### Fase 1 — Análisis paralelo (team de 2 agents) + síntesis README/setup
 
-```bash
-# Estructura completa
-find . -maxdepth 4 -type f \
-  -not -path "*/node_modules/*" \
-  -not -path "*/.git/*" \
-  -not -path "*/dist/*" \
-  -not -path "*/build/*" \
-  -not -path "*/.next/*" \
-  | head -100
+> **CRÍTICO**: lanzar las 2 invocaciones de `Agent` en **un único mensaje** con
+> múltiples tool uses (paralelo real).
 
-# Stack
-cat package.json 2>/dev/null
+#### Agent 1 — Stack & Setup (subagent_type: Explore)
 
-# Variables de entorno
-cat .env.example 2>/dev/null || cat .env.template 2>/dev/null
+```
+"Analizá el stack y la configuración de setup del proyecto.
 
-# CI/CD
-ls .github/workflows/ 2>/dev/null
-cat Dockerfile 2>/dev/null | head -20
-cat docker-compose*.yml 2>/dev/null | head -20
+Tareas:
+1. Lee package.json (o requirements.txt / go.mod / pom.xml / Cargo.toml).
+   Lista deps directas y devDeps con versión exacta.
+2. Lee .env.example, .env.template, .env.local.example si existen
+   (KEYS solamente, nunca valores).
+3. Detectá CI/CD: .github/workflows/, .gitlab-ci.yml, Jenkinsfile,
+   bitbucket-pipelines.yml, circle.yml.
+4. Detectá Docker: Dockerfile (todas las stages), docker-compose*.yml.
+5. Detectá scripts del package.json relevantes para setup
+   (dev, build, test, lint, db migrate, etc.).
+
+Reportá un resumen estructurado:
+- Framework + lenguaje + package manager
+- Deps clave (UI, ORM, HTTP, testing, validation)
+- Env vars requeridas + opcionales
+- Setup steps (en orden)
+- CI/CD detectado
+- Docker/containerización presente
+
+Menos de 400 palabras."
 ```
 
-Generar:
+#### Agent 2 — Estructura & Convenciones (subagent_type: Explore)
+
+```
+"Mapeá la estructura del proyecto y sus convenciones.
+
+Tareas:
+1. Estructura de directorios (3 niveles, ignorando node_modules/dist/build/.git/.next).
+2. Identificá patrón de organización: feature-based, layer-based, DDD, hexagonal, MVC.
+3. Detectá naming conventions (kebab-case/camelCase, prefijos use-/get-, sufijos
+   .service./.hook./.store.).
+4. Localizá: README existente del proyecto, AGENTS.md, CLAUDE.md (no leer
+   contenido — solo confirmar existencia).
+5. Detectá tests: ubicación (junto a source vs carpetas separadas), framework.
+
+Reportá:
+- Tree resumido (5-10 directorios principales con propósito)
+- Patrón de organización detectado
+- Naming conventions
+- Convenciones de testing
+- Archivos meta presentes (README.md, AGENTS.md, etc.)
+
+Menos de 400 palabras."
+```
+
+Cuando los 2 reporten, **el orquestador (no sub-agents)** sintetiza y crea:
 - `docs/README.md` — índice completo, tree del proyecto, convenciones, changelog
 - `docs/setup.md` — requisitos, instalación, troubleshooting
 
@@ -46,45 +79,76 @@ Generar:
 
 **Confirmar con el usuario antes de continuar a Fase 2.**
 
-### Fase 2: Detectar endpoints → api/*.md
+### Fase 2 — Endpoints + Components paralelo (team de 2 agents)
 
-```bash
-# Express/Nest/Fastify routes
-find . -maxdepth 5 -name "*.route*" -o -name "*.controller*" -o -name "*.router*" \
-  2>/dev/null | grep -v node_modules
+> **CRÍTICO**: paralelo real, mismo mensaje, múltiples Agent tool uses.
+> Espacios de escritura disjuntos: Agent API → `docs/api/`, Agent UI → `docs/components/`.
 
-# Next.js API routes
-find . -path "*/api/*" -name "*.ts" -o -name "*.js" 2>/dev/null | grep -v node_modules
+#### Agent API (subagent_type: Explore) — solo si hay backend
 
-# Modelos / Schemas / DTOs
-find . -maxdepth 5 -name "*.model.*" -o -name "*.schema.*" -o -name "*.entity.*" \
-  -o -name "*.dto.*" 2>/dev/null | grep -v node_modules
+```
+"Documentá los endpoints HTTP del proyecto.
+
+Tareas:
+1. Buscá routes/controllers: *.route.*, *.controller.*, *.router.*, Next.js api/.
+2. Buscá modelos/schemas/DTOs: *.model.*, *.schema.*, *.entity.*, *.dto.*.
+3. Por cada módulo lógico (auth, users, payments, etc.):
+   - Crear docs/api/{modulo}.md usando endpoint template de
+     ai-specs/specs/documentation-standards.mdc.
+   - Endpoints con method, ruta, auth, headers, params, body, response, errores.
+   - Ejemplos request/response basados en DTOs/schemas REALES (no inventar).
+   - Notas de implementación (reglas de negocio, limitaciones).
+4. Crear docs/api/README.md con índice de módulos + auth + base URL + convenciones.
+
+Espacio de escritura EXCLUSIVO: docs/api/. NO toques docs/components/.
+Idioma: el del proyecto (AGENTS.md § Language o español).
+NO inventar endpoints o comportamientos — '[POR COMPLETAR]' si falta info.
+
+Reportá: lista de archivos creados + 1 línea por cada uno."
 ```
 
-Leer cada archivo. Generar:
-- `docs/api/README.md` — índice de módulos, auth, base URL, convenciones
-- `docs/api/{modulo}.md` por cada grupo — usando **endpoint template** de `documentation-standards.mdc`
+#### Agent UI (subagent_type: Explore) — solo si hay frontend
 
-Si frontend: también generar `docs/components/README.md` con índice de componentes.
+```
+"Documentá los componentes UI del proyecto.
+
+Tareas:
+1. Buscá components: components/, app/ (Next.js App Router), pages/.
+2. Identificá los más relevantes (formularios, layouts, vistas principales,
+   componentes reutilizables).
+3. Por cada componente o grupo:
+   - Crear docs/components/{nombre}.md usando component template de
+     documentation-standards.mdc.
+   - Ubicación, descripción, props (TypeScript types reales).
+   - Datos que consume (endpoint, hook, campos usados).
+   - Estados (loading, empty, error, success).
+   - Datos que necesita del backend.
+4. Crear docs/components/README.md con índice de componentes.
+
+Espacio de escritura EXCLUSIVO: docs/components/. NO toques docs/api/.
+Idioma: el del proyecto.
+NO inventar props o comportamientos.
+
+Reportá: lista de archivos creados + 1 línea por cada uno."
+```
+
+Si el proyecto es **solo backend** → no lanzar Agent UI. Si es **solo frontend** → no lanzar Agent API. Si es fullstack → ambos en paralelo.
 
 **Confirmar antes de Fase 3.**
 
-### Fase 3: Arquitectura + decisiones + despliegue
+### Fase 3 — Arquitectura + decisiones + despliegue + flujos (secuencial)
+
+Esta fase requiere **síntesis** de las anteriores. NO se paraleliza — el orquestador lee
+los outputs de Fase 1 y 2 (ya en disco) y produce documentos de alto nivel.
 
 Generar:
 - `docs/arquitectura.md` — Stack (referencia a CLAUDE.md para detalle), servicios, ambientes, dependencias externas. Enfoque en diagramas y visión de alto nivel, NO duplicar lo que ya está en `ai-specs/specs/`.
 - `docs/decisiones.md` — ADRs inferidos: base de datos, framework, auth, deploy. Formato: Fecha, Estado, Contexto, Decisión, Consecuencias.
 - `docs/despliegue.md` — CI/CD detectado, flujo de deploy, variables por ambiente, rollback.
+- `docs/flujos.md` — flujos principales del sistema (auth, CRUD principal, etc.). Para cada flujo: descripción, pasos, casos edge. Placeholders para diagramas: `![Flujo X](./assets/flujo-x.svg)`. En comentarios HTML: prompt exacto para generar cada diagrama con Excalidraw MCP.
 
 > **Cross-reference**: `docs/arquitectura.md` dice "Stack detallado en CLAUDE.md" y se enfoca
 > en diagramas y decisiones arquitecturales, no en listar dependencias.
-
-**Confirmar antes de Fase 4.**
-
-### Fase 4: Flujos + placeholders de diagramas
-
-Generar:
-- `docs/flujos.md` — flujos principales del sistema (auth, CRUD principal, etc.). Para cada flujo: descripción, pasos, casos edge. Placeholders para diagramas: `![Flujo X](./assets/flujo-x.svg)`. En comentarios HTML: prompt exacto para generar cada diagrama con Excalidraw MCP.
 
 **Confirmar. Docs completos.**
 

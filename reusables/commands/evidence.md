@@ -1,7 +1,7 @@
-<!-- sdd-version: 1.0 -->
+<!-- sdd-version: 2.0 -->
 # Role
-Senior engineer + QA liaison. Genera evidencia de completitud de un ticket y documentación
-técnica cross-team en /docs.
+Senior engineer + QA liaison. Orquesta un **team de 2 agents Explore en paralelo** para
+generar evidencia QA + documentación técnica cross-team en /docs.
 
 # Arguments
 `$ARGUMENTS` — Ticket ID (ej: AUTH-123, BACK-45 — el formato depende del proyecto en el tracker), "current" para inferir del branch, o flag `--docs-only`.
@@ -62,42 +62,100 @@ Si no: pedir al dev que describa brevemente.
 | Infra/Config | CI, Docker, configs | Para todos: qué cambió en el entorno |
 | Fix/Bugfix | Cualquiera | Bug, causa raíz, fix aplicado |
 
-## 3. Generar evidencia QA (skip si `--docs-only`)
+## 3. Lanzar team de 2 agents en paralelo
 
-Crear `docs/evidence/{TICKET_ID}.md` usando el **evidence template** de `ai-specs/specs/documentation-standards.mdc` sección "Reference Templates".
+> **CRÍTICO**: las 2 invocaciones de `Agent` deben ir en **un único mensaje** con
+> múltiples tool uses para que se ejecuten realmente en paralelo. Si las mandás
+> secuenciales se pierde la ganancia (~40% más lento).
+>
+> **Por qué team aplica acá**: lectura + redacción son paralelizables. Cada agent
+> escribe a un directorio distinto (`docs/evidence/` vs `docs/api|components/`),
+> sin conflictos de archivos.
 
-Contenido:
-- Resumen de qué se hizo y por qué
-- **Links** (sección al inicio, después del resumen):
-  - PR: `[PR #{number}]({GH_PR_URL})` (si existe, si no: "PR pendiente")
-  - Evidencia: `[Evidencia]({GH_REPO_URL}/blob/{GH_BRANCH}/docs/evidence/{TICKET_ID}.md)`
-  - Doc técnica: `[Documentación]({GH_REPO_URL}/blob/{GH_BRANCH}/docs/{api|components}/{modulo}.md)`
-- Tabla de archivos modificados (ruta, tipo de cambio, descripción)
-- Tests: cuáles corren y resultado, o "[Sin tests — verificación manual requerida]"
-- Pasos de verificación manual para QA (prerrequisito, acción, resultado esperado)
-- Casos edge a verificar
-- Notas para QA: ambiente, datos de prueba, dependencias
+### Agent 1 — QA Evidence (subagent_type: Explore)
 
-## 4. Generar/actualizar documentación cross-team (siempre)
+Skip si `--docs-only`.
 
-Según el tipo de cambio:
+```
+"Generá la evidencia QA para el ticket {TICKET_ID}.
 
-### Si Backend → documentar para Frontend:
-Actualizar o crear `docs/api/{modulo}.md` usando el **endpoint template** de `documentation-standards.mdc`.
-- Endpoints con method, ruta, auth, headers, params, body, response, errores
-- Ejemplos de request/response basados en DTOs/schemas REALES del código
-- Notas de implementación (reglas de negocio, limitaciones)
-- Ejemplo de uso para frontend
+Contexto disponible:
+- TICKET_ID: {TICKET_ID}
+- Ticket info (si MCP del tracker disponible): {título, descripción, criterios}
+- Diff vs main: {git diff main...HEAD --stat}
+- GH_REPO_URL: {url}
+- GH_BRANCH: {branch}
+- GH_PR_URL: {url o NO_PR}
+- Tipo de cambio: {Backend API / Backend Logic / Frontend UI / Frontend Logic / Fullstack / Infra / Fix}
 
-> **Source of truth**: Los patrones generales de API están en `ai-specs/specs/{tipo}-standards.mdc`.
-> `docs/api/{modulo}.md` documenta endpoints específicos con detalle para consumo del frontend.
+Tareas:
+1. Leé los archivos modificados (los que aparecen en git diff main...HEAD --name-only)
+   para entender QUÉ cambió (no solo dónde).
+2. Crear docs/evidence/{TICKET_ID}.md usando el evidence template de
+   ai-specs/specs/documentation-standards.mdc sección 'Reference Templates'.
+3. Contenido:
+   - Resumen de qué se hizo y por qué (3-5 frases)
+   - Links: PR (si existe), Evidencia, Doc técnica
+   - Tabla de archivos modificados (ruta | tipo de cambio | descripción)
+   - Tests: cuáles corren y resultado, o '[Sin tests — verificación manual requerida]'
+   - Pasos de verificación manual para QA (prerrequisito → acción → resultado esperado)
+   - Casos edge a verificar
+   - Notas para QA: ambiente, datos de prueba, dependencias
 
-### Si Frontend → documentar para Backend:
-Actualizar o crear `docs/components/{modulo}.md` usando el **component template** de `documentation-standards.mdc`.
-- Ubicación, descripción, props
-- Datos que consume (endpoint, hook, campos usados)
-- Estados (loading, empty, error, success)
-- Datos que necesita del backend
+Restricciones:
+- Espacio de escritura EXCLUSIVO: docs/evidence/{TICKET_ID}.md y subdirectorios
+  bajo docs/evidence/. NO toques docs/api/ ni docs/components/ (los maneja Agent 2).
+- Idioma: el definido en AGENTS.md § Language. Si no hay AGENTS.md, español.
+- Si algo no se puede inferir: marcá '[POR COMPLETAR — preguntar a {equipo}]'.
+- NO inventes endpoints, DTOs ni comportamientos que no estén en el código.
+
+Reportá: ruta del archivo creado + 1 línea de resumen del contenido."
+```
+
+### Agent 2 — Cross-team Documentation (subagent_type: Explore)
+
+Siempre se ejecuta (incluso con `--docs-only`).
+
+```
+"Generá la documentación técnica cross-team para los cambios del branch actual.
+
+Contexto disponible:
+- TICKET_ID: {TICKET_ID o '(sin ticket)' si --docs-only sin ID}
+- Diff vs main: {git diff main...HEAD --name-only}
+- Tipo de cambio: {Backend / Frontend / Fullstack / Infra}
+- ai-specs/specs/documentation-standards.mdc (templates de referencia)
+
+Tareas:
+- Si el cambio toca BACKEND (routes/, controllers/, services/, endpoints):
+  Actualizá o creá docs/api/{modulo}.md usando el endpoint template.
+  - Endpoints con method, ruta, auth, headers, params, body, response, errores
+  - Ejemplos basados en DTOs/schemas REALES del código (NO inventar)
+  - Notas de implementación (reglas de negocio, limitaciones)
+  - Ejemplo de uso para frontend
+
+- Si el cambio toca FRONTEND (components/, pages/, hooks/, stores/):
+  Actualizá o creá docs/components/{modulo}.md usando el component template.
+  - Ubicación, descripción, props
+  - Datos que consume (endpoint, hook, campos usados)
+  - Estados (loading, empty, error, success)
+  - Datos que necesita del backend
+
+- Si fullstack: AMBOS docs.
+
+Restricciones:
+- Espacio de escritura EXCLUSIVO: docs/api/, docs/components/. NO toques
+  docs/evidence/ (lo maneja Agent 1).
+- Si actualizás un archivo existente: solo modificar secciones afectadas, marcar
+  con '> 🆕 Actualizado por {TICKET_ID} ({FECHA})'.
+- Idioma según AGENTS.md § Language o español por default.
+- NUNCA inventar comportamientos. '[POR COMPLETAR — preguntar a {equipo}]' si falta info.
+
+Reportá: rutas de archivos creados/modificados + 1 línea de resumen por cada uno."
+```
+
+## 4. Consolidación post-team (secuencial)
+
+Cuando los 2 agents reporten, ejecutar acá (en main agent, NO en sub-agents):
 
 ## 5. Actualizar índice
 

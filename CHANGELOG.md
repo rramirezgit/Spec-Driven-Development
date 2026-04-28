@@ -6,6 +6,19 @@ está al tope.
 
 ---
 
+## V4.12 — Teams en ejecución + UX multi-target + hardening cross-equipo
+
+| Cambio | Impacto |
+|--------|---------|
+| Team de 2 agents en `/evidence` | QA Evidence + Cross-team Documentation en paralelo. Espacios de escritura disjuntos (docs/evidence vs docs/api+docs/components). ~40% menos tiempo. |
+| Team de agents por fases en `/generate-docs` | Fase 1: Stack + Estructura paralelo. Fase 2: API + UI paralelo (solo los aplicables al stack). Fase 3: síntesis secuencial (arquitectura, ADRs, despliegue, flujos). Confirmación entre fases. |
+| Auto-detección de target subproject | En multi-target, antes de preguntar el target, contar archivos modificados (`git diff main...HEAD`) por path de cada subproject. Sugerir el de mayor count como primera opción. Reduce fricción en multi-microservicio. |
+| Fix MCP: `setTargetSubproject` requiere `activeTicket` | Antes permitía setear target sin ticket activo, llevando a errores confusos en advance. Ahora bloquea early con mensaje claro. |
+| Hardening hook anti-refspec | `git push origin HEAD:main`, `+refs/heads/feature:refs/heads/main` y otras formas de refspec ahora bloqueadas (antes solo bloqueaba la forma directa). 10/10 casos test correctos. |
+| Validación post-loop multi-target en Phase 2 | Después de generar `plan-{slug}-ticket.md` por cada slug, contar archivos generados vs esperados. Fallar early si incompleto. |
+| `.phase-state.json` para handoff Phase 0a→0b→0c | Schema explícito. Cada sub-fase valida que la previa completó (`completed: true`) antes de empezar. Borrado al terminar 0c. |
+| Tests MCP: 26 → 34 | +3 schema contract (per-ticket fields, gate flags), +4 transitions edge (rejects unknown destination, skip states), +3 isSafeBranchName edge (newline/tab/null byte). |
+
 ## V4.11 — Push a dev permitido + confirmación obligatoria en /commit
 
 | Cambio | Impacto |

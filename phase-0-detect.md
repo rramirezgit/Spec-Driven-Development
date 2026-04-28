@@ -40,9 +40,56 @@ Para mantener manejable el contenido y reducir riesgo de pérdida de contexto, *
 
 ### Cómo orquestar
 
-1. **Leé `phase-0a-mcps-tracker.md` por completo** y ejecutá todos sus pasos. **No saltes a Phase 0b hasta haber completado Phase 0a entero**.
-2. Cuando Phase 0a termine (con tracker confirmado y workflow validado), **leé `phase-0b-codebase.md`** y ejecutá sus pasos.
-3. Cuando Phase 0b termine (con `PROYECTO_PERFIL` construido en memoria), **leé `phase-0c-confirm.md`** y ejecutá sus pasos.
+> **Handoff entre sub-fases (V4.12+)**: cada sub-fase escribe sus salidas a
+> `.ai-internal/.phase-state.json` (archivo transitorio, se borra al final de
+> Phase 0c). Esto evita pérdida de contexto si el LLM se compacta entre fases
+> o si una sub-fase falla y hay que reanudar.
+
+#### Schema de `.ai-internal/.phase-state.json`
+
+```json
+{
+  "version": "4.12",
+  "started_at": "2026-04-28T22:00:00Z",
+  "phase_0a": {
+    "completed": false,
+    "tracker": "jira | notion | null",
+    "mcps_disponibles": { "atlassian": "available", "github": "available", ... },
+    "atlassian_prefix": "mcp__atlassian__ | ...",
+    "notion_prefix": "mcp__notion__ | ...",
+    "cloud_id": "...",
+    "project_key": "...",
+    "workspace_name": "...",
+    "jira_statuses": { "qa_review": "QA Review", ... },
+    "notion_database_id": "...",
+    "notion_status_property": "...",
+    "notion_statuses": { ... }
+  },
+  "phase_0b": {
+    "completed": false,
+    "es_re_ejecucion": false,
+    "version_previa": "...",
+    "es_monorepo": false,
+    "subproject_count": 0,
+    "subprojects": [{ "path": "...", "subtype": "..." }, ...],
+    "team_analysis": {
+      "stack": { "framework": "...", "lenguaje": "...", "ui_library": "...", ... },
+      "arquitectura": { "estructura_carpetas": "...", "patron_organizacion": "...", ... },
+      "calidad": { "testing_framework": "...", "ci_setup": "...", ... }
+    }
+  },
+  "phase_0c": {
+    "completed": false,
+    "multi_target_mode": false,
+    "subproject_slugs": [],
+    "user_answers": { "idioma_tickets": "...", "tiene_figma": "...", ... }
+  }
+}
+```
+
+1. **Leé `phase-0a-mcps-tracker.md` por completo** y ejecutá todos sus pasos. **No saltes a Phase 0b hasta haber completado Phase 0a entero**. Al terminar 0a, escribí `.ai-internal/.phase-state.json` con la sección `phase_0a` poblada y `completed: true`.
+2. Cuando Phase 0a termine, **leé `phase-0b-codebase.md`** y ejecutá sus pasos. Antes de empezar, validá que `phase_0a.completed === true` en el state file. Al terminar 0b, mergeá la sección `phase_0b`.
+3. Cuando Phase 0b termine, **leé `phase-0c-confirm.md`** y ejecutá sus pasos. Validá `phase_0b.completed === true`. Al terminar 0c y escribir `project-profile.md` + `project-vars.sh`, **borrá `.ai-internal/.phase-state.json`** (es transitorio).
 4. Al final de Phase 0c quedará escrito `.ai-internal/project-profile.md` y `.ai-internal/project-vars.sh`. Mostrar:
 
    ```

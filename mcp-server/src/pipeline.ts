@@ -710,6 +710,17 @@ export async function setTargetSubproject(
     };
   }
 
+  // Defensa: setear target sin ticket activo carece de sentido y produce mensajes
+  // de error confusos en el gate de IMPLEMENTACION. Forzar el orden correcto.
+  if (!data.activeTicket) {
+    return {
+      ok: false,
+      error:
+        "⛔ No hay ticket activo. Llamá sdd_set_active_ticket(ticketId) ANTES de setTargetSubproject. " +
+        "El target subproject pertenece al ticket — sin ticket no hay target.",
+    };
+  }
+
   const config = await loadProjectConfig();
   if (!config?.multiTargetMode) {
     return {

@@ -13,9 +13,15 @@ if [ "$TOOL_NAME" = "Bash" ]; then
   # Block push to protected branches (main / master). Push a dev y feature
   # branches está permitido — la confirmación previa al push se hace en /commit
   # vía AskUserQuestion (V4.11+).
-  # Regex exige espacio antes y espacio/EOL/&&/;/| después del nombre de la rama
-  # para no matchear substrings como "feature/main-rewrite".
-  if echo "$COMMAND" | grep -qE 'git\s+push\b.*\s(main|master)(\s|$|&|;|\|)'; then
+  #
+  # Cubrimos varias formas de expresar el destino:
+  #   git push origin main                       → matchea " main" terminal/operador
+  #   git push -u origin master                  → idem
+  #   git push origin HEAD:main                  → matchea ":main"
+  #   git push origin +refs/heads/x:refs/heads/main → matchea ":refs/heads/main"
+  #   git push origin feature/main-rewrite       → NO matchea (regex requiere
+  #                                                espacio o ":" antes de main/master)
+  if echo "$COMMAND" | grep -qE 'git\s+push\b.*[ :](main|master|refs/heads/(main|master))(\s|$|&|;|\|)'; then
     echo "🛑 git push a main/master bloqueado por SDD guardrail. Releases van solo via /release-to-main (PR dev→main)." >&2
     exit 2
   fi

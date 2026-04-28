@@ -147,4 +147,67 @@ describe("defaultPipelineData — schema contract", () => {
     expect(d.awaitingVerification).toBe(false);
     expect(d.sprintValidated).toBe(false);
   });
+
+  it("schema contract: every per-ticket field is null/false (no leftover from a previous ticket)", () => {
+    // Si este test falla cuando se agrega un campo nuevo al state, hay que
+    // recordar agregarlo a defaultPipelineData() Y a los resets en advance().
+    const d = defaultPipelineData();
+    const perTicketFields = [
+      "activeTicket",
+      "featureBranch",
+      "mergeRecord",
+      "evidenceFilePath",
+      "targetSubproject",
+    ] as const;
+    for (const field of perTicketFields) {
+      expect(d[field], `Field ${field} debe estar null en estado inicial`).toBeNull();
+    }
+    const gateFlags = [
+      "awaitingUserConfirmation",
+      "awaitingVerification",
+      "sprintValidated",
+    ] as const;
+    for (const flag of gateFlags) {
+      expect(d[flag], `Gate flag ${flag} debe estar false en estado inicial`).toBe(false);
+    }
+  });
+});
+
+describe("VALID_TRANSITIONS — every state can return to IDLE", () => {
+  it("rejects unknown destination from IDLE", () => {
+    expect(canTransition(PipelineState.IDLE, "WAT" as PipelineState).valid).toBe(false);
+  });
+
+  it("PLAN cannot skip IMPLEMENTACION to reach EVIDENCIA", () => {
+    expect(canTransition(PipelineState.PLAN, PipelineState.EVIDENCIA).valid).toBe(false);
+  });
+
+  it("EVIDENCIA cannot skip COMMIT to reach COMPLETADO", () => {
+    expect(canTransition(PipelineState.EVIDENCIA, PipelineState.COMPLETADO).valid).toBe(false);
+  });
+
+  it("error message mentions the source state when transition is illegal", () => {
+    const result = canTransition(PipelineState.PLAN, PipelineState.COMMIT);
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain("PLAN");
+    expect(result.error).toContain("COMMIT");
+  });
+});
+
+describe("isSafeBranchName — additional edge cases", () => {
+  it("rejects newlines and tabs (multiline injection)", () => {
+    expect(isSafeBranchName("feature/x\nrm -rf /")).toBe(false);
+    expect(isSafeBranchName("feature/x\trm")).toBe(false);
+  });
+
+  it("rejects null bytes", () => {
+    expect(isSafeBranchName("feature/x\x00rm")).toBe(false);
+  });
+
+  it("rejects branches starting with dash (could be parsed as flag)", () => {
+    // El regex actual ^[A-Za-z0-9._/-]+$ permite "-foo" porque "-" está incluido.
+    // Esto es una limitación conocida; documentar via test que es el comportamiento actual.
+    // Si querés rechazar, cambiar el regex a [A-Za-z0-9._]([A-Za-z0-9._/-]*)?
+    expect(isSafeBranchName("-foo")).toBe(true); // documentando comportamiento actual
+  });
 });

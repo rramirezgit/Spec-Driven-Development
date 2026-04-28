@@ -433,6 +433,8 @@ source .ai-internal/project-vars.sh
 if [ "$SDD_MULTI_TARGET_MODE" = "true" ] && [ -n "$SDD_SUBPROJECT_SLUGS" ]; then
   # MULTI-TARGET: un plan-ticket por subproyecto, sufijo = slug
   IFS=',' read -ra SLUG_ARRAY <<< "$SDD_SUBPROJECT_SLUGS"
+  EXPECTED_PLANS=${#SLUG_ARRAY[@]}
+  GENERATED_PLANS=0
   for SLUG in "${SLUG_ARRAY[@]}"; do
     SLUG_UPPER=$(echo "$SLUG" | tr '[:lower:]-' '[:upper:]_')
     SUB_FRAMEWORK_VAR="SDD_SUB_${SLUG_UPPER}_FRAMEWORK"
@@ -442,9 +444,21 @@ if [ "$SDD_MULTI_TARGET_MODE" = "true" ] && [ -n "$SDD_SUBPROJECT_SLUGS" ]; then
     echo "Generando plan-${SLUG}-ticket.md desde template..."
     sed "s/__SDD_FRAMEWORK__/$SUB_FRAMEWORK/g; s/__SDD_NOMBRE__/$SDD_NOMBRE/g; s/__SDD_TIPO__/$SUB_TYPE/g; s/__SDD_IDIOMA_TECNICO__/$SDD_IDIOMA_TECNICO/g" \
         .ai-internal/templates/plan-ticket-template.md > "ai-specs/.commands/plan-${SLUG}-ticket.md"
-    PLAN_LINES=$(wc -l < "ai-specs/.commands/plan-${SLUG}-ticket.md")
-    echo "plan-${SLUG}-ticket.md generado ($PLAN_LINES líneas)"
+    if [ -s "ai-specs/.commands/plan-${SLUG}-ticket.md" ]; then
+      PLAN_LINES=$(wc -l < "ai-specs/.commands/plan-${SLUG}-ticket.md")
+      echo "plan-${SLUG}-ticket.md generado ($PLAN_LINES líneas)"
+      GENERATED_PLANS=$((GENERATED_PLANS + 1))
+    else
+      echo "❌ FALLO: plan-${SLUG}-ticket.md no se generó o quedó vacío"
+    fi
   done
+  # Validación post-loop: esperado vs generado
+  if [ "$GENERATED_PLANS" -ne "$EXPECTED_PLANS" ]; then
+    echo "❌ Multi-target plan generation incompleta: esperado=$EXPECTED_PLANS generado=$GENERATED_PLANS"
+    echo "   Re-ejecutá Fase 2 o revisá el project-profile.md."
+    exit 1
+  fi
+  echo "✅ Multi-target plan generation OK ($GENERATED_PLANS/$EXPECTED_PLANS)"
 elif [ "$SDD_TIPO" = "monorepo-fullstack" ]; then
   # FULLSTACK CLÁSICO 1+1: mantiene backwards-compat con frontend/backend
   FRONT_FRAMEWORK=$(grep -A5 "### frontend" .ai-internal/project-profile.md | grep "Framework" | sed 's/.*\*\*Framework\*\*: //' | awk '{print $1}')

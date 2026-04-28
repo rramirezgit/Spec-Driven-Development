@@ -207,11 +207,30 @@ Secuencia obligatoria:
 
 **⛔ GATE DE TARGET SUBPROJECT (solo si MULTI_TARGET_MODE == true)**:
 Si el proyecto está en modo multi-target (`__SDD_MULTI_TARGET_MODE__ == true`), antes de planificar:
-1. AskUserQuestion (single_select): "¿Qué subproyecto afecta este ticket?"
-   Opciones: una por cada slug en `__SDD_SUBPROJECT_SLUGS__` (separadas por coma).
-2. Llamar `sdd_set_target_subproject(slug)` para registrar el target en el pipeline state.
-3. El comando de plan a invocar es **dinámico**: `/plan-{slug_elegido}-ticket` (ej: `/plan-auth-service-ticket`).
-4. El comando de develop posterior será también dinámico: `/develop-{slug_elegido}`.
+
+1. **Auto-detección por archivos modificados** (mejora UX V4.12):
+   ```bash
+   # Si hay archivos modificados/staged en el branch actual, contar archivos por subproyecto
+   git diff --name-only main...HEAD 2>/dev/null
+   git diff --name-only --staged 2>/dev/null
+   git diff --name-only 2>/dev/null
+   ```
+   Para cada slug en `__SDD_SUBPROJECT_SLUGS__`, leer `SDD_SUB_{SLUG_UPPER}_PATH` desde `.ai-internal/project-vars.sh` y contar cuántos archivos modificados caen bajo ese path.
+   - Si **un solo subproyecto** acumula >0 archivos → es candidato auto-detectado.
+   - Si **varios** acumulan archivos → mostrar el ranking (ej. "auth-service: 5 archivos | shared-lib: 1 archivo") y proponer el de mayor count como sugerencia.
+   - Si **ninguno** (no hay archivos modificados aún) → saltar auto-detección, ir a paso 2 con todas las opciones.
+
+2. **AskUserQuestion** (single_select): "¿Qué subproyecto afecta este ticket?"
+   - Si hay candidato auto-detectado: la primera opción es el sugerido con prefijo "✨ {slug} (auto-detectado: N archivos modificados)".
+   - El resto: una opción por cada slug en `__SDD_SUBPROJECT_SLUGS__`.
+   - Última opción: "Ninguno de los anteriores — cancelar".
+3. Llamar `sdd_set_target_subproject(slug)` para registrar el target en el pipeline state.
+4. El comando de plan a invocar es **dinámico**: `/plan-{slug_elegido}-ticket` (ej: `/plan-auth-service-ticket`).
+5. El comando de develop posterior será también dinámico: `/develop-{slug_elegido}`.
+
+> **Por qué auto-detectar**: en multi-target con 5+ servicios, preguntar a ciegas
+> en cada ticket es fricción. Si el dev ya tocó archivos en `services/auth/`, la
+> respuesta es obvia — lo proponemos directamente y solo ofrecemos cambiarlo.
 
 > **Si MULTI_TARGET_MODE == false**: usar `/plan-__SDD_TIPO__-ticket` directo (sin pregunta).
 
