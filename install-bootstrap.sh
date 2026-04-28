@@ -46,9 +46,7 @@ FILES=(
   "reusables/opsx/bulk-archive.md|.ai-internal/reusables/opsx/bulk-archive.md"
   "reusables/opsx/onboard.md|.ai-internal/reusables/opsx/onboard.md"
   "reusables/commands/explain.md|.ai-internal/reusables/commands/explain.md"
-  "reusables/commands/meta-prompt.md|.ai-internal/reusables/commands/meta-prompt.md"
   "reusables/commands/commit.md|.ai-internal/reusables/commands/commit.md"
-  "reusables/commands/update-docs.md|.ai-internal/reusables/commands/update-docs.md"
   "reusables/commands/review-pr.md|.ai-internal/reusables/commands/review-pr.md"
   "reusables/commands/test-plan.md|.ai-internal/reusables/commands/test-plan.md"
   "reusables/commands/evidence.md|.ai-internal/reusables/commands/evidence.md"
@@ -61,7 +59,7 @@ FILES=(
 )
 
 echo ""
-echo "🔧 Spec-Driven Development — Bootstrap V4.12"
+echo "🔧 Spec-Driven Development — Bootstrap V4.13"
 echo "============================================="
 echo ""
 
@@ -160,10 +158,26 @@ echo ""
 echo "📥 Descargando archivos..."
 echo ""
 
+# Limpiar staging dirs huérfanos de ejecuciones previas que fueron interrumpidas
+# antes de poder limpiar (ej. Ctrl+C muy temprano, kernel panic, etc).
+for OLD_STAGING in "${PWD}"/.bootstrap-staging.*/; do
+  [ -d "$OLD_STAGING" ] || continue
+  rm -rf "$OLD_STAGING"
+  echo "🧹 Limpiado staging huérfano: $OLD_STAGING"
+done
+
 # Staging area: descargas van acá primero; si todo OK, se mueven al destino final.
 # Si algo falla, el trap limpia y la instalación previa queda intacta.
+#
+# IMPORTANTE: el trap se REGISTRA antes de mktemp con un placeholder vacío, y
+# luego se actualiza cuando STAGING tiene valor. Así si Ctrl+C llega entre
+# mktemp y trap setup tradicional, no queda huérfano.
+STAGING=""
+cleanup_staging() {
+  [ -n "$STAGING" ] && [ -d "$STAGING" ] && rm -rf "$STAGING"
+}
+trap cleanup_staging EXIT INT TERM
 STAGING=$(mktemp -d "${PWD}/.bootstrap-staging.XXXXXX")
-trap 'rm -rf "$STAGING"' EXIT
 
 # ── Descargar manifest primero (defensa contra MITM y corrupción de transit) ──
 # El manifest contiene SHA-256 esperado de cada archivo. Si falta, seguimos

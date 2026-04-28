@@ -13,6 +13,34 @@ Prioridades:
 
 ## P1 — alto valor
 
+### Single Source of Truth para stack/framework
+- **Estado actual**: 7 archivos contienen el stack del proyecto (CLAUDE.md, AGENTS.md, base-standards.mdc, {tipo}-standards.mdc, {tipo}-developer.md, openspec/config.yaml, project-profile.md). Cuando algo cambia (ej. Next.js 14→15), todos deben actualizarse. Riesgo de divergencia ALTO.
+- **Propuesta**: CLAUDE.md como única fuente canonical (con frontmatter YAML estructurado). Los otros archivos REFERENCIAN ("Ver CLAUDE.md § Architecture") en lugar de copiar.
+- **Trabajo**: refactor de los templates en phase-2-adapted.md.
+- **Esfuerzo**: ~2 h.
+- **Riesgo de implementación**: medio-alto (toca casi todos los archivos generados; conviene primero V4.14 con feature flag).
+
+### Eliminar AGENTS.md (duplicado de CLAUDE.md)
+- AGENTS.md es legacy — duplicado de CLAUDE.md. Algunos comandos lo referencian como fuente de "AGENTS.md § Language" pero ese contenido también vive en base-standards.mdc.
+- **Riesgo**: rompe backwards-compat con proyectos pre-V4.14 que tienen AGENTS.md.
+- **Estrategia gradual**: en V4.14 marcar como deprecated en todas las referencias; en V5.0 eliminar la generación; los proyectos lo borran manualmente cuando quieren.
+
+### Rotación de docs/decisiones.md
+- ADRs crecen sin límite. Después de 50+ se vuelve innavegable.
+- **Propuesta**: estructura `docs/decisiones/{YEAR}.md` con README.md como índice. Rotación anual automática.
+- **Esfuerzo**: ~30 min en /generate-docs Fase 3.
+
+### Comando `/cleanup` para auditar transitorios huérfanos
+- Detecta `.bootstrap-staging.*` viejos, `.compacted.claim.{PID}` con PID muerto, `.upgrade-pending` con >2h, `.bootstrap-backup/` con >3 backups.
+- Reporta al usuario qué encontró + ofrece limpieza.
+- **Esfuerzo**: ~45 min.
+
+### Rotación de `.bootstrap-backup/`
+- Hoy crece sin rotación con cada upgrade.
+- **Propuesta**: mantener last-3 backups, eliminar el resto al inicio de cada upgrade.
+- **Esfuerzo**: ~15 min en bootstrap.md.
+
+
 ### Activar versionado granular `sdd_version` en upgrade
 - **Estado**: marcadores presentes en los 20 archivos de `reusables/` (frontmatter o `<!-- sdd-version: X.Y -->`), pero el flujo de upgrade en `phase-1-reusables.md` SIEMPRE sobrescribe.
 - **Problema**: ediciones manuales del usuario en `.claude/commands/opsx/*.md` se pierden silenciosamente al re-ejecutar `/bootstrap`.

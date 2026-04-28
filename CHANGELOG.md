@@ -6,6 +6,17 @@ está al tope.
 
 ---
 
+## V4.13 — Cleanup de basura generada + reducción de overlap
+
+| Cambio | Impacto |
+|--------|---------|
+| Eliminados `meta-prompt.md` y `update-docs.md` de reusables | Decorativos sin uso real. `update-docs.md` tenía overlap 100% con `/generate-docs`. Proyectos pre-V4.13 con esos archivos no se rompen — siguen existiendo localmente, solo no se actualizan. |
+| `/evidence` deja de generar `docs/api/` y `docs/components/` | Antes había race "last-write-wins" entre `/evidence` y `/generate-docs` que escribían los mismos paths. Ahora `/generate-docs` es la fuente única de docs cross-team; `/evidence` se limita a `docs/evidence/{TICKET_ID}.md`. |
+| `/evidence` v3.0: 1 agent en vez de 2 | Antes lanzaba team de 2 (QA + Cross-team Doc). Como cross-team se movió a `/generate-docs`, queda solo el agent de QA evidence (más simple, menos tokens). |
+| `.gitignore` raíz del repo SDD | Cubre `.bootstrap-staging.*/`, `.bootstrap-backup/`, `.bootstrap-meta.json`, `mcp-server/node_modules/`, `mcp-server/dist/`. Antes estos podían commitearse por accidente. |
+| Trap de cleanup en `install-bootstrap.sh` antes de `mktemp` | Si Ctrl+C llega en los milisegundos entre crear staging y registrar trap, ya no quedaba directorio huérfano. Ahora trap registrado antes de crear el dir. Además, al inicio se limpian stagings huérfanos de runs previos. |
+| Fail-safe en `bootstrap.md` modo upgrade | Si `.upgrade-pending` lleva >2 horas sin tocar, avisar al usuario que probablemente es huérfano. Documentado: NO borrar el archivo si el upgrade aborta — solo al completar. Garantiza idempotencia para retomar. |
+
 ## V4.12 — Teams en ejecución + UX multi-target + hardening cross-equipo
 
 | Cambio | Impacto |

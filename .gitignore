@@ -1,0 +1,26 @@
+# Bootstrap transitorios — no commitear NUNCA
+.bootstrap-staging.*/
+.bootstrap-backup/
+.bootstrap-meta.json
+
+# MCP server build artifacts (regenerables con npm install + npm run build)
+mcp-server/node_modules/
+mcp-server/dist/
+mcp-server/*.tsbuildinfo
+
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Logs / temp
+*.log
+npm-debug.log*
+.npm/
+
+# Cuando este repo se INSTALA en un proyecto (via install-bootstrap.sh),
+# el instalador agrega .ai-internal/ al .gitignore del proyecto destino.
+# Acá no aplica porque .ai-internal/ no existe en el repo SDD mismo.

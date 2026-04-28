@@ -112,7 +112,7 @@ Archivos resultantes:
 - `.claude/commands/opsx/bulk-archive.md`
 - `.claude/commands/opsx/onboard.md`
 
-### 4.3 — Copiar AI commands (9 archivos)
+### 4.3 — Copiar AI commands (7 archivos)
 
 ```bash
 echo "Copiando AI commands..."
@@ -122,14 +122,14 @@ echo "  ✅ $(ls ai-specs/.commands/*.md | wc -l | tr -d ' ') AI commands copiad
 
 Archivos resultantes:
 - `ai-specs/.commands/explain.md`
-- `ai-specs/.commands/meta-prompt.md`
 - `ai-specs/.commands/commit.md`
-- `ai-specs/.commands/update-docs.md`
 - `ai-specs/.commands/review-pr.md`
 - `ai-specs/.commands/test-plan.md`
 - `ai-specs/.commands/evidence.md`
 - `ai-specs/.commands/generate-docs.md`
 - `ai-specs/.commands/release-to-main.md`
+
+> **V4.13**: `meta-prompt.md` y `update-docs.md` removidos por desuso/overlap. Los proyectos pre-V4.13 que ya los tengan no se rompen — los archivos siguen existiendo localmente pero no se actualizan en upgrades. Pueden borrarse manualmente si no se usan.
 
 ### 4.4 — Copiar agente reusable (1 archivo)
 
