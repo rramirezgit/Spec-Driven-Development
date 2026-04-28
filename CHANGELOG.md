@@ -6,6 +6,18 @@ está al tope.
 
 ---
 
+## V4.10 — Modo multi-target (microservicios / microfrontends)
+
+| Cambio | Impacto |
+|--------|---------|
+| Modo multi-target opt-in | Phase 0c pregunta si N≥3 subproyectos o 2 del mismo tipo: ¿generar comandos por subproyecto o tratarlo como un único proyecto? |
+| Schema extendido | `project-profile.md` agrega `Multi Target Mode` y `Subproject Slugs`. `project-vars.sh` genera variables iterables `SDD_SUB_{SLUG_UPPER}_PATH/FRAMEWORK/TYPE`. |
+| Phase 2 con loop por subproyecto | Multi-target genera `develop-{slug}.md`, `plan-{slug}-ticket.md`, `{slug}-standards.mdc`, `{slug}-developer.md` — uno por servicio. Backwards-compat estricta con `monorepo-fullstack` 1+1 (sigue generando `frontend`/`backend`). |
+| Menu y plan-ticket dinámicos | En multi-target, antes de planificar pregunta con `AskUserQuestion` qué subproyecto afecta el ticket y construye comandos con slug. Cada ticket = 1 servicio (regla acordada). |
+| MCP `sdd_set_target_subproject` | Nuevo tool registra el subproyecto target en pipeline state. Gate de IMPLEMENTACION lo requiere si multi-target. Validación contra lista de slugs del profile. |
+| CLAUDE.md con tabla de servicios | En multi-target, el CLAUDE.md generado abre con tabla `Servicio \| Path \| Tipo \| Framework \| Comando dev \| Standards` y delega detalles a cada `{slug}-standards.mdc`. |
+| Tests Vitest extendidos | 26 tests (+3 schema contract: defaultPipelineData state inicial, targetSubproject null, gate flags). |
+
 ## V4.9 — Evidencia simplificada, sin Figma/Screenshot obligatorios
 
 | Cambio | Impacto |

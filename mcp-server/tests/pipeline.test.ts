@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { canTransition, isSafeBranchName } from "../src/pipeline.js";
-import { PipelineState } from "../src/types.js";
+import { PipelineState, defaultPipelineData } from "../src/types.js";
 
 describe("canTransition — state machine", () => {
   it("allows IDLE → ARTEFACTOS", () => {
@@ -122,5 +122,29 @@ describe("isSafeBranchName — input hardening for execFileSync", () => {
   it("accepts dots in version-style branches", () => {
     expect(isSafeBranchName("v1.2.3")).toBe(true);
     expect(isSafeBranchName("release.candidate.1")).toBe(true);
+  });
+});
+
+describe("defaultPipelineData — schema contract", () => {
+  it("starts in IDLE with all per-ticket fields cleared", () => {
+    const d = defaultPipelineData();
+    expect(d.state).toBe(PipelineState.IDLE);
+    expect(d.activeTicket).toBeNull();
+    expect(d.tickets).toEqual([]);
+    expect(d.featureBranch).toBeNull();
+    expect(d.mergeRecord).toBeNull();
+    expect(d.evidenceFilePath).toBeNull();
+  });
+
+  it("includes targetSubproject field initialized to null (multi-target schema)", () => {
+    const d = defaultPipelineData();
+    expect(d.targetSubproject).toBeNull();
+  });
+
+  it("includes gate flags initialized to false", () => {
+    const d = defaultPipelineData();
+    expect(d.awaitingUserConfirmation).toBe(false);
+    expect(d.awaitingVerification).toBe(false);
+    expect(d.sprintValidated).toBe(false);
   });
 });

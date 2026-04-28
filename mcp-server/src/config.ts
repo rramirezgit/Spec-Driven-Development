@@ -91,9 +91,21 @@ function parseProfile(content: string): ProjectConfig {
 
   const tipo = get("Tipo", "tipo", "Type", "type", "Project Type");
 
-  // Parse subprojects for monorepo-fullstack
+  // Multi-target mode (V4.10+): one set of commands per subproject
+  const multiTargetRaw = get("Multi Target Mode", "multi_target_mode", "MultiTargetMode");
+  const multiTargetMode = multiTargetRaw.toLowerCase() === "true";
+
+  const subprojectSlugsRaw = get("Subproject Slugs", "subproject_slugs");
+  const subprojectSlugs = subprojectSlugsRaw
+    ? subprojectSlugsRaw
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
+    : undefined;
+
+  // Parse subprojects when relevant: multi-target OR classic monorepo-fullstack
   let subprojects: SubprojectConfig[] | undefined;
-  if (tipo === "monorepo-fullstack") {
+  if (multiTargetMode || tipo === "monorepo-fullstack") {
     subprojects = parseSubprojects(content);
   }
 
@@ -114,6 +126,8 @@ function parseProfile(content: string): ProjectConfig {
     // Common
     idioma: get("Idioma", "idioma", "Language", "language"),
     subprojects,
+    multiTargetMode: multiTargetMode || undefined,
+    subprojectSlugs,
   };
 }
 

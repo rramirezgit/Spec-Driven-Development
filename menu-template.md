@@ -203,9 +203,20 @@ Secuencia obligatoria:
    - Si no hay sprint (Kanban) → `sdd_confirm_sprint(kanban=true)`
    - Si Scrum sin sprint activo → BLOQUEAR, informar al usuario
    > **Si tracker=notion**: saltar verificación de sprint. Llamar directamente `sdd_confirm_sprint(kanban=true)`.
-3. Solo entonces: `sdd_set_active_ticket(ID)` + leer `/plan-__SDD_TIPO__-ticket` + `sdd_advance(PLAN)`
+3. Solo entonces: `sdd_set_active_ticket(ID)` + (si multi-target, elegir target service ↓) + leer `/plan-{tipo_o_slug}-ticket` + `sdd_advance(PLAN)`
+
+**⛔ GATE DE TARGET SUBPROJECT (solo si MULTI_TARGET_MODE == true)**:
+Si el proyecto está en modo multi-target (`__SDD_MULTI_TARGET_MODE__ == true`), antes de planificar:
+1. AskUserQuestion (single_select): "¿Qué subproyecto afecta este ticket?"
+   Opciones: una por cada slug en `__SDD_SUBPROJECT_SLUGS__` (separadas por coma).
+2. Llamar `sdd_set_target_subproject(slug)` para registrar el target en el pipeline state.
+3. El comando de plan a invocar es **dinámico**: `/plan-{slug_elegido}-ticket` (ej: `/plan-auth-service-ticket`).
+4. El comando de develop posterior será también dinámico: `/develop-{slug_elegido}`.
+
+> **Si MULTI_TARGET_MODE == false**: usar `/plan-__SDD_TIPO__-ticket` directo (sin pregunta).
 
 > **Regla**: Se selecciona UN ticket. No se pueden seleccionar múltiples para trabajar en paralelo.
+> **Regla multi-target**: cada ticket apunta a UN solo subproyecto. Si un cambio toca varios servicios → split en sub-tickets, uno por servicio.
 
 ## PLAN → crear rama e implementar
 Mostrar plan técnico.
@@ -220,7 +231,10 @@ Secuencia obligatoria:
 Ramas protegidas (main, dev, master, develop) son **RECHAZADAS por el server**.
 El nombre debe seguir el patrón `feature/`, `hotfix/`, o `bugfix/`.
 
-Ofrecer implementar con `/develop-__SDD_TIPO__`.
+Ofrecer implementar:
+- Si `__SDD_MULTI_TARGET_MODE__ == true`: invocar el develop dinámico del target del ticket → `/develop-{targetSubproject}` (leer el `targetSubproject` del estado con `sdd_get_state`).
+- Si modo simple: `/develop-__SDD_TIPO__`.
+
 Después: `sdd_register_branch(rama)` + `sdd_advance(IMPLEMENTACION)`.
 
 ## IMPLEMENTACION → verificar y generar evidencia

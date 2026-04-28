@@ -11,6 +11,61 @@ Habiendo analizado el codebase, ahora preguntá ÚNICAMENTE lo que no pudiste de
 
 **Regla**: Si podés inferirlo con >80% de confianza del codebase, NO lo preguntes. Confirmalo en el resumen del Paso 2.
 
+### 1.0 — Determinar modo multi-target (multi-microservicio / multi-microfrontend)
+
+> **Por qué**: cuando el proyecto tiene múltiples subproyectos independientes (microservicios, microfrontends, libs separadas), generar comandos genéricos por "rol" (frontend/backend) pierde especificidad. El **modo multi-target** genera un set de archivos por subproyecto (con su propio path, stack y comandos).
+
+Calcular `MULTI_TARGET_CANDIDATE` con la lógica:
+
+```
+Sea N = subproject_count (de phase-0b 0.1c)
+Sea front_count = cantidad de subprojects con SUBTYPE empezando en "frontend:" o "mobile:"
+Sea back_count = cantidad de subprojects con SUBTYPE empezando en "backend:"
+Sea other_count = N - front_count - back_count
+
+MULTI_TARGET_CANDIDATE = true si:
+  - N >= 3, O
+  - N == 2 y NO es exactamente 1 frontend + 1 backend (ej: 2 backends, 2 frontends, 1 backend + 1 lib),
+  - O cualquier other_count > 0 con N >= 2.
+
+Caso 1+1 clásico (N==2, front_count==1, back_count==1) → MULTI_TARGET_CANDIDATE = false (mantener fullstack-clásico para backwards-compat).
+Caso plano (N <= 1) → MULTI_TARGET_CANDIDATE = false.
+```
+
+**Si `MULTI_TARGET_CANDIDATE == true`**, preguntar con AskUserQuestion (single_select):
+
+```
+🎯 Detecté {N} subproyectos en este repo:
+  • {path_1} ({SUBTYPE_1})
+  • {path_2} ({SUBTYPE_2})
+  ...
+
+¿Cómo querés gestionarlos en el flujo de SDD?
+```
+
+Opciones:
+- **"Multi-target — un set de comandos por subproyecto"** (recomendado para microservicios/microfrontends): genera `/develop-{slug}`, `/plan-{slug}-ticket` y `{slug}-standards.mdc` para cada subproyecto. Cada ticket elige un subproyecto target.
+- **"Modo simple — un solo comando genérico"**: trata todo como un único proyecto (útil si los subproyectos son livianos o querés mantenerlo simple).
+
+Guardar el resultado:
+
+```
+MULTI_TARGET_MODE = true | false
+```
+
+**Si MULTI_TARGET_MODE == true**, calcular un slug por cada subproyecto:
+
+```
+Para cada subproject:
+  RAW = nombre_carpeta (ej: "auth-service", "payments-service", "shell")
+  SLUG = lowercase + reemplazar _ y espacios por -
+  Si hay colisiones → agregar índice numérico (auth-service, auth-service-2)
+
+SUBPROJECT_SLUGS = lista ordenada de {path, slug, type, framework, ui_library, ...}
+```
+
+> **Si MULTI_TARGET_CANDIDATE == false** (proyecto plano o fullstack-clásico 1+1): saltar este paso. `MULTI_TARGET_MODE = false` por default.
+
 ### 1.1 — Determinar qué preguntar
 
 Evaluá cada item:
@@ -199,6 +254,8 @@ Crear `.ai-internal/project-profile.md` con TODOS los datos reales del PROYECTO_
 ```
 # Proyecto: {nombre}
 # Tipo: {tipo}
+# Multi Target Mode: {MULTI_TARGET_MODE}
+# Subproject Slugs: {coma-separados — solo si Multi Target Mode == true, ej: "auth-service,payments-service,shell"}
 # Framework: {framework} {version}
 # Lenguaje: {lenguaje}
 # UI Library: {ui_library}
@@ -236,12 +293,13 @@ Crear `.ai-internal/project-profile.md` con TODOS los datos reales del PROYECTO_
 # Es re-ejecución: {bool}
 # Archivos protegidos: {lista}
 
-{Si tipo == monorepo-fullstack, agregar sección de subprojects:}
+{Si tipo == monorepo-fullstack Y MULTI_TARGET_MODE == false, agregar sección de subprojects clásica (1 frontend + 1 backend):}
 
 ## Subprojects
 
 ### frontend
 **Path**: {path_del_subdirectorio_frontend}
+**Type**: frontend
 **Framework**: {framework_frontend} {version}
 **UI Library**: {ui_library}
 **HTTP Client**: {http_client}
@@ -257,6 +315,7 @@ Crear `.ai-internal/project-profile.md` con TODOS los datos reales del PROYECTO_
 
 ### backend
 **Path**: {path_del_subdirectorio_backend}
+**Type**: backend
 **Framework**: {framework_backend} {version}
 **ORM**: {orm}
 **Database**: {database}
@@ -266,6 +325,33 @@ Crear `.ai-internal/project-profile.md` con TODOS los datos reales del PROYECTO_
 **Estructura carpetas**: {breve}
 **Patrón API**: {patron}
 **Env vars**: {lista_backend}
+
+{Si MULTI_TARGET_MODE == true, agregar una sección por cada subproyecto detectado, usando el slug como header:}
+
+## Subprojects
+
+### {slug_subproject_1}
+**Path**: {path_relativo}
+**Type**: {frontend | backend | mobile | shared-lib | infra | unknown}
+**Framework**: {framework + versión}
+**UI Library**: {ui_library_si_aplica}
+**HTTP Client**: {http_client_si_aplica}
+**Server State**: {server_state_si_aplica}
+**Auth State**: {auth_state_si_aplica}
+**Form Lib**: {form_lib_si_aplica}
+**Validation Lib**: {validation_lib}
+**ORM**: {orm_si_aplica}
+**Database**: {database_si_aplica}
+**Auth Method**: {auth_method_si_aplica}
+**Testing**: {testing_framework}
+**Estructura carpetas**: {breve}
+**Patrones**: {patrones_relevantes}
+**Env vars**: {lista_de_keys}
+
+### {slug_subproject_2}
+{misma estructura, datos del agent que analizó este subproject}
+
+{...repetir por cada subproject del array MONOREPO_DETECTION.subprojects}
 ```
 
 > Reemplazá TODOS los `{...}` con datos reales antes de escribir.
@@ -298,6 +384,9 @@ else
   CRITERIO_PROYECTO="Requisitos técnicos completos"
 fi
 
+MULTI_TARGET_MODE=$(grep "^# Multi Target Mode:" .ai-internal/project-profile.md | sed 's/^# Multi Target Mode: //')
+SUBPROJECT_SLUGS=$(grep "^# Subproject Slugs:" .ai-internal/project-profile.md | sed 's/^# Subproject Slugs: //')
+
 cat > .ai-internal/project-vars.sh << VARSEOF
 # Auto-generated from project-profile.md — do not edit manually
 # Used by phase-2 templates for sed replacement
@@ -312,7 +401,35 @@ SDD_NOTION_DATABASE_ID="$NOTION_DB_ID"
 SDD_IDIOMA_TECNICO="$IDIOMA_TECNICO"
 SDD_IDIOMA_TICKETS="$IDIOMA_TICKETS"
 SDD_CRITERIO_PROYECTO="$CRITERIO_PROYECTO"
+SDD_MULTI_TARGET_MODE="$MULTI_TARGET_MODE"
+SDD_SUBPROJECT_SLUGS="$SUBPROJECT_SLUGS"
 VARSEOF
+
+# Si multi-target, agregar bloque iterativo: una variable por subproject
+# con su path, slug, tipo, framework. Phase 2 itera sobre estas variables.
+if [ "$MULTI_TARGET_MODE" = "true" ] && [ -n "$SUBPROJECT_SLUGS" ]; then
+  echo "" >> .ai-internal/project-vars.sh
+  echo "# Multi-target subprojects (iterables — un bloque por subproyecto)" >> .ai-internal/project-vars.sh
+  IFS=',' read -ra SLUG_ARRAY <<< "$SUBPROJECT_SLUGS"
+  for SLUG in "${SLUG_ARRAY[@]}"; do
+    # Para cada slug, leer su sección desde project-profile.md "## Subprojects"
+    # y exportar variables. El project-profile tiene secciones tipo:
+    #   ### {slug}
+    #   **Path**: {path}
+    #   **Framework**: {framework}
+    #   **Type**: {type}
+    SLUG_UPPER=$(echo "$SLUG" | tr '[:lower:]-' '[:upper:]_')
+    SUB_PATH=$(awk -v s="### $SLUG" '$0==s{f=1;next} f && /^### /{exit} f && /^\*\*Path\*\*:/{sub(/^\*\*Path\*\*: */,""); print; exit}' .ai-internal/project-profile.md)
+    SUB_FRAMEWORK=$(awk -v s="### $SLUG" '$0==s{f=1;next} f && /^### /{exit} f && /^\*\*Framework\*\*:/{sub(/^\*\*Framework\*\*: */,""); print; exit}' .ai-internal/project-profile.md)
+    SUB_TYPE=$(awk -v s="### $SLUG" '$0==s{f=1;next} f && /^### /{exit} f && /^\*\*Type\*\*:/{sub(/^\*\*Type\*\*: */,""); print; exit}' .ai-internal/project-profile.md)
+    {
+      echo "SDD_SUB_${SLUG_UPPER}_SLUG=\"$SLUG\""
+      echo "SDD_SUB_${SLUG_UPPER}_PATH=\"$SUB_PATH\""
+      echo "SDD_SUB_${SLUG_UPPER}_FRAMEWORK=\"$SUB_FRAMEWORK\""
+      echo "SDD_SUB_${SLUG_UPPER}_TYPE=\"$SUB_TYPE\""
+    } >> .ai-internal/project-vars.sh
+  done
+fi
 
 echo "✅ project-vars.sh generado"
 ```

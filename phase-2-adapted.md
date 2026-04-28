@@ -36,7 +36,23 @@ Al generar archivos que referencian MCP tools (create-tickets, enrich-ticket, co
 
 ### `CLAUDE.md`
 
-> **Si el tipo es `monorepo-fullstack`**: el CLAUDE.md incluye AMBOS stacks en secciones separadas.
+> **Si MULTI_TARGET_MODE == true**: el CLAUDE.md incluye una **tabla de servicios** al inicio (después del título), una entrada por cada subproyecto del array `SDD_SUBPROJECT_SLUGS`. Formato:
+>
+> ```markdown
+> ## Subproyectos (modo multi-target)
+>
+> | Servicio | Path | Tipo | Framework | Comando dev | Standards |
+> |----------|------|------|-----------|-------------|-----------|
+> | auth-service | services/auth | backend | NestJS 10 | `/develop-auth-service` | `ai-specs/specs/auth-service-standards.mdc` |
+> | payments-service | services/payments | backend | Go 1.22 | `/develop-payments-service` | `ai-specs/specs/payments-service-standards.mdc` |
+> | shell | apps/shell | frontend | Next.js 14 | `/develop-shell` | `ai-specs/specs/shell-standards.mdc` |
+>
+> > **Cada ticket apunta a UN subproyecto.** Antes de planificar, el menú pregunta cuál y registra el target con `sdd_set_target_subproject`. El comando de develop a usar es siempre `/develop-{slug}`.
+> ```
+>
+> Después de la tabla, omitir las secciones genéricas "Architecture" / "Adding a New Resource" / "Key Patterns" del CLAUDE.md base — esos detalles viven ahora en cada `{slug}-standards.mdc`. Mantener solo: comandos globales del repo (si los hay — ej. `pnpm install` en raíz), guidelines transversales (idioma, branching, commits) y el link a la tabla.
+>
+> **Si el tipo es `monorepo-fullstack` Y MULTI_TARGET_MODE == false**: el CLAUDE.md incluye AMBOS stacks en secciones separadas.
 > La sección Architecture tiene subsecciones `### Frontend ({path_front}/)` y `### Backend ({path_back}/)`.
 > Los comandos de desarrollo incluyen los de ambos subdirectorios (ej: `cd {path_front} && npm run dev`, `cd {path_back} && npm run start:dev`).
 > La sección "Adding a New Resource" tiene dos subsecciones: una para el frontend y otra para el backend.
@@ -177,7 +193,9 @@ rules:
 
 > Nombrá el archivo según el tipo detectado: `frontend-developer.md` | `backend-developer.md` | `fullstack-developer.md` | `mobile-developer.md`
 >
-> **Si el tipo es `monorepo-fullstack`**: generá **DOS** archivos de agent — uno para frontend y otro para backend.
+> **Si MULTI_TARGET_MODE == true**: generá **un archivo de agent por cada subproyecto** listado en `SDD_SUBPROJECT_SLUGS`. Nombre: `ai-specs/.agents/{slug}-developer.md`. Cada uno con el stack y framework de su subproyecto.
+>
+> **Si el tipo es `monorepo-fullstack` Y MULTI_TARGET_MODE == false**: generá **DOS** archivos de agent — uno para frontend y otro para backend.
 > Cada agent es especialista en su subdirectorio y stack. Los datos de cada uno vienen de la sección `## Subprojects` del `project-profile.md`.
 
 **Para tipo `monorepo-fullstack`**, generar:
@@ -255,7 +273,12 @@ Senior {framework} architect. Plans production-ready features following establis
 
 ### `ai-specs/.commands/develop-{tipo}.md`
 
-> **Si el tipo es `monorepo-fullstack`**: generá **DOS** archivos de develop command:
+> **Si MULTI_TARGET_MODE == true** (microservicios / microfrontends): generá **un develop-{slug}.md por cada subproyecto** listado en `SDD_SUBPROJECT_SLUGS`.
+> - Cada archivo se especializa en `{path}/` del subproyecto correspondiente y lee `ai-specs/specs/{slug}-standards.mdc`.
+> - El nombre del comando es `/develop-{slug}` (ej: `/develop-auth-service`, `/develop-payments-service`, `/develop-shell-mfe`).
+> - Cada ticket elige UN subproyecto target (regla acordada V4.10). Tickets que tocan varios servicios → split en sub-tickets, cada uno con su target.
+>
+> **Si tipo == `monorepo-fullstack` Y MULTI_TARGET_MODE == false** (1 frontend + 1 backend clásico): generá **DOS** archivos de develop command:
 > - `ai-specs/.commands/develop-frontend.md` — especializado en el subdirectorio frontend
 > - `ai-specs/.commands/develop-backend.md` — especializado en el subdirectorio backend
 >
@@ -267,7 +290,7 @@ Senior {framework} architect. Plans production-ready features following establis
 > En el paso "0. Crear rama", la rama es compartida (un ticket puede tocar front y back).
 > El develop-frontend trabaja solo en `{path_front}/` y el develop-backend solo en `{path_back}/`.
 >
-> **Para tickets que tocan ambos**: el usuario ejecuta primero `/develop-backend {ID}` y luego `/develop-frontend {ID}` (o viceversa), ambos en la misma rama feature.
+> **Para tickets que tocan ambos** (solo modo clásico): el usuario ejecuta primero `/develop-backend {ID}` y luego `/develop-frontend {ID}` (o viceversa), ambos en la misma rama feature.
 
 ```markdown
 # Role
@@ -407,9 +430,23 @@ Si `PLAN_TEMPLATE=MISSING`: DETENER con error "Template de plan-ticket no encont
 ```bash
 source .ai-internal/project-vars.sh
 
-if [ "$SDD_TIPO" = "monorepo-fullstack" ]; then
-  # Generar dos archivos de plan — uno para frontend, otro para backend
-  # Los frameworks de cada subproject se leen del project-profile.md
+if [ "$SDD_MULTI_TARGET_MODE" = "true" ] && [ -n "$SDD_SUBPROJECT_SLUGS" ]; then
+  # MULTI-TARGET: un plan-ticket por subproyecto, sufijo = slug
+  IFS=',' read -ra SLUG_ARRAY <<< "$SDD_SUBPROJECT_SLUGS"
+  for SLUG in "${SLUG_ARRAY[@]}"; do
+    SLUG_UPPER=$(echo "$SLUG" | tr '[:lower:]-' '[:upper:]_')
+    SUB_FRAMEWORK_VAR="SDD_SUB_${SLUG_UPPER}_FRAMEWORK"
+    SUB_TYPE_VAR="SDD_SUB_${SLUG_UPPER}_TYPE"
+    SUB_FRAMEWORK="${!SUB_FRAMEWORK_VAR:-unknown}"
+    SUB_TYPE="${!SUB_TYPE_VAR:-unknown}"
+    echo "Generando plan-${SLUG}-ticket.md desde template..."
+    sed "s/__SDD_FRAMEWORK__/$SUB_FRAMEWORK/g; s/__SDD_NOMBRE__/$SDD_NOMBRE/g; s/__SDD_TIPO__/$SUB_TYPE/g; s/__SDD_IDIOMA_TECNICO__/$SDD_IDIOMA_TECNICO/g" \
+        .ai-internal/templates/plan-ticket-template.md > "ai-specs/.commands/plan-${SLUG}-ticket.md"
+    PLAN_LINES=$(wc -l < "ai-specs/.commands/plan-${SLUG}-ticket.md")
+    echo "plan-${SLUG}-ticket.md generado ($PLAN_LINES líneas)"
+  done
+elif [ "$SDD_TIPO" = "monorepo-fullstack" ]; then
+  # FULLSTACK CLÁSICO 1+1: mantiene backwards-compat con frontend/backend
   FRONT_FRAMEWORK=$(grep -A5 "### frontend" .ai-internal/project-profile.md | grep "Framework" | sed 's/.*\*\*Framework\*\*: //' | awk '{print $1}')
   BACK_FRAMEWORK=$(grep -A5 "### backend" .ai-internal/project-profile.md | grep "Framework" | sed 's/.*\*\*Framework\*\*: //' | awk '{print $1}')
 
@@ -424,6 +461,7 @@ if [ "$SDD_TIPO" = "monorepo-fullstack" ]; then
   echo "plan-frontend-ticket.md generado ($(wc -l < ai-specs/.commands/plan-frontend-ticket.md) líneas)"
   echo "plan-backend-ticket.md generado ($(wc -l < ai-specs/.commands/plan-backend-ticket.md) líneas)"
 else
+  # PLANO: un solo plan-ticket
   TIPO_LOWER=$(echo "$SDD_TIPO" | tr '[:upper:]' '[:lower:]')
   echo "Generando plan-${TIPO_LOWER}-ticket.md desde template..."
 
@@ -649,7 +687,9 @@ echo "documentation-standards.mdc generado ($DOC_LINES líneas)"
 
 > Nombrá según el tipo detectado: `frontend-standards.mdc` | `backend-standards.mdc` | `mobile-standards.mdc`
 >
-> **Si el tipo es `monorepo-fullstack`**: generá **DOS** archivos de standards:
+> **Si MULTI_TARGET_MODE == true**: generá **un archivo de standards por cada subproyecto** listado en `SDD_SUBPROJECT_SLUGS`. Nombre: `ai-specs/specs/{slug}-standards.mdc`. Globs apuntan a `{path_subproject}/**`. Cada uno documenta el stack y convenciones específicas del subproyecto (datos del agent que lo analizó en Phase 0b).
+>
+> **Si tipo == `monorepo-fullstack` Y MULTI_TARGET_MODE == false**: generá **DOS** archivos de standards:
 > - `ai-specs/specs/frontend-standards.mdc` — con los datos del subproject frontend, globs apuntando a `{path_front}/**`
 > - `ai-specs/specs/backend-standards.mdc` — con los datos del subproject backend, globs apuntando a `{path_back}/**`
 >

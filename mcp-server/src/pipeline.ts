@@ -133,6 +133,23 @@ export async function advance(
     };
   }
 
+  // Gate: IMPLEMENTACION en multi-target requiere targetSubproject seteado
+  if (to === PipelineState.IMPLEMENTACION) {
+    const config = await loadProjectConfig();
+    if (config?.multiTargetMode && !data.targetSubproject) {
+      const slugs = (config.subprojectSlugs ?? []).join(", ");
+      return {
+        ok: false,
+        from,
+        to,
+        error:
+          "⛔ Proyecto en modo multi-target — falta target subproject. " +
+          "Antes de implementar, llamá sdd_set_target_subproject(slug) con uno de: " +
+          `[${slugs}]. Cada ticket apunta a UN solo subproyecto.`,
+      };
+    }
+  }
+
   // Gate: IMPLEMENTACION → EVIDENCIA requires user verification
   if (from === PipelineState.IMPLEMENTACION && to === PipelineState.EVIDENCIA) {
     if (data.awaitingVerification) {
@@ -264,6 +281,7 @@ export async function advance(
     data.awaitingVerification = false;
     data.sprintValidated = false;
     data.evidenceFilePath = null;
+    data.targetSubproject = null;
   }
 
   // Reset per-ticket state when cycling back to TICKETS from COMPLETADO
@@ -275,6 +293,7 @@ export async function advance(
     data.awaitingVerification = false;
     data.sprintValidated = false;
     data.evidenceFilePath = null;
+    data.targetSubproject = null;
   }
 
   const logEntry: LogEntry = {
@@ -667,6 +686,62 @@ export async function registerMerge(
   return { ok: true };
 }
 
+// ─── Target subproject (multi-target mode) ──────────────────────────────────
+
+export interface SetTargetSubprojectResult {
+  ok: boolean;
+  slug?: string;
+  error?: string;
+}
+
+export async function setTargetSubproject(
+  slug: string,
+): Promise<SetTargetSubprojectResult> {
+  const data = await loadState();
+
+  // Solo válido entre TICKETS y PLAN (antes de implementar)
+  if (
+    data.state !== PipelineState.TICKETS &&
+    data.state !== PipelineState.PLAN
+  ) {
+    return {
+      ok: false,
+      error: `Solo se puede setear el target subproject en estado TICKETS o PLAN. Estado actual: ${data.state}.`,
+    };
+  }
+
+  const config = await loadProjectConfig();
+  if (!config?.multiTargetMode) {
+    return {
+      ok: false,
+      error:
+        "⛔ El proyecto NO está en modo multi-target. setTargetSubproject solo aplica si project-profile.md tiene `Multi Target Mode: true`.",
+    };
+  }
+
+  const allowed = config.subprojectSlugs ?? [];
+  if (!allowed.includes(slug)) {
+    return {
+      ok: false,
+      error:
+        `⛔ Slug "${slug}" no está en la lista de subproyectos del proyecto. ` +
+        `Subproyectos válidos: [${allowed.join(", ")}].`,
+    };
+  }
+
+  data.targetSubproject = slug;
+
+  const logEntry: LogEntry = {
+    timestamp: new Date().toISOString(),
+    action: "SET_TARGET_SUBPROJECT",
+    detail: `Target subproject set to "${slug}" for ticket ${data.activeTicket ?? "(none yet)"}.`,
+  };
+  data.log.push(logEntry);
+
+  await saveState(data);
+  return { ok: true, slug };
+}
+
 export interface ConfirmNextResult {
   ok: boolean;
   remainingTickets: string[];
@@ -724,6 +799,7 @@ export interface GetStateResult {
   awaitingVerification: boolean;
   sprintValidated: boolean;
   evidenceFilePath: string | null;
+  targetSubproject: string | null;
 }
 
 export async function getState(): Promise<GetStateResult> {
@@ -752,5 +828,6 @@ export async function getState(): Promise<GetStateResult> {
     awaitingVerification: data.awaitingVerification ?? false,
     sprintValidated: data.sprintValidated ?? false,
     evidenceFilePath: data.evidenceFilePath ?? null,
+    targetSubproject: data.targetSubproject ?? null,
   };
 }

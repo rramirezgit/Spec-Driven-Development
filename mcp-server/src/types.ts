@@ -51,6 +51,8 @@ export interface PipelineData {
   sprintValidated?: boolean;
   /** Path to the evidence file for the active ticket */
   evidenceFilePath?: string | null;
+  /** Slug of the active subproject target (only used when project is in multi-target mode) */
+  targetSubproject?: string | null;
 }
 
 export interface SubprojectConfig {
@@ -78,6 +80,10 @@ export interface ProjectConfig {
   idioma: string;
   /** Present when tipo is "monorepo-fullstack" — describes each subdirectory */
   subprojects?: SubprojectConfig[];
+  /** True when project is in multi-target mode (one set of commands per subproject) */
+  multiTargetMode?: boolean;
+  /** Slugs of subprojects (only set when multiTargetMode is true) */
+  subprojectSlugs?: string[];
 }
 
 export const VALID_TRANSITIONS: Record<PipelineState, PipelineState[]> = {
@@ -148,5 +154,6 @@ export function defaultPipelineData(): PipelineData {
     awaitingVerification: false,
     sprintValidated: false,
     evidenceFilePath: null,
+    targetSubproject: null,
   };
 }

@@ -10,10 +10,10 @@ Complete plan ready to execute — no code, only the plan.
 # Process
 
 ## 1. Load context
-- Adopt `ai-specs/.agents/__SDD_TIPO__-developer.md`
+- Adopt `ai-specs/.agents/__SDD_TIPO__-developer.md` (en multi-target: el agent ya cargado es el del subproyecto target — `{slug}-developer.md`).
 - Fetch ticket via MCP (if available, else ask user for details)
-- Read `ai-specs/specs/__SDD_TIPO__-standards.mdc`
-- Explore relevant source files with `ls` and targeted `cat`
+- Read `ai-specs/specs/__SDD_TIPO__-standards.mdc` (en multi-target: `{slug}-standards.mdc`).
+- Explore relevant source files with `ls` and targeted `cat` — en multi-target, **ceñirse al `path` del subproyecto target** registrado en el pipeline state (`sdd_get_state` → `targetSubproject`). No tocar archivos fuera de ese path en este ticket.
 
 ## 2. Produce plan
 

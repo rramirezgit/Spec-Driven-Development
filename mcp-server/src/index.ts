@@ -15,6 +15,7 @@ import {
   confirmImplementation,
   confirmSprint,
   registerEvidence,
+  setTargetSubproject,
 } from "./pipeline.js";
 import type { MergeType } from "./types.js";
 import {
@@ -275,7 +276,34 @@ server.tool(
   },
 );
 
-// ─── Tool 11: sdd_confirm_next ───────────────────────────────────────────────
+// ─── Tool 11: sdd_set_target_subproject (multi-target mode) ─────────────────
+
+server.tool(
+  "sdd_set_target_subproject",
+  "Setea el subproyecto target del ticket activo. SOLO aplica en proyectos en modo multi-target " +
+    "(project-profile.md con `Multi Target Mode: true`). Cada ticket apunta a UN solo subproyecto. " +
+    "OBLIGATORIO antes de sdd_advance(IMPLEMENTACION) en multi-target — el server bloquea sin target. " +
+    "ANTES de llamar: pedir al usuario con AskUserQuestion qué subproyecto afecta el ticket. " +
+    "El slug DEBE coincidir con uno de los listados en `Subproject Slugs` del project-profile.md.",
+  {
+    slug: z.string().describe(
+      "Slug del subproyecto target (ej: 'auth-service', 'payments-service', 'shell-mfe')",
+    ),
+  },
+  async ({ slug }) => {
+    const result = await setTargetSubproject(slug);
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify(result, null, 2),
+        },
+      ],
+    };
+  },
+);
+
+// ─── Tool 12: sdd_confirm_next ───────────────────────────────────────────────
 
 server.tool(
   "sdd_confirm_next",
@@ -298,7 +326,7 @@ server.tool(
   },
 );
 
-// ─── Tool 12: sdd_transition_ticket (+ alias sdd_transition_jira) ────────────
+// ─── Tool 13: sdd_transition_ticket (+ alias sdd_transition_jira) ────────────
 
 const VALID_STATES_FOR_TICKET_TRANSITION = [
   PipelineState.COMMIT,
@@ -350,7 +378,7 @@ server.tool(
   transitionTicketHandler,
 );
 
-// ─── Tool 13: sdd_comment_ticket (+ alias sdd_comment_jira) ─────────────────
+// ─── Tool 14: sdd_comment_ticket (+ alias sdd_comment_jira) ─────────────────
 
 const VALID_STATES_FOR_TICKET_COMMENT = [
   PipelineState.COMMIT,
