@@ -1,16 +1,16 @@
 {
-  "version": "4.10",
-  "generated_at": "2026-04-28T22:11:17Z",
+  "version": "4.11",
+  "generated_at": "2026-04-28T22:32:30Z",
   "files": {
     "phase-0-detect.md": "4eab78b9b9a89d24bd93420c41a110a3aa7c4821a57c9bed0c8a360486937fee",
     "phase-0a-mcps-tracker.md": "de93780de6b6ee06fbe3613f26278564b1d41e33a29a3a7f5d9c22d9e2409200",
     "phase-0b-codebase.md": "2339b399c52eaa92377b3c5a9737bf474cafcd72ab2946f63022636d074b47ed",
     "phase-0c-confirm.md": "af7a906ba2ec466958a1f6d5a315a964ea8aaf82624c0fc07980e13e1aa40ce2",
     "phase-1-reusables.md": "587ddcb1f57ed8747cc09785d429f3f58cf1bf9b86969b85bccfc515e9644d72",
-    "CHANGELOG.md": "542e710ec4e37eba2685187af21be87b34917c16da8bee8fc6bb2b85f7a020ac",
+    "CHANGELOG.md": "8ab35e1d40c8f6a7b0bb198d856f1335798896a8fd5af80e914168763f2ae8cb",
     "phase-2-adapted.md": "24f831bcb92ba918ca05fd8463e227488cda769686ca5224294fd1a47330d6f2",
     "phase-3-finalize.md": "9e8c1a6dbf2e0656e5e0e59a8b962145b96c21363ccc756edef6f06722b9c479",
-    "bootstrap.md": "305a0b74a83637d0508fb0c4b20fcfbee2d6b06a578fc5c2822b25bd13e66100",
+    "bootstrap.md": "94bfdafbf782fe2b9e65cfbc67b3f0f78874ec74467c7c1c7e905657b6b5d143",
     "mcp-server/package.json": "f9ce9bfb4bffe48dc50eab0e9b000838a8e3a6da12e2da43dd7c33debe302f23",
     "mcp-server/tsconfig.json": "579bb660bad1636c30081102e48f4b56d22e3acd1afeaf8eee282d4a37b4e9d6",
     "mcp-server/src/types.ts": "d265feb9498dc7bd030e2c71515de9780e1c172c115d0fc216cee150e10a82c5",
@@ -38,7 +38,7 @@
     "reusables/opsx/onboard.md": "49f62ee24561f0138d8c14ddc3c9778350aa806c0402d6cd0c7794207df1ca06",
     "reusables/commands/explain.md": "f151fe2c40531ff2f9eb91c86942af941a7eaf08f92a0c36b040950d585699eb",
     "reusables/commands/meta-prompt.md": "deafaf476668a2f688bb00c9a024ccddb81940347c4c6c92c8c7b08e0aae0c53",
-    "reusables/commands/commit.md": "f880f2e66f7567e2329a4b4281bd64974f0369ca2c42b467dbd33f3f378eb0ae",
+    "reusables/commands/commit.md": "655057db4500bf67630c347ac904466e98c1e8f405d793534acece57e6e46af1",
     "reusables/commands/update-docs.md": "729d927ad2fd0f708252f42664375e69090c668b58520643755e1554bf9c73bf",
     "reusables/commands/review-pr.md": "b4d461f88a4001bc748f03d2edf0fab9802f01cc8e3cad67fef3d41ea2c5ad15",
     "reusables/commands/test-plan.md": "bce481a068250b8389551b61ed9745b77f3b8406e1189abecebc90ffb5c6f757",
@@ -48,6 +48,6 @@
     "reusables/agents/product-strategy-analyst.md": "8e7cb2dffb451da5968180bf23aeb02cf9ad4e4f591ee3d578305c2eb1c548ec",
     "hooks/pre-compact-marker.sh": "9e6f509406817e0a997e98af35896df73c163502f2b9b9b35b3dc9f64e7964af",
     "hooks/post-compact-reminder.sh": "51f9120096365156c5a0a5d75f3dfd19b0427dd9b42fefb1643b3e69e593a934",
-    "hooks/guard-dangerous-ops.sh": "a493b7f1cbd6bea640bd88131104fd6fdb104f9dc90bd4322fe39387c7bb6a0c"
+    "hooks/guard-dangerous-ops.sh": "9f88341bd7223f72660f9c4a66ce5bde5f447817c58e38c532a73457950eb07f"
   }
 }

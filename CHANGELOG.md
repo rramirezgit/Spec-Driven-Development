@@ -6,6 +6,14 @@ está al tope.
 
 ---
 
+## V4.11 — Push a dev permitido + confirmación obligatoria en /commit
+
+| Cambio | Impacto |
+|--------|---------|
+| Guard hook relajado | `guard-dangerous-ops.sh` ya NO bloquea `git push` a `dev` ni a feature branches. Sigue bloqueando push a `main`/`master`, push --force/-f, reset --hard, clean -f, y merges destructivos. Regex endurecida para evitar falsos positivos en branches con "main" como substring (ej. `feature/main-rewrite` pasa). |
+| Confirmación obligatoria en /commit | Antes de cada `git push` (paso 5 push del feature branch, paso 6.2 push del merge a dev), `/commit` usa `AskUserQuestion` para pedir confirmación explícita al usuario. Opción "No pushear todavía" deja el commit/merge local intacto y HALT. |
+| Filosofía | El bloqueo del hook era too aggressive (impedía push hasta a dev). La confirmación se mueve al lugar natural — el comando `/commit` — donde el usuario ve el resumen y decide. |
+
 ## V4.10 — Modo multi-target (microservicios / microfrontends)
 
 | Cambio | Impacto |

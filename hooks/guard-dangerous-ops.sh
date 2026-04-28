@@ -10,17 +10,21 @@ TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // empty')
 if [ "$TOOL_NAME" = "Bash" ]; then
   COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
 
-  # Block git push (any variant)
-  if echo "$COMMAND" | grep -qE '^git\s+push\b|&&\s*git\s+push\b|;\s*git\s+push\b'; then
-    echo "🛑 git push bloqueado por SDD guardrail. Pedí confirmación al usuario antes de pushear." >&2
+  # Block push to protected branches (main / master). Push a dev y feature
+  # branches está permitido — la confirmación previa al push se hace en /commit
+  # vía AskUserQuestion (V4.11+).
+  # Regex exige espacio antes y espacio/EOL/&&/;/| después del nombre de la rama
+  # para no matchear substrings como "feature/main-rewrite".
+  if echo "$COMMAND" | grep -qE 'git\s+push\b.*\s(main|master)(\s|$|&|;|\|)'; then
+    echo "🛑 git push a main/master bloqueado por SDD guardrail. Releases van solo via /release-to-main (PR dev→main)." >&2
     exit 2
   fi
 
   # Block git merge to protected branches
   if echo "$COMMAND" | grep -qE 'git\s+merge\b'; then
-    # Extract target or current context — block merges to main/master/dev/develop
-    if echo "$COMMAND" | grep -qE 'git\s+(checkout|switch)\s+(main|master|dev|develop)\s*&&\s*git\s+merge'; then
-      echo "🛑 merge a branch protegida bloqueado por SDD guardrail. Pedí confirmación al usuario." >&2
+    # Extract target or current context — block merges to main/master
+    if echo "$COMMAND" | grep -qE 'git\s+(checkout|switch)\s+(main|master)\s*&&\s*git\s+merge'; then
+      echo "🛑 merge a main/master bloqueado por SDD guardrail. Pedí confirmación al usuario." >&2
       exit 2
     fi
   fi

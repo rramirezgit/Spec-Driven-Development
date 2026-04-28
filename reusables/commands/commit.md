@@ -49,7 +49,19 @@ test -f "docs/evidence/${TICKET_ID}.md" && echo "EVIDENCE_EXISTS" || echo "NO_EV
 - Never commit: secrets, .env, generated artifacts
 
 ## 5. Commit and push
-`git push -u origin <branch>` if new branch.
+
+Después del commit local, **antes** de cualquier `git push`:
+
+1. Mostrar el estado al usuario: rama actual, último commit (subject + 1 línea), si la rama existe en remoto o es nueva.
+2. **AskUserQuestion** (single_select): `"¿Pushear {CURRENT_BRANCH} a origin?"`
+   Opciones:
+   - `"Sí, pushear"` → ejecutar `git push -u origin <branch>` (con `-u` si la rama es nueva).
+   - `"No pushear todavía"` → HALT con mensaje: "Commit local hecho. Pushea manualmente cuando quieras."
+3. Solo después de respuesta afirmativa: ejecutar el push.
+
+> **Por qué**: el guard hook (V4.11+) ya no bloquea push a `dev` ni a feature branches.
+> La confirmación interactiva pasa a hacerse acá en `/commit` para que el usuario
+> tenga siempre un punto de control antes de subir código a remoto.
 
 ## 6. Merge a dev (directo, sin PR)
 
@@ -85,9 +97,20 @@ git fetch origin
 git checkout {DEV_BRANCH}
 git pull origin {DEV_BRANCH}
 git merge {CURRENT_BRANCH} --no-edit
-git push origin {DEV_BRANCH}
-git checkout {CURRENT_BRANCH}
 ```
+
+**Antes del `git push origin {DEV_BRANCH}`** (push del merge a remoto):
+
+1. Mostrar resumen: archivos mergeados, número de commits incorporados, head local vs remoto.
+2. **AskUserQuestion** (single_select): `"¿Pushear el merge a origin/{DEV_BRANCH}?"`
+   Opciones:
+   - `"Sí, pushear merge a {DEV_BRANCH}"` → ejecutar `git push origin {DEV_BRANCH}`.
+   - `"No pushear todavía — quiero revisar"` → HALT. Dejar el merge local hecho. Volver a la rama original con `git checkout {CURRENT_BRANCH}` y avisar: "Merge local hecho en {DEV_BRANCH}. No se pushea hasta que confirmes."
+3. Solo después de respuesta afirmativa:
+   ```bash
+   git push origin {DEV_BRANCH}
+   git checkout {CURRENT_BRANCH}
+   ```
 
 **Si hay conflictos de merge**: NO resolverlos automáticamente. Mostrar:
 ```
