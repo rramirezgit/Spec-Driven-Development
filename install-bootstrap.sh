@@ -216,39 +216,48 @@ for ENTRY in "${FILES[@]}"; do
 
   printf "  ⏳ %s..." "$FILENAME"
 
-  CONTENT=""
   DL_ERROR=""
   HTTP_STATUS=""
 
+  # Descargar DIRECTO al archivo de staging — nunca a una variable.
+  # Bash command substitution strip trailing newlines, lo que rompe el SHA-256
+  # respecto al archivo original en el repo.
   if [ "$DOWNLOAD_METHOD" = "gh" ]; then
-    CONTENT=$(gh api "repos/${REPO}/contents/${REPO_PATH}" \
-      -H "Accept: application/vnd.github.raw+json" \
-      --method GET 2>&1) || DL_ERROR="$CONTENT"
+    if ! gh api "repos/${REPO}/contents/${REPO_PATH}" \
+         -H "Accept: application/vnd.github.raw+json" \
+         --method GET > "$STAGED" 2>/dev/null; then
+      DL_ERROR="gh api failed"
+    fi
   else
-    # Capture HTTP status separately so we can reject HTML error pages.
-    # -f makes curl fail on >=400, -w prints status, -o writes body.
-    TMP_BODY=$(mktemp)
-    HTTP_STATUS=$(curl -sS -o "$TMP_BODY" -w "%{http_code}" \
+    HTTP_STATUS=$(curl -sS -o "$STAGED" -w "%{http_code}" \
       -H "Authorization: token $GITHUB_TOKEN" \
-      "https://raw.githubusercontent.com/${REPO}/${BRANCH}/${REPO_PATH}" 2>&1) \
+      "https://raw.githubusercontent.com/${REPO}/${BRANCH}/${REPO_PATH}" 2>/dev/null) \
       || DL_ERROR="curl failed"
-    if [ "$HTTP_STATUS" = "200" ]; then
-      CONTENT=$(cat "$TMP_BODY")
-    else
+    if [ -z "$DL_ERROR" ] && [ "$HTTP_STATUS" != "200" ]; then
       DL_ERROR="HTTP $HTTP_STATUS"
     fi
-    rm -f "$TMP_BODY"
   fi
 
-  # Validate: no error, non-empty, minimum size, and not a GitHub API error JSON
-  # (API errors contain "message" + "documentation_url"; legit JSON files don't).
-  CONTENT_BYTES=$(printf '%s' "$CONTENT" | wc -c | tr -d ' ')
-  if [ -z "$DL_ERROR" ] && [ -n "$CONTENT" ] && \
-     [ "$CONTENT_BYTES" -gt 50 ] && \
-     ! printf '%s' "$CONTENT" | head -c 200 | grep -qi '<!doctype\|<html' && \
-     ! printf '%s' "$CONTENT" | grep -q '"documentation_url"'; then
-    printf '%s' "$CONTENT" > "$STAGED"
+  # Validar leyendo del archivo en disco (no via variable, que strip newlines).
+  if [ -z "$DL_ERROR" ] && [ -s "$STAGED" ]; then
+    FILE_BYTES=$(wc -c < "$STAGED" | tr -d ' ')
+    HEAD_BLOB=$(head -c 1024 "$STAGED" 2>/dev/null)
+    IS_HTML_ERROR=false
+    IS_API_ERROR=false
+    if [ "$FILE_BYTES" -lt 50 ]; then
+      DL_ERROR="contenido demasiado corto ($FILE_BYTES bytes)"
+    elif printf '%s' "$HEAD_BLOB" | head -c 200 | grep -qi '<!doctype\|<html'; then
+      IS_HTML_ERROR=true
+      DL_ERROR="recibido HTML (probable página de error)"
+    elif printf '%s' "$HEAD_BLOB" | grep -q '"documentation_url"'; then
+      IS_API_ERROR=true
+      DL_ERROR="recibido GitHub API error JSON"
+    fi
+  elif [ -z "$DL_ERROR" ]; then
+    DL_ERROR="archivo vacío o no creado"
+  fi
 
+  if [ -z "$DL_ERROR" ]; then
     # Verificar SHA-256 contra manifest (si disponible)
     HASH_OK=true
     if [ "$MANIFEST_AVAILABLE" = "true" ] && command -v jq >/dev/null 2>&1 && command -v shasum >/dev/null 2>&1; then
@@ -277,6 +286,7 @@ for ENTRY in "${FILES[@]}"; do
     if [ -n "$DL_ERROR" ]; then
       echo "     Error: $(echo "$DL_ERROR" | head -2)"
     fi
+    rm -f "$STAGED"
     FAILED=$((FAILED + 1))
   fi
 done
