@@ -3,6 +3,7 @@ name: "OPSX: Verify"
 description: Verify implementation matches change artifacts before archiving
 category: Workflow
 tags: [workflow, verify]
+sdd_version: "1.0"
 ---
 
 **Input**: Optional change name. If omitted, prompt.

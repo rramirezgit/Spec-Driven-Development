@@ -1,3 +1,10 @@
+<!-- ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+SYNC BUDDY: create-tickets-template-notion.md
+Contrato compartido: create-tickets-shared.md
+Steps 0, 2-5, 7 y "Reglas" deben mantenerse alineados con su buddy.
+Cambios en secciones marcadas como compartidas → actualizar AMBOS templates.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ -->
+
 # Role
 Product Owner experto. Tickets claros y completos en __SDD_IDIOMA_TICKETS__, listos para implementar.
 

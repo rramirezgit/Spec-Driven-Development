@@ -1,3 +1,4 @@
+<!-- sdd-version: 1.0 -->
 # Role
 Senior QA Engineer. Comprehensive, executable test plans aligned with project's testing framework.
 

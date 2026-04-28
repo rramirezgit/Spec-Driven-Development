@@ -136,7 +136,16 @@ El bootstrap detecta automaticamente el upgrade y entra en **Modo Upgrade**:
 - **Pipeline legacy**: si tenia `pipeline-tracker.md`, lo migra a `pipeline-state.json`
 - **Archivos editados manualmente**: backup antes de sobreescribir
 
-> **Nota**: `migrate-to-mcp.sh` esta **deprecado** — el upgrade automatico de `/bootstrap` ahora cubre todo lo que hacia ese script (y mas). Usa `install-bootstrap.sh` + `/bootstrap` en su lugar.
+> **Nota**: `migrate-to-mcp.sh` fue eliminado en V4.9 — el upgrade automático de `/bootstrap` cubre todo lo que hacía ese script. Usa `install-bootstrap.sh` + `/bootstrap`.
+
+### Que cambia en V4.9
+
+| Cambio | Impacto |
+|--------|---------|
+| Evidencia con plantilla estandar | Comentario al ticket es una plantilla fija con dos secciones ("Que se hizo" y "Como probarlo"), ambas en lenguaje no tecnico. Misma plantilla para todos los tipos de proyecto. |
+| Figma ya no es gate obligatorio | Eliminado `sdd_register_figma_link` y el gate de IMPLEMENTACION. Figma sigue detectandose como MCP opcional. |
+| Screenshot ya no es gate obligatorio | Eliminado `sdd_register_screenshot` y el gate de COMMIT. Sin screenshots ni Chrome DevTools en `/evidence`. |
+| Comentario QA simplificado | Sin links a Figma/screenshots/branches/endpoints/archivos. Autocontenido y legible por no programadores. |
 
 ### Que cambia en V4.8
 

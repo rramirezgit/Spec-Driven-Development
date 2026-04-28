@@ -556,11 +556,11 @@ else
   echo "  ✅ Longitud: $MENU_LINES líneas"
 fi
 
-# Verificar que NO contiene placeholders sin reemplazar
-UNREPLACED=$(grep -c '{{' .claude/commands/menu.md 2>/dev/null || echo "0")
+# Verificar que NO contiene placeholders sin reemplazar (formato __SDD_NOMBRE__)
+UNREPLACED=$(grep -c -E '__SDD_[A-Z_]+__' .claude/commands/menu.md 2>/dev/null || echo "0")
 if [ "$UNREPLACED" -gt 0 ]; then
-  echo "  ❌ $UNREPLACED placeholders {{...}} sin reemplazar"
-  grep '{{' .claude/commands/menu.md
+  echo "  ❌ $UNREPLACED placeholders __SDD_*__ sin reemplazar"
+  grep -E '__SDD_[A-Z_]+__' .claude/commands/menu.md
   MENU_ERRORS=$((MENU_ERRORS + 1))
 else
   echo "  ✅ Todos los placeholders reemplazados"

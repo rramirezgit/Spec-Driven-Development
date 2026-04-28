@@ -3,6 +3,7 @@ name: "OPSX: Onboard"
 description: Guided onboarding - walk through a complete OpenSpec workflow cycle
 category: Workflow
 tags: [workflow, onboarding, tutorial]
+sdd_version: "1.0"
 ---
 
 Guide the user through their first complete OpenSpec workflow cycle.

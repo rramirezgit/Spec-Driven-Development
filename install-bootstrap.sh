@@ -12,7 +12,11 @@ BRANCH="main"
 # Formato: "ruta_en_repo|ruta_destino_local"
 FILES=(
   "phase-0-detect.md|.ai-internal/phases/phase-0-detect.md"
+  "phase-0a-mcps-tracker.md|.ai-internal/phases/phase-0a-mcps-tracker.md"
+  "phase-0b-codebase.md|.ai-internal/phases/phase-0b-codebase.md"
+  "phase-0c-confirm.md|.ai-internal/phases/phase-0c-confirm.md"
   "phase-1-reusables.md|.ai-internal/phases/phase-1-reusables.md"
+  "CHANGELOG.md|.ai-internal/CHANGELOG.md"
   "phase-2-adapted.md|.ai-internal/phases/phase-2-adapted.md"
   "phase-3-finalize.md|.ai-internal/phases/phase-3-finalize.md"
   "bootstrap.md|.claude/commands/bootstrap.md"
@@ -57,7 +61,7 @@ FILES=(
 )
 
 echo ""
-echo "🔧 Spec-Driven Development — Bootstrap V4.8"
+echo "🔧 Spec-Driven Development — Bootstrap V4.9"
 echo "============================================="
 echo ""
 
@@ -151,44 +155,123 @@ else
   echo ".ai-internal/" > .gitignore
 fi
 
-# ── Descargar ────────────────────────────────────
+# ── Descargar (atomic: staging dir + commit al final) ──────────
 echo ""
 echo "📥 Descargando archivos..."
 echo ""
 
+# Staging area: descargas van acá primero; si todo OK, se mueven al destino final.
+# Si algo falla, el trap limpia y la instalación previa queda intacta.
+STAGING=$(mktemp -d "${PWD}/.bootstrap-staging.XXXXXX")
+trap 'rm -rf "$STAGING"' EXIT
+
+# ── Descargar manifest primero (defensa contra MITM y corrupción de transit) ──
+# El manifest contiene SHA-256 esperado de cada archivo. Si falta, seguimos
+# en modo "best effort" (compatibilidad con repos pre-V4.9 sin manifest).
+MANIFEST_AVAILABLE=false
+MANIFEST_FILE="$STAGING/.bootstrap-manifest.json"
+echo "  ⏳ bootstrap-manifest.json..."
+if [ "$DOWNLOAD_METHOD" = "gh" ]; then
+  gh api "repos/${REPO}/contents/bootstrap-manifest.json" \
+    -H "Accept: application/vnd.github.raw+json" \
+    --method GET 2>/dev/null > "$MANIFEST_FILE" \
+    && MANIFEST_AVAILABLE=true || true
+else
+  curl -sSf -o "$MANIFEST_FILE" \
+    -H "Authorization: token $GITHUB_TOKEN" \
+    "https://raw.githubusercontent.com/${REPO}/${BRANCH}/bootstrap-manifest.json" 2>/dev/null \
+    && MANIFEST_AVAILABLE=true || true
+fi
+
+if [ "$MANIFEST_AVAILABLE" = "true" ] && command -v jq >/dev/null 2>&1; then
+  MANIFEST_VERSION=$(jq -r '.version // "unknown"' "$MANIFEST_FILE" 2>/dev/null)
+  MANIFEST_COUNT=$(jq -r '.files | length' "$MANIFEST_FILE" 2>/dev/null)
+  echo "  ✅ Manifest cargado (versión $MANIFEST_VERSION, $MANIFEST_COUNT archivos con hash)"
+else
+  echo "  ⚠️  Manifest no disponible — se continúa sin verificación de hash"
+  MANIFEST_AVAILABLE=false
+fi
+
 DOWNLOADED=0
 FAILED=0
+HASH_MISMATCHES=0
 
 for ENTRY in "${FILES[@]}"; do
   REPO_PATH="${ENTRY%%|*}"
   DEST="${ENTRY##*|}"
   FILENAME=$(basename "$REPO_PATH")
 
-  mkdir -p "$(dirname "$DEST")"
+  # Sandbox check: DEST must be relative, must not contain ".." segments,
+  # and must stay within the project directory. Rejects path traversal.
+  case "$DEST" in
+    /*|*..*)
+      printf "  ❌ %-28s — ruta inválida (path traversal): %s\n" "$FILENAME" "$DEST"
+      FAILED=$((FAILED + 1))
+      continue
+      ;;
+  esac
+
+  STAGED="$STAGING/$DEST"
+  mkdir -p "$(dirname "$STAGED")"
 
   printf "  ⏳ %s..." "$FILENAME"
 
   CONTENT=""
   DL_ERROR=""
+  HTTP_STATUS=""
 
   if [ "$DOWNLOAD_METHOD" = "gh" ]; then
     CONTENT=$(gh api "repos/${REPO}/contents/${REPO_PATH}" \
       -H "Accept: application/vnd.github.raw+json" \
       --method GET 2>&1) || DL_ERROR="$CONTENT"
   else
-    CONTENT=$(curl -sf -H "Authorization: token $GITHUB_TOKEN" \
-      "https://raw.githubusercontent.com/${REPO}/${BRANCH}/${REPO_PATH}" 2>&1) || DL_ERROR="$CONTENT"
+    # Capture HTTP status separately so we can reject HTML error pages.
+    # -f makes curl fail on >=400, -w prints status, -o writes body.
+    TMP_BODY=$(mktemp)
+    HTTP_STATUS=$(curl -sS -o "$TMP_BODY" -w "%{http_code}" \
+      -H "Authorization: token $GITHUB_TOKEN" \
+      "https://raw.githubusercontent.com/${REPO}/${BRANCH}/${REPO_PATH}" 2>&1) \
+      || DL_ERROR="curl failed"
+    if [ "$HTTP_STATUS" = "200" ]; then
+      CONTENT=$(cat "$TMP_BODY")
+    else
+      DL_ERROR="HTTP $HTTP_STATUS"
+    fi
+    rm -f "$TMP_BODY"
   fi
 
-  # Validate: non-empty, more than 3 lines, and not a GitHub API error response
-  # (API errors contain "message" and "documentation_url" — legit JSON files like package.json don't)
+  # Validate: no error, non-empty, minimum size, and not a GitHub API error JSON
+  # (API errors contain "message" + "documentation_url"; legit JSON files don't).
+  CONTENT_BYTES=$(printf '%s' "$CONTENT" | wc -c | tr -d ' ')
   if [ -z "$DL_ERROR" ] && [ -n "$CONTENT" ] && \
-     [ "$(printf '%s' "$CONTENT" | wc -l)" -gt 3 ] && \
+     [ "$CONTENT_BYTES" -gt 50 ] && \
+     ! printf '%s' "$CONTENT" | head -c 200 | grep -qi '<!doctype\|<html' && \
      ! printf '%s' "$CONTENT" | grep -q '"documentation_url"'; then
-    printf '%s' "$CONTENT" > "$DEST"
-    LINES=$(wc -l < "$DEST" | tr -d ' ')
-    printf "\r  ✅ %-28s → %s (%s líneas)\n" "$FILENAME" "$DEST" "$LINES"
-    DOWNLOADED=$((DOWNLOADED + 1))
+    printf '%s' "$CONTENT" > "$STAGED"
+
+    # Verificar SHA-256 contra manifest (si disponible)
+    HASH_OK=true
+    if [ "$MANIFEST_AVAILABLE" = "true" ] && command -v jq >/dev/null 2>&1 && command -v shasum >/dev/null 2>&1; then
+      EXPECTED_HASH=$(jq -r --arg k "$REPO_PATH" '.files[$k] // empty' "$MANIFEST_FILE" 2>/dev/null)
+      if [ -n "$EXPECTED_HASH" ]; then
+        ACTUAL_HASH=$(shasum -a 256 "$STAGED" | awk '{print $1}')
+        if [ "$ACTUAL_HASH" != "$EXPECTED_HASH" ]; then
+          HASH_OK=false
+          printf "\r  ❌ %-28s — hash mismatch\n" "$FILENAME"
+          echo "     Esperado: $EXPECTED_HASH"
+          echo "     Recibido: $ACTUAL_HASH"
+          rm -f "$STAGED"
+          HASH_MISMATCHES=$((HASH_MISMATCHES + 1))
+          FAILED=$((FAILED + 1))
+        fi
+      fi
+    fi
+
+    if [ "$HASH_OK" = "true" ]; then
+      LINES=$(wc -l < "$STAGED" | tr -d ' ')
+      printf "\r  ✅ %-28s → %s (%s líneas)\n" "$FILENAME" "$DEST" "$LINES"
+      DOWNLOADED=$((DOWNLOADED + 1))
+    fi
   else
     printf "\r  ❌ %-28s — falló\n" "$FILENAME"
     if [ -n "$DL_ERROR" ]; then
@@ -202,11 +285,49 @@ echo ""
 
 if [ "$FAILED" -gt 0 ]; then
   echo "⚠️  $FAILED archivos fallaron."
+  if [ "$HASH_MISMATCHES" -gt 0 ]; then
+    echo "   $HASH_MISMATCHES de ellos por hash mismatch (contenido descargado no coincide con manifest)."
+    echo "   Esto puede indicar: (a) MITM/proxy modificando contenido, (b) repo en estado inconsistente,"
+    echo "   (c) manifest desactualizado respecto al branch. Reportar al mantenedor."
+  fi
+  echo "   Instalación abortada — la versión previa queda intacta (staging descartado)."
   echo ""
   echo "   Debug: gh api repos/${REPO}/contents --jq '.[].path'"
   echo ""
   exit 1
 fi
+
+# ── Commit atomic: mover archivos del staging a sus destinos finales ────
+# A esta altura todas las descargas tuvieron éxito. Se promueven en bloque.
+echo "📦 Promoviendo archivos del staging a su destino final..."
+PROMOTED=0
+PROMOTE_FAILED=0
+for ENTRY in "${FILES[@]}"; do
+  DEST="${ENTRY##*|}"
+  STAGED="$STAGING/$DEST"
+  if [ ! -f "$STAGED" ]; then
+    # Defensive: si por alguna razón no quedó staged, abortamos.
+    echo "  ❌ Falta en staging: $DEST"
+    PROMOTE_FAILED=$((PROMOTE_FAILED + 1))
+    continue
+  fi
+  mkdir -p "$(dirname "$DEST")"
+  if mv -f "$STAGED" "$DEST"; then
+    PROMOTED=$((PROMOTED + 1))
+  else
+    echo "  ❌ Falló mv: $DEST"
+    PROMOTE_FAILED=$((PROMOTE_FAILED + 1))
+  fi
+done
+
+if [ "$PROMOTE_FAILED" -gt 0 ]; then
+  echo ""
+  echo "⚠️  $PROMOTE_FAILED archivos no se pudieron promover desde staging."
+  echo "   La instalación quedó parcial — revisar permisos y reintentar."
+  exit 1
+fi
+echo "  ✅ $PROMOTED archivos promovidos."
+echo ""
 
 # ── Configurar hooks de protección ───────────────
 echo "🛡️  Configurando hooks de protección..."

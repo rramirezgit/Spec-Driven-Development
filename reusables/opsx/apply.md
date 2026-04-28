@@ -3,6 +3,7 @@ name: "OPSX: Apply"
 description: Implement tasks from an OpenSpec change
 category: Workflow
 tags: [workflow, artifacts, experimental]
+sdd_version: "1.0"
 ---
 
 **Input**: Optional change name. If omitted, infer or prompt.

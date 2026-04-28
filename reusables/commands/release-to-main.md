@@ -1,3 +1,4 @@
+<!-- sdd-version: 1.0 -->
 # Role
 Release manager. Lee tickets aprobados por QA y crea un PR de dev a main.
 
@@ -115,7 +116,6 @@ Antes de crear el PR, buscar evidencia de cada ticket:
 ```bash
 for TICKET in {lista_de_tickets_aprobados}; do
   test -f "docs/evidence/${TICKET}.md" && echo "${TICKET}=HAS_EVIDENCE" || echo "${TICKET}=NO_EVIDENCE"
-  test -f "docs/evidence/screenshots/${TICKET}.png" && echo "${TICKET}_SCREENSHOT=YES" || echo "${TICKET}_SCREENSHOT=NO"
 done
 ```
 
@@ -133,7 +133,7 @@ Crear el PR:
   ## Tickets incluidos
 
   {por cada ticket aprobado:}
-  - [{TICKET-ID}]({ticket_url}) — {título} | [Evidencia]({GH_REPO_URL}/blob/{DEV_BRANCH}/docs/evidence/{TICKET-ID}.md) {si tiene screenshot: "| [Screenshot]({GH_REPO_URL}/blob/{DEV_BRANCH}/docs/evidence/screenshots/{TICKET-ID}.png?raw=true)"}
+  - [{TICKET-ID}]({ticket_url}) — {título} | [Evidencia]({GH_REPO_URL}/blob/{DEV_BRANCH}/docs/evidence/{TICKET-ID}.md)
   > **Si tracker=jira**: `{ticket_url}` = URL de Jira issue
   > **Si tracker=notion**: `{ticket_url}` = URL de Notion page (`https://notion.so/{page_id}`)
   {si el ticket NO tiene evidencia: marcar con ⚠️ en vez de link}

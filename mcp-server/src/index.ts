@@ -11,12 +11,10 @@ import {
   setActiveTicket,
   confirmNext,
   registerBranch,
-  registerScreenshot,
   registerMerge,
   confirmImplementation,
   confirmSprint,
   registerEvidence,
-  registerFigmaLink,
 } from "./pipeline.js";
 import type { MergeType } from "./types.js";
 import {
@@ -172,59 +170,7 @@ server.tool(
   },
 );
 
-// ─── Tool 7: sdd_register_figma_link ─────────────────────────────────────────
-
-server.tool(
-  "sdd_register_figma_link",
-  "Registra el link de Figma del diseño para el ticket activo. " +
-    "OBLIGATORIO para proyectos frontend/fullstack/mobile — sdd_advance(IMPLEMENTACION) fallará sin link de Figma. " +
-    "ANTES de llamar: pedir al usuario el link de Figma con AskUserQuestion. " +
-    "El link DEBE ser una URL válida de Figma (https://figma.com/design/... o https://figma.com/file/...). " +
-    "VIOLACIÓN: inventar o adivinar un link de Figma. Siempre pedirlo al usuario.",
-  {
-    url: z.string().describe("URL de Figma del diseño (ej: https://www.figma.com/design/abc123/MiDiseño)"),
-  },
-  async ({ url }) => {
-    const result = await registerFigmaLink(url);
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: JSON.stringify(result, null, 2),
-        },
-      ],
-    };
-  },
-);
-
-// ─── Tool 8: sdd_register_screenshot ────────────────────────────────────────
-
-server.tool(
-  "sdd_register_screenshot",
-  "Registra que se capturó un screenshot de evidencia visual. " +
-    "OBLIGATORIO para proyectos frontend/fullstack/mobile — sdd_advance(COMMIT) fallará sin screenshot. " +
-    "ANTES de llamar este tool: 1) Iniciar el proyecto (npm run dev o similar), " +
-    "2) Navegar a la página afectada con Chrome DevTools o Playwright, " +
-    "3) Capturar screenshot con take_screenshot, " +
-    "4) Guardar en docs/evidence/screenshots/{TICKET_ID}.png. " +
-    "VIOLACIÓN: registrar screenshot sin haberlo capturado realmente.",
-  {
-    filePath: z.string().describe("Ruta del archivo de screenshot capturado (ej: docs/evidence/screenshots/AUTH-45.png)"),
-  },
-  async ({ filePath }) => {
-    const result = await registerScreenshot(filePath);
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: JSON.stringify(result, null, 2),
-        },
-      ],
-    };
-  },
-);
-
-// ─── Tool 8: sdd_confirm_sprint ──────────────────────────────────────────────
+// ─── Tool 7: sdd_confirm_sprint ──────────────────────────────────────────────
 
 server.tool(
   "sdd_confirm_sprint",
@@ -252,7 +198,7 @@ server.tool(
   },
 );
 
-// ─── Tool 9: sdd_confirm_implementation ─────────────────────────────────────
+// ─── Tool 8: sdd_confirm_implementation ─────────────────────────────────────
 
 server.tool(
   "sdd_confirm_implementation",
@@ -276,7 +222,7 @@ server.tool(
   },
 );
 
-// ─── Tool 10: sdd_register_evidence ─────────────────────────────────────────
+// ─── Tool 9: sdd_register_evidence ─────────────────────────────────────────
 
 server.tool(
   "sdd_register_evidence",
@@ -302,7 +248,7 @@ server.tool(
   },
 );
 
-// ─── Tool 11: sdd_register_merge ─────────────────────────────────────────────
+// ─── Tool 10: sdd_register_merge ─────────────────────────────────────────────
 
 server.tool(
   "sdd_register_merge",
@@ -329,7 +275,7 @@ server.tool(
   },
 );
 
-// ─── Tool 12: sdd_confirm_next ───────────────────────────────────────────────
+// ─── Tool 11: sdd_confirm_next ───────────────────────────────────────────────
 
 server.tool(
   "sdd_confirm_next",
@@ -352,7 +298,7 @@ server.tool(
   },
 );
 
-// ─── Tool 13: sdd_transition_ticket (+ alias sdd_transition_jira) ────────────
+// ─── Tool 12: sdd_transition_ticket (+ alias sdd_transition_jira) ────────────
 
 const VALID_STATES_FOR_TICKET_TRANSITION = [
   PipelineState.COMMIT,
@@ -404,7 +350,7 @@ server.tool(
   transitionTicketHandler,
 );
 
-// ─── Tool 14: sdd_comment_ticket (+ alias sdd_comment_jira) ─────────────────
+// ─── Tool 13: sdd_comment_ticket (+ alias sdd_comment_jira) ─────────────────
 
 const VALID_STATES_FOR_TICKET_COMMENT = [
   PipelineState.COMMIT,

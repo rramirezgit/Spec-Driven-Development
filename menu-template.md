@@ -220,18 +220,8 @@ Secuencia obligatoria:
 Ramas protegidas (main, dev, master, develop) son **RECHAZADAS por el server**.
 El nombre debe seguir el patrón `feature/`, `hotfix/`, o `bugfix/`.
 
-**⛔ GATE DE FIGMA (enforced por el MCP server para frontend/fullstack/mobile)**:
-`sdd_advance(IMPLEMENTACION)` fallará si no hay link de Figma registrado con `sdd_register_figma_link`.
-Secuencia obligatoria para proyectos con UI:
-1. Pedir al usuario el link de Figma con AskUserQuestion: "¿Cuál es el link de Figma para este ticket?"
-2. **ESPERAR respuesta del usuario** — NUNCA inventar o adivinar un link
-3. Registrar: `sdd_register_figma_link(url)`
-4. Solo entonces: `sdd_advance(IMPLEMENTACION)`
-
-Para proyectos backend-only: el Figma gate no aplica, se avanza directo.
-
 Ofrecer implementar con `/develop-__SDD_TIPO__`.
-Después: `sdd_register_branch(rama)` + (si frontend) `sdd_register_figma_link(url)` + `sdd_advance(IMPLEMENTACION)`.
+Después: `sdd_register_branch(rama)` + `sdd_advance(IMPLEMENTACION)`.
 
 ## IMPLEMENTACION → verificar y generar evidencia
 
@@ -250,23 +240,13 @@ Secuencia obligatoria:
 El server **verifica que el archivo existe en disco** — no se puede falsear.
 Secuencia: generar `/evidence` → `sdd_register_evidence("docs/evidence/{TICKET_ID}.md")`
 
-## EVIDENCIA → screenshot + commit + merge a dev (obligatorio)
+## EVIDENCIA → commit + merge a dev (obligatorio)
 Mostrar evidencia generada.
-
-**⛔ GATE DE SCREENSHOT (enforced por el MCP server para frontend/fullstack/mobile)**:
-`sdd_advance(COMMIT)` fallará si no se registró un screenshot con `sdd_register_screenshot`.
-Secuencia obligatoria para proyectos con UI:
-1. Iniciar el proyecto (`npm run dev`, `npm start`, o el comando correspondiente)
-2. Navegar a la página/vista afectada con Chrome DevTools o Playwright
-3. Verificar visualmente que el cambio funciona
-4. Capturar screenshot: `take_screenshot` → guardar en `docs/evidence/screenshots/{TICKET_ID}.png`
-5. Registrar: `sdd_register_screenshot("docs/evidence/screenshots/{TICKET_ID}.png")`
-6. Solo entonces: leer y ejecutar `/commit` → `sdd_advance(COMMIT)`
-
-Para proyectos backend-only: el screenshot gate no aplica, se avanza directo.
 
 **Esto NO es opcional** — el commit y merge a dev son parte del ciclo del ticket.
 Leer y ejecutar `/commit`. Después: `sdd_advance(COMMIT)`.
+
+> El comentario al ticket se construye con la **plantilla estándar** (definida en `/commit` §7.3): dos secciones fijas — "Qué se hizo" y "Cómo probarlo" — ambas en lenguaje no técnico, sin referencias a Figma, screenshots, archivos modificados ni endpoints.
 
 ## COMMIT → merge + transicionar ticket
 

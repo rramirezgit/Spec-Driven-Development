@@ -3,6 +3,7 @@ name: "OPSX: Explore"
 description: Enter explore mode - think through ideas before building
 category: Workflow
 tags: [workflow, explore, thinking]
+sdd_version: "1.0"
 ---
 
 Enter explore mode. Think deeply. Visualize freely.

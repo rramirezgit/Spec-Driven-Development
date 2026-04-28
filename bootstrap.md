@@ -1,11 +1,11 @@
 ---
 name: "Bootstrap: Setup AI Workflow"
-description: Configura el sistema completo de flujos AI en este proyecto (V4.8)
+description: Configura el sistema completo de flujos AI en este proyecto (V4.9)
 category: Setup
 tags: [bootstrap, setup, workflow]
 ---
 
-# Bootstrap AI Workflow V4.8
+# Bootstrap AI Workflow V4.9
 
 Sos el orquestador del bootstrap. Tu trabajo es ejecutar las fases en orden, una a la vez, cargando el archivo correspondiente.
 
@@ -24,7 +24,7 @@ test -f .bootstrap-meta.json && grep -o '"content_hash"[[:space:]]*:[[:space:]]*
 Determinar `UPGRADE_PENDING`:
 
 1. **Tier 1 — Archivo explícito**: Si `.ai-internal/.upgrade-pending` existe → `UPGRADE_PENDING=true` (leer `from_version`, `to_version`, `trigger`, `from_hash`, `to_hash` del JSON)
-2. **Tier 2 — Versión diferente**: Si no existe `.upgrade-pending` pero sí `.bootstrap-meta.json`: comparar la versión de este archivo (`bootstrap_version`) con la versión de este bootstrap (V4.8). Si son distintas → `UPGRADE_PENDING=true` (fallback)
+2. **Tier 2 — Versión diferente**: Si no existe `.upgrade-pending` pero sí `.bootstrap-meta.json`: comparar la versión de este archivo (`bootstrap_version`) con la versión de este bootstrap (V4.9). Si son distintas → `UPGRADE_PENDING=true` (fallback)
 3. **Tier 3 — Hash ausente**: Si la versión es igual PERO `content_hash` está vacío o no existe en `.bootstrap-meta.json` → `UPGRADE_PENDING=true` (el proyecto fue bootstrapped antes de la detección por hash; forzar upgrade para computar el hash inicial)
 4. Si no existe `.bootstrap-meta.json` → `UPGRADE_PENDING=false` (instalación nueva, flujo normal)
 
@@ -82,10 +82,12 @@ Parsear del `project-profile.md`:
 
 ```bash
 echo "=== CHANGELOG ==="
-head -35 .ai-internal/phases/phase-0-detect.md
+test -f .ai-internal/CHANGELOG.md && cat .ai-internal/CHANGELOG.md || cat .ai-internal/phases/phase-0-detect.md | head -50
 ```
 
-Parsear las líneas que empiezan con `> -` del bloque `Changelog V{from} → V{to}` para extraer los cambios relevantes. Si hay múltiples bloques de changelog (ej: V3→V4, V4→V4.1, V4.1→V4.3, V4.3→V4.6), incluir TODOS los que apliquen entre `from_version` y `to_version`.
+> Desde V4.9 el changelog vive en `CHANGELOG.md` (raíz del repo, descargado a `.ai-internal/CHANGELOG.md`). Para proyectos pre-V4.9 puede no existir todavía — fallback a leer las primeras líneas de `phase-0-detect.md` (que en versiones viejas tenía el changelog embebido).
+
+Parsear las entradas con formato `## VX.Y — ...` y sus tablas para extraer los cambios relevantes entre `from_version` y `to_version`. Incluir TODAS las versiones intermedias en orden cronológico.
 
 ### 0b.3 — Detectar archivos modificados manualmente + gaps de infraestructura
 
@@ -253,7 +255,7 @@ if [ ! -f .ai-internal/project-vars.sh ]; then
 fi
 ```
 
-Si no existe: leer las instrucciones de generación de `project-vars.sh` en `.ai-internal/phases/phase-0-detect.md` (sección "GUARDAR ESTADO") y ejecutarlas usando los datos del `project-profile.md` existente.
+Si no existe: leer las instrucciones de generación de `project-vars.sh` en `.ai-internal/phases/phase-0c-confirm.md` (sección "GUARDAR ESTADO") y ejecutarlas usando los datos del `project-profile.md` existente.
 
 **Después**: Leer `.ai-internal/phases/phase-2-adapted.md` y usar los datos del `project-profile.md` existente para regenerar:
 - `.claude/commands/menu.md` — **IMPORTANTE: este archivo se genera desde template con `sed`, NO por Claude. Seguir las instrucciones de phase-2-adapted.md al pie de la letra.**
@@ -551,7 +553,10 @@ Corré primero:
   ./install-bootstrap.sh
 
 O descargalos manualmente de tu repo privado a:
-  .ai-internal/phases/phase-0-detect.md
+  .ai-internal/phases/phase-0-detect.md      (orquestador)
+  .ai-internal/phases/phase-0a-mcps-tracker.md
+  .ai-internal/phases/phase-0b-codebase.md
+  .ai-internal/phases/phase-0c-confirm.md
   .ai-internal/phases/phase-1-reusables.md
   .ai-internal/phases/phase-2-adapted.md
   .ai-internal/phases/phase-3-finalize.md
@@ -571,7 +576,7 @@ Basándote en el estado:
 Mostrá:
 
 ```
-🔧 AI Workflow Bootstrap V4.8
+🔧 AI Workflow Bootstrap V4.9
 ==============================
 
 Estado:
@@ -598,7 +603,7 @@ Y empezar desde fase 0.
 
 Leer el archivo de la fase correspondiente y ejecutar sus instrucciones **completas**:
 
-- Fase 0: `cat .ai-internal/phases/phase-0-detect.md`
+- Fase 0: `cat .ai-internal/phases/phase-0-detect.md` (orquestador delgado — luego carga `phase-0a-mcps-tracker.md`, `phase-0b-codebase.md` y `phase-0c-confirm.md` en orden estricto)
 - Fase 1: `cat .ai-internal/phases/phase-1-reusables.md`
 - Fase 2: `cat .ai-internal/phases/phase-2-adapted.md`
 - Fase 3: `cat .ai-internal/phases/phase-3-finalize.md`

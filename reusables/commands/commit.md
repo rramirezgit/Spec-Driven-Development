@@ -1,3 +1,4 @@
+<!-- sdd-version: 1.0 -->
 # Role
 Senior engineer. Create clear commits, merge to dev, and transition tickets aligned with project standards.
 
@@ -23,27 +24,16 @@ If user requested no git operations:
 ## 1. Inspect state
 `git status` + `git diff` (+ `git diff --staged`). Identify current branch.
 
-## 2. Evidence check ⚠️
+## 2. Evidence check (opcional)
 
-If a ticket ID is identified (from args, branch name, or staged files):
+If a ticket ID is identified (from args, branch name, or staged files), opcionalmente verificar si hay doc local de evidencia:
 
 ```bash
 TICKET_ID="[extracted_ticket_id]"
 test -f "docs/evidence/${TICKET_ID}.md" && echo "EVIDENCE_EXISTS" || echo "NO_EVIDENCE"
 ```
 
-- **Si existe evidencia**: continuar normalmente
-- **Si NO existe evidencia**: mostrar warning:
-  ```
-  ⚠️  No se encontró evidencia para {TICKET_ID}.
-
-  La evidencia ayuda a QA a validar y documenta los cambios para el equipo.
-
-  Opciones:
-  1. Generar evidencia ahora (recomendado) → /evidence {TICKET_ID}
-  2. Continuar sin evidencia
-  ```
-  Si elige generar: ejecutar `/evidence`, luego continuar con commit.
+> El archivo local `docs/evidence/{TICKET_ID}.md` es **opcional**. El comentario al ticket (sección 7.3) se construye con la plantilla estándar y NO depende del archivo local. Si existe, podés usarlo como insumo para redactar; si no, redactás directamente desde el diff.
 
 ## 3. Resolve scope
 - Empty args → all relevant changes (exclude .env, build artifacts, local config)
@@ -156,151 +146,55 @@ Seguir los pasos que retorna `sdd_transition_ticket`:
 2. Buscar la transición cuyo nombre coincida con el status real de QA Review (del paso 7.0)
 3. Llamar `transitionJiraIssue` con el ID de la transición encontrada
 
-### 7.3. Agregar comentario completo para QA
+### 7.3. Agregar comentario estándar al ticket
 
-Antes de construir el comentario, recopilar la información:
+El comentario es **una plantilla fija**, igual para todos los tipos de proyecto (backend, frontend, fullstack, mobile, infra). Tiene **dos secciones obligatorias**, ambas redactadas en lenguaje **no técnico** — entendibles por QA, PM o cualquier persona del negocio sin necesidad de abrir el código.
 
-```bash
-# Evidencia
-test -f "docs/evidence/${TICKET_ID}.md" && echo "EVIDENCE=YES" || echo "EVIDENCE=NO"
-test -f "docs/evidence/screenshots/${TICKET_ID}.png" && echo "SCREENSHOT=YES" || echo "SCREENSHOT=NO"
+#### Cómo redactar cada sección
 
-# Archivos modificados en el branch
-git diff {DEV_BRANCH}...{CURRENT_BRANCH} --stat
+**📋 Qué se hizo**: 3 a 6 frases en lenguaje claro. Describir el cambio desde la perspectiva de quien usa el producto.
+- ✅ Sí: "Ahora el usuario puede recuperar su contraseña desde la pantalla de login."
+- ❌ No: nombres de archivos, librerías, endpoints, funciones, métodos HTTP, rutas de código, nombres de tablas, frameworks.
 
-# Repo URL para links
-gh repo view --json url -q .url 2>/dev/null || git remote get-url origin 2>/dev/null | sed 's/\.git$//' | sed 's|git@github.com:|https://github.com/|'
+**🧪 Cómo probarlo**: pasos numerados que cualquier persona pueda seguir, en lenguaje de usuario final.
+- ✅ Sí: "1. Entrar a la pantalla de login. 2. Tocar 'Olvidé mi contraseña'. 3. Verificar que llega un email."
+- ❌ No: "llamar al endpoint POST /auth/reset", "verificar el insert en la tabla users".
 
-# Figma link (del pipeline state)
-# Obtener con sdd_get_state → figmaLink
-```
+**⚠️ A tener en cuenta** (opcional, omitir el bloque si no aplica): limitaciones o casos especiales en lenguaje no técnico.
 
-**Si existe evidencia** (`docs/evidence/{TICKET_ID}.md`): leer el archivo para extraer:
-- Resumen del cambio
-- Tabla de archivos modificados
-- Pasos de verificación manual (plan de pruebas para QA)
-- Casos edge
-- Notas para QA
-
-**Si NO existe evidencia**: construir un resumen básico a partir del diff y el commit message.
-
-**Determinar tipo de proyecto** para elegir template: leer `Tipo` de `.ai-internal/project-profile.md`.
-
----
-
-#### TEMPLATE BACKEND (tipo contiene "backend")
+#### Plantilla — usar exactamente esta estructura
 
 Llamar `sdd_comment_ticket(ticketId, body)` con:
 
 ```
-✅ Desarrollo completado — mergeado a {DEV_BRANCH}
+✅ Trabajo completado — {TICKET_ID}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📋 Resumen
+📋 Qué se hizo
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-{resumen conciso de qué se hizo y por qué}
+{3 a 6 frases en lenguaje no técnico explicando qué cambió desde la perspectiva del usuario o del negocio. Sin nombres técnicos.}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📁 Archivos modificados ({N})
+🧪 Cómo probarlo
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-{por cada archivo: ruta | tipo de cambio (nuevo/modificado/eliminado) | descripción breve}
+1. {Acción concreta — "entrar a X", "tocar Y", "completar el formulario con tales datos"}
+2. {Acción concreta}
+3. {Resultado esperado — "debería ver Z", "debería recibir el email"}
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🔌 Endpoints afectados
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-{por cada endpoint nuevo o modificado:}
-{METHOD} {ruta} — {descripción breve del cambio}
-
-{si no hay endpoints afectados: "N/A — cambio interno sin impacto en API"}
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🧪 Plan de pruebas
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-{por cada paso de verificación:}
-☐ {paso}: {acción a realizar} → Resultado esperado: {qué debe pasar}
-
-{si hay casos edge:}
-⚠️ Casos edge:
-☐ {caso edge 1}
-☐ {caso edge 2}
-
-{si hay notas (ambiente, datos de prueba, dependencias):}
-📝 Notas: {notas}
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📎 Links
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-📝 Evidencia: {GH_REPO_URL}/blob/{DEV_BRANCH}/docs/evidence/{TICKET_ID}.md
-🔀 Branch: {CURRENT_BRANCH} → {DEV_BRANCH}
+{si hay un caso especial o limitación, agregar al final:}
+⚠️ A tener en cuenta:
+- {Limitación o caso especial en lenguaje no técnico}
 ```
 
 ---
 
-#### TEMPLATE FRONTEND / FULLSTACK / MOBILE (tipo contiene "frontend", "fullstack" o "mobile")
-
-Llamar `sdd_comment_ticket(ticketId, body)` con:
-
-```
-✅ Desarrollo completado — mergeado a {DEV_BRANCH}
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📋 Resumen
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-{resumen conciso de qué se hizo y por qué}
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🎨 Diseño
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-🔗 Figma: {FIGMA_LINK}
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📁 Archivos modificados ({N})
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-{por cada archivo: ruta | tipo de cambio (nuevo/modificado/eliminado) | descripción breve}
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🖥️ Pantallas a verificar
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-{por cada pantalla/vista afectada:}
-• {nombre de la pantalla/ruta} — {qué cambió visualmente}
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-🧪 Plan de pruebas
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-{por cada paso de verificación:}
-☐ {paso}: {acción a realizar} → Resultado esperado: {qué debe pasar}
-
-{si hay casos edge:}
-⚠️ Casos edge:
-☐ {caso edge 1}
-☐ {caso edge 2}
-
-{si hay notas (ambiente, datos de prueba, dependencias):}
-📝 Notas: {notas}
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-📎 Links
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-📝 Evidencia: {GH_REPO_URL}/blob/{DEV_BRANCH}/docs/evidence/{TICKET_ID}.md
-📸 Screenshot: {GH_REPO_URL}/blob/{DEV_BRANCH}/docs/evidence/screenshots/{TICKET_ID}.png
-🔀 Branch: {CURRENT_BRANCH} → {DEV_BRANCH}
-```
-
----
-
-> **Nota**: El comentario debe ser autocontenido — QA no debería necesitar abrir otros archivos para saber qué probar. Los links son complementarios para evidencia detallada.
-> **FIGMA_LINK**: se obtiene del pipeline state (campo `figmaLink` retornado por `sdd_get_state`). Si no hay link, omitir la sección Diseño.
+> **Reglas**:
+> - **Misma plantilla para todos los tipos de proyecto.** No hay variantes por backend/frontend/fullstack/mobile.
+> - **Sin links a Figma, screenshots, evidencia local, branches, archivos modificados ni endpoints.** El comentario es 100 % autocontenido y legible por no programadores.
+> - **Idioma**: según `AGENTS.md` § Language. Si no hay AGENTS.md, español.
+> - Si el cambio es puramente interno (refactor, infra) y no hay nada visible para el usuario final, redactar "Qué se hizo" en términos del impacto (ej. "El sistema ahora responde más rápido al guardar formularios") y "Cómo probarlo" como verificación funcional ("Entrar a X y guardar — debería responder igual que antes, sin errores").
 
 ### 7.4. Si la transición falla
 

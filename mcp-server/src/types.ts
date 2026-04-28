@@ -43,8 +43,6 @@ export interface PipelineData {
   awaitingUserConfirmation?: boolean;
   /** Name of the feature branch created for the active ticket */
   featureBranch?: string | null;
-  /** True when a screenshot has been captured for the active ticket */
-  screenshotCaptured?: boolean;
   /** Records how the code was merged (direct merge vs PR) */
   mergeRecord?: MergeRecord | null;
   /** True when implementation is done but user hasn't verified it works yet */
@@ -53,8 +51,6 @@ export interface PipelineData {
   sprintValidated?: boolean;
   /** Path to the evidence file for the active ticket */
   evidenceFilePath?: string | null;
-  /** Figma link registered for the active ticket (required for frontend/fullstack) */
-  figmaLink?: string | null;
 }
 
 export interface SubprojectConfig {
@@ -148,11 +144,9 @@ export function defaultPipelineData(): PipelineData {
     log: [],
     awaitingUserConfirmation: false,
     featureBranch: null,
-    screenshotCaptured: false,
     mergeRecord: null,
     awaitingVerification: false,
     sprintValidated: false,
     evidenceFilePath: null,
-    figmaLink: null,
   };
 }

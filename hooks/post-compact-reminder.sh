@@ -3,14 +3,24 @@
 # Checks for .compacted marker written by pre-compact-marker.sh
 # Plain text to stdout gets injected as additional context
 
+# Require project dir; bail silently if not set (no marker possible)
+if [ -z "${CLAUDE_PROJECT_DIR:-}" ]; then
+  exit 0
+fi
+
 MARKER="$CLAUDE_PROJECT_DIR/.ai-internal/.compacted"
+CLAIM="$MARKER.claim.$$"
 
 if [ ! -f "$MARKER" ]; then
   exit 0
 fi
 
-# Remove marker so it only fires once
-rm -f "$MARKER"
+# Atomic claim: rename marker to a unique name. If another process already
+# claimed it, mv fails and we exit without injecting (single-fire guarantee).
+if ! mv "$MARKER" "$CLAIM" 2>/dev/null; then
+  exit 0
+fi
+rm -f "$CLAIM"
 
 # Inject directive into Claude's context
 cat << 'EOF'

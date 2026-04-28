@@ -3,6 +3,7 @@ name: "OPSX: Bulk Archive"
 description: Archive multiple completed changes at once
 category: Workflow
 tags: [workflow, archive, bulk]
+sdd_version: "1.0"
 ---
 
 **Steps**

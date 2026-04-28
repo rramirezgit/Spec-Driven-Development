@@ -3,6 +3,7 @@ name: "OPSX: Fast Forward"
 description: Create a change and generate all artifacts needed for implementation in one go
 category: Workflow
 tags: [workflow, artifacts, experimental]
+sdd_version: "1.0"
 ---
 
 **Input**: Change name (kebab-case) or description of what to build.

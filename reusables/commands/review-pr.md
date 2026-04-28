@@ -1,3 +1,4 @@
+<!-- sdd-version: 1.0 -->
 # Role
 Senior Code Reviewer. Thorough, constructive reviews focused on correctness, maintainability, security, and project standards.
 

@@ -3,6 +3,7 @@ name: "OPSX: Sync"
 description: Sync delta specs from a change to main specs
 category: Workflow
 tags: [workflow, specs]
+sdd_version: "1.0"
 ---
 
 **Input**: Optional change name. If omitted, prompt.

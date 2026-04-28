@@ -1,3 +1,4 @@
+<!-- sdd-version: 1.0 -->
 # Role
 Senior engineer + QA liaison. Genera evidencia de completitud de un ticket y documentación
 técnica cross-team en /docs.
@@ -71,55 +72,11 @@ Contenido:
   - PR: `[PR #{number}]({GH_PR_URL})` (si existe, si no: "PR pendiente")
   - Evidencia: `[Evidencia]({GH_REPO_URL}/blob/{GH_BRANCH}/docs/evidence/{TICKET_ID}.md)`
   - Doc técnica: `[Documentación]({GH_REPO_URL}/blob/{GH_BRANCH}/docs/{api|components}/{modulo}.md)`
-  - Screenshot: `[Screenshot]({GH_REPO_URL}/blob/{GH_BRANCH}/docs/evidence/screenshots/{TICKET_ID}.png)` (si aplica)
 - Tabla de archivos modificados (ruta, tipo de cambio, descripción)
 - Tests: cuáles corren y resultado, o "[Sin tests — verificación manual requerida]"
 - Pasos de verificación manual para QA (prerrequisito, acción, resultado esperado)
 - Casos edge a verificar
 - Notas para QA: ambiente, datos de prueba, dependencias
-
-## 3b. Screenshot visual (solo cambios frontend)
-
-> Skip si `--docs-only` o si el tipo de cambio NO involucra frontend.
-> Solo aplica a: Frontend UI, Frontend Logic, Fullstack.
-
-Preguntar con AskUserQuestion (single select):
-
-"📸 Los cambios incluyen frontend. ¿Incluir screenshot como evidencia visual en {TICKET_ID}?"
-
-Opciones:
-1. "Capturar con Chrome DevTools" — screenshot automático de la app corriendo
-2. "Yo proporciono el screenshot" — el usuario pasa la ruta de un archivo
-3. "Sin screenshot" — solo evidencia textual
-
-### Opción 1: Capturar con Chrome DevTools
-
-1. Verificar Chrome DevTools MCP disponible
-   - Si NO disponible → avisar "⚠️ Chrome DevTools MCP no disponible, continuando sin screenshot" y seguir
-2. Preguntar URL/ruta si no es evidente del contexto del ticket
-3. Asegurar directorio: `mkdir -p docs/evidence/screenshots`
-4. Capturar: `mcp__chrome-devtools__take_screenshot` con `filePath: "docs/evidence/screenshots/{TICKET_ID}.png"`
-5. Mostrar el screenshot al usuario (Read tool) y preguntar "¿Se ve bien?"
-   - Si no → opción de recapturar o cancelar
-
-### Opción 2: Usuario proporciona screenshot
-
-1. Preguntar: "Pasame el path del archivo"
-2. Asegurar directorio: `mkdir -p docs/evidence/screenshots`
-3. Copiar a `docs/evidence/screenshots/{TICKET_ID}.png` (bash cp)
-
-### Después de obtener el screenshot (ambas opciones):
-
-Agregar sección al final de `docs/evidence/{TICKET_ID}.md`:
-
-```markdown
-## Screenshot
-
-![Screenshot {TICKET_ID}]({GH_REPO_URL}/blob/{GH_BRANCH}/docs/evidence/screenshots/{TICKET_ID}.png?raw=true)
-```
-
-> Usa la URL absoluta de GitHub con `?raw=true` para que la imagen se renderice tanto en GitHub como en Jira/Confluence/Notion cuando se comparte el link.
-> Fallback si no hay GH_REPO_URL: usar path relativo `./screenshots/{TICKET_ID}.png`.
 
 ## 4. Generar/actualizar documentación cross-team (siempre)
 
@@ -159,7 +116,6 @@ Mostrar al dev:
 
 # Output
 - `docs/evidence/{TICKET_ID}.md` — creado (solo si no es --docs-only)
-- `docs/evidence/screenshots/{TICKET_ID}.png` — screenshot (si se capturó/proporcionó)
 - `docs/{api|components}/{modulo}.md` — creado/actualizado
 - `docs/README.md` — actualizado si hay archivos nuevos
 
@@ -172,5 +128,4 @@ Mostrar al dev:
 - Usar templates de `documentation-standards.mdc` — no inline templates
 - Si actualiza un archivo existente: solo modificar secciones afectadas, marcar con `> 🆕 Actualizado por {TICKET_ID} ({FECHA})`
 - Degradar graciosamente si MCP no disponible
-- Si Chrome DevTools MCP no está disponible y el usuario eligió screenshot automático: degradar a "Sin screenshot" con aviso
 - No asumir formato de ticket ID — usar el ID exacto que provee el tracker del proyecto

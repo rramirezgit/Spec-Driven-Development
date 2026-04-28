@@ -3,6 +3,7 @@ name: "OPSX: Archive"
 description: Archive a completed change
 category: Workflow
 tags: [workflow, archive]
+sdd_version: "1.0"
 ---
 
 **Input**: Optional change name. If omitted, prompt.

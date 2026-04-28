@@ -3,6 +3,7 @@ name: "OPSX: New"
 description: Start a new change using the experimental artifact workflow (OPSX)
 category: Workflow
 tags: [workflow, artifacts, experimental]
+sdd_version: "1.0"
 ---
 
 Start a new change using the experimental artifact-driven approach.

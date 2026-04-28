@@ -3,6 +3,7 @@ name: product-strategy-analyst
 description: Expert product strategist for idea analysis, use case identification, and value proposition development.
 model: opus
 color: pink
+sdd_version: "1.0"
 ---
 
 # Product Strategy Analyst

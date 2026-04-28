@@ -1,5 +1,5 @@
-import { readFile, writeFile, mkdir, rename, stat as fsStat } from "node:fs/promises";
-import { execSync } from "node:child_process";
+import { readFile, writeFile, mkdir, rename } from "node:fs/promises";
+import { execSync, execFileSync } from "node:child_process";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -120,25 +120,6 @@ export async function advance(
     };
   }
 
-  // Gate: IMPLEMENTACION requires figma link for frontend/fullstack/mobile projects
-  if (to === PipelineState.IMPLEMENTACION) {
-    const config = await loadProjectConfig();
-    const tipo = (config?.tipo ?? "").toLowerCase();
-    const requiresFigma =
-      tipo.includes("frontend") || tipo.includes("fullstack") || tipo.includes("mobile");
-    if (requiresFigma && !data.figmaLink) {
-      return {
-        ok: false,
-        from,
-        to,
-        error:
-          "⛔ Proyecto " + tipo + " requiere link de Figma antes de implementar. " +
-          "Pedí el link de Figma al usuario con AskUserQuestion y registralo con sdd_register_figma_link. " +
-          "Sin referencia visual no se puede comenzar la implementación.",
-      };
-    }
-  }
-
   // Gate: IMPLEMENTACION requires a feature branch (can't implement on main/dev)
   if (to === PipelineState.IMPLEMENTACION && !data.featureBranch) {
     return {
@@ -179,25 +160,6 @@ export async function advance(
           "⛔ No se puede avanzar a COMMIT sin evidencia registrada. " +
           "Generá el archivo de evidencia (docs/evidence/{TICKET_ID}.md) y " +
           "registralo con sdd_register_evidence.",
-      };
-    }
-  }
-
-  // Gate: EVIDENCIA → COMMIT requires screenshot for frontend/fullstack projects
-  if (from === PipelineState.EVIDENCIA && to === PipelineState.COMMIT) {
-    const config = await loadProjectConfig();
-    const tipo = config?.tipo?.toLowerCase() ?? "";
-    const requiresScreenshot =
-      tipo.includes("frontend") || tipo.includes("fullstack") || tipo.includes("mobile");
-    if (requiresScreenshot && !data.screenshotCaptured) {
-      return {
-        ok: false,
-        from,
-        to,
-        error:
-          "⛔ Proyecto " + tipo + " requiere screenshot obligatorio antes de avanzar a COMMIT. " +
-          "Usá Chrome DevTools o Playwright para capturar un screenshot del cambio funcionando, " +
-          "luego llamá sdd_register_screenshot. Sin evidencia visual no se puede avanzar.",
       };
     }
   }
@@ -298,12 +260,10 @@ export async function advance(
     data.change = null;
     data.awaitingUserConfirmation = false;
     data.featureBranch = null;
-    data.screenshotCaptured = false;
     data.mergeRecord = null;
     data.awaitingVerification = false;
     data.sprintValidated = false;
     data.evidenceFilePath = null;
-    data.figmaLink = null;
   }
 
   // Reset per-ticket state when cycling back to TICKETS from COMPLETADO
@@ -311,12 +271,10 @@ export async function advance(
   if (to === PipelineState.TICKETS && from === PipelineState.COMPLETADO) {
     data.activeTicket = null;
     data.featureBranch = null;
-    data.screenshotCaptured = false;
     data.mergeRecord = null;
     data.awaitingVerification = false;
     data.sprintValidated = false;
     data.evidenceFilePath = null;
-    data.figmaLink = null;
   }
 
   const logEntry: LogEntry = {
@@ -511,73 +469,6 @@ export async function registerBranch(
   return { ok: true, branch: branchName };
 }
 
-// ─── Screenshot registration ─────────────────────────────────────────────────
-
-export interface RegisterScreenshotResult {
-  ok: boolean;
-  error?: string;
-}
-
-export async function registerScreenshot(
-  filePath: string,
-): Promise<RegisterScreenshotResult> {
-  const data = await loadState();
-
-  if (
-    data.state !== PipelineState.IMPLEMENTACION &&
-    data.state !== PipelineState.EVIDENCIA
-  ) {
-    return {
-      ok: false,
-      error: `Solo se puede registrar screenshot en estado IMPLEMENTACION o EVIDENCIA. Estado actual: ${data.state}.`,
-    };
-  }
-
-  // Verify the screenshot file actually exists on disk
-  const fullPath = join(PROJECT_ROOT, filePath);
-  try {
-    const stat = await fsStat(fullPath);
-    if (!stat.isFile()) {
-      return {
-        ok: false,
-        error: `⛔ "${filePath}" no es un archivo válido.`,
-      };
-    }
-    // Verify it's an image (check extension)
-    const ext = filePath.toLowerCase().split(".").pop() ?? "";
-    if (!["png", "jpg", "jpeg", "webp", "gif"].includes(ext)) {
-      return {
-        ok: false,
-        error: `⛔ "${filePath}" no parece ser una imagen (extensión: .${ext}). Se esperan: .png, .jpg, .jpeg, .webp, .gif.`,
-      };
-    }
-    // Verify minimum file size (empty/corrupt images are < 100 bytes)
-    if (stat.size < 100) {
-      return {
-        ok: false,
-        error: `⛔ "${filePath}" es demasiado pequeño (${stat.size} bytes). No parece ser un screenshot válido.`,
-      };
-    }
-  } catch {
-    return {
-      ok: false,
-      error: `⛔ El archivo de screenshot no existe: ${filePath}. Capturá el screenshot primero con Chrome DevTools o Playwright.`,
-    };
-  }
-
-  data.screenshotCaptured = true;
-
-  const logEntry: LogEntry = {
-    timestamp: new Date().toISOString(),
-    action: "REGISTER_SCREENSHOT",
-    detail: `Screenshot verified on disk: ${filePath} for ticket ${data.activeTicket}.`,
-  };
-  data.log.push(logEntry);
-
-  await saveState(data);
-  return { ok: true };
-}
-
 // ─── Implementation verification ─────────────────────────────────────────────
 
 export interface ConfirmImplementationResult {
@@ -695,52 +586,16 @@ export async function registerEvidence(
   return { ok: true };
 }
 
-// ─── Figma link registration ─────────────────────────────────────────────────
-
-export interface RegisterFigmaLinkResult {
-  ok: boolean;
-  error?: string;
-}
-
-const FIGMA_URL_PATTERN = /^https:\/\/(www\.)?figma\.com\/(file|design|proto|board)\/.+/i;
-
-export async function registerFigmaLink(
-  url: string,
-): Promise<RegisterFigmaLinkResult> {
-  const data = await loadState();
-
-  if (
-    data.state !== PipelineState.PLAN &&
-    data.state !== PipelineState.TICKETS
-  ) {
-    return {
-      ok: false,
-      error: `Solo se puede registrar link de Figma en estado TICKETS o PLAN. Estado actual: ${data.state}.`,
-    };
-  }
-
-  // Validate it's a real Figma URL
-  if (!FIGMA_URL_PATTERN.test(url.trim())) {
-    return {
-      ok: false,
-      error:
-        "⛔ URL no es un link válido de Figma. " +
-        "Debe empezar con https://figma.com/design/... o https://figma.com/file/... " +
-        "Pedí al usuario el link correcto del diseño en Figma.",
-    };
-  }
-
-  data.figmaLink = url.trim();
-
-  const logEntry: LogEntry = {
-    timestamp: new Date().toISOString(),
-    action: "REGISTER_FIGMA_LINK",
-    detail: `Figma link registered for ticket ${data.activeTicket}: ${url}`,
-  };
-  data.log.push(logEntry);
-
-  await saveState(data);
-  return { ok: true };
+/**
+ * Conservative validator for git branch names — rejects anything that could
+ * inject shell or git-ref tricks. Git allows more characters in theory; this
+ * is intentionally stricter to limit attack surface.
+ */
+export function isSafeBranchName(name: string): boolean {
+  if (!name || name.length > 200) return false;
+  // Reject ".." segments (defense-in-depth even though execFileSync is shell-free).
+  if (name.includes("..")) return false;
+  return /^[A-Za-z0-9._/-]+$/.test(name);
 }
 
 // ─── Merge registration ─────────────────────────────────────────────────────
@@ -769,12 +624,25 @@ export async function registerMerge(
   // Verify the merge actually happened: check that the feature branch
   // is an ancestor of the target branch (meaning it was merged)
   if (type === "direct") {
+    const featureBranch = data.featureBranch ?? "";
+
+    // Reject branch names with shell metacharacters or git ref-unsafe chars.
+    // Git refs allow letters, digits, "/", "-", "_", ".". Anything else is suspicious.
+    if (!isSafeBranchName(featureBranch) || !isSafeBranchName(targetBranch)) {
+      return {
+        ok: false,
+        error:
+          `⛔ Nombre de rama inválido: contiene caracteres no permitidos. ` +
+          `featureBranch="${featureBranch}" targetBranch="${targetBranch}".`,
+      };
+    }
+
     try {
-      // Check that the target branch contains the feature branch commits
-      const featureBranch = data.featureBranch ?? "";
-      execSync(
-        `git merge-base --is-ancestor ${featureBranch} ${targetBranch}`,
-        { cwd: PROJECT_ROOT, encoding: "utf-8" },
+      // execFileSync (array form) is shell-free — no metachar interpolation.
+      execFileSync(
+        "git",
+        ["merge-base", "--is-ancestor", featureBranch, targetBranch],
+        { cwd: PROJECT_ROOT, encoding: "utf-8", stdio: "pipe" },
       );
     } catch {
       return {
@@ -852,12 +720,10 @@ export interface GetStateResult {
   nextCommand: string;
   awaitingUserConfirmation: boolean;
   featureBranch: string | null;
-  screenshotCaptured: boolean;
   mergeRecord: { type: string; targetBranch: string } | null;
   awaitingVerification: boolean;
   sprintValidated: boolean;
   evidenceFilePath: string | null;
-  figmaLink: string | null;
 }
 
 export async function getState(): Promise<GetStateResult> {
@@ -882,11 +748,9 @@ export async function getState(): Promise<GetStateResult> {
     nextCommand,
     awaitingUserConfirmation: data.awaitingUserConfirmation ?? false,
     featureBranch: data.featureBranch ?? null,
-    screenshotCaptured: data.screenshotCaptured ?? false,
     mergeRecord: data.mergeRecord ?? null,
     awaitingVerification: data.awaitingVerification ?? false,
     sprintValidated: data.sprintValidated ?? false,
     evidenceFilePath: data.evidenceFilePath ?? null,
-    figmaLink: data.figmaLink ?? null,
   };
 }
