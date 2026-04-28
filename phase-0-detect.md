@@ -35,7 +35,7 @@ Para mantener manejable el contenido y reducir riesgo de pérdida de contexto, *
 | Orden | Archivo | Responsabilidad |
 |-------|---------|-----------------|
 | 1️⃣ | `.ai-internal/phases/phase-0a-mcps-tracker.md` | openspec check, legacy cleanup, detección de MCPs, elección de tracker (Jira/Notion), config y verificación de workflow del tracker |
-| 2️⃣ | `.ai-internal/phases/phase-0b-codebase.md` | CLAUDE.md previo, config previa (incremental), detección de monorepo, exploración del codebase (stack, framework, patrones), construcción de `PROYECTO_PERFIL` |
+| 2️⃣ | `.ai-internal/phases/phase-0b-codebase.md` | CLAUDE.md previo, config previa (incremental), detección de monorepo, **análisis profundo con team de Explore agents en paralelo** (3 agents para proyectos planos: stack/arquitectura/calidad — N agents para monorepos: uno por subproyecto), construcción de `PROYECTO_PERFIL` |
 | 3️⃣ | `.ai-internal/phases/phase-0c-confirm.md` | Fase 1 (preguntas pendientes), Fase 2 (resumen + confirmación), guardado de `project-profile.md` y `project-vars.sh` |
 
 ### Cómo orquestar

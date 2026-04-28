@@ -1,13 +1,13 @@
 {
   "version": "4.9",
-  "generated_at": "2026-04-28T16:03:32Z",
+  "generated_at": "2026-04-28T21:53:05Z",
   "files": {
-    "phase-0-detect.md": "3d0f62bca6e67b7fc31eaf0aaa698d28bbc22b47e0a14b31517f887f59c8b4ce",
+    "phase-0-detect.md": "4eab78b9b9a89d24bd93420c41a110a3aa7c4821a57c9bed0c8a360486937fee",
     "phase-0a-mcps-tracker.md": "de93780de6b6ee06fbe3613f26278564b1d41e33a29a3a7f5d9c22d9e2409200",
-    "phase-0b-codebase.md": "aa9d1bec325d53375bf6e662c0cd90cb301029b7ed9c410ff7f2c55a78959688",
+    "phase-0b-codebase.md": "2339b399c52eaa92377b3c5a9737bf474cafcd72ab2946f63022636d074b47ed",
     "phase-0c-confirm.md": "2c9fb99b7029d8e7b0b51e83c3084fb832bfd7458042318322ab1d63504440bd",
     "phase-1-reusables.md": "587ddcb1f57ed8747cc09785d429f3f58cf1bf9b86969b85bccfc515e9644d72",
-    "CHANGELOG.md": "f528abeffa744cd04357e359c17194ee26822edab3813c4bcc156f39ed340b13",
+    "CHANGELOG.md": "b831270573e61b41e398673275cb9271d71904e88271b126302582e345ce25c9",
     "phase-2-adapted.md": "7de7ea53bdb788f9558749a6bd1aff39363e675f44b457691f61144846de1fe5",
     "phase-3-finalize.md": "9e8c1a6dbf2e0656e5e0e59a8b962145b96c21363ccc756edef6f06722b9c479",
     "bootstrap.md": "dad0ac8762d8ce8037d8ec012067920aa2cb184b91a3dff4b6b3fc9d26d46610",

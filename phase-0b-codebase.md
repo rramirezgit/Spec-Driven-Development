@@ -119,111 +119,168 @@ MONOREPO_DETECTION:
 
 **Si `es_monorepo == true`**:
 - Marcar `tipo: monorepo-fullstack`
-- Para cada subproyecto, usar **Agent tool** (subagent_type=Explore) en paralelo para analizar cada subdirectorio:
+- **Spawn N agents Explore en paralelo, uno por cada subproyecto detectado**. La lista viene de `MONOREPO_DETECTION.subprojects`. Esto escala automáticamente: 2 subprojects → 2 agents, 5 subprojects (ej. microservicios) → 5 agents.
+- **CRÍTICO**: enviar **todas** las invocaciones de Agent en **un único mensaje** con múltiples tool uses para que se ejecuten realmente en paralelo. Si las mandás secuenciales, se pierde la ventaja de tiempo.
+
+  Para cada subproyecto, usar `Agent` tool con `subagent_type: "Explore"` y prompt específico según su tipo detectado:
 
   ```
-  Agent 1 (frontend): "Analizá el subdirectorio {path_front}/:
-    - Lee {path_front}/package.json completo
-    - Detectá: framework, versión, UI library, state management, HTTP client, testing, form lib, validation lib
-    - Explorá la estructura de carpetas (src/, app/, components/, etc.)
-    - Leé archivos clave: tsconfig.json, theme config, auth store, un ejemplo de hook/component
-    - Retorná un resumen estructurado con todos los datos detectados"
+  Si SUBTYPE empieza con "frontend:" o "mobile:":
+    "Analizá el subdirectorio {path}/ (tipo detectado: {SUBTYPE}):
+      - Lee {path}/package.json completo
+      - Detectá: framework + versión exacta, UI library, state management,
+        HTTP client, testing framework, form lib, validation lib
+      - Explorá estructura de carpetas (src/, app/, components/, hooks/, etc.)
+      - Leé archivos clave: tsconfig, theme/design tokens, auth store, 1-2
+        ejemplos de hook/component
+      - Identificá patrón de organización (feature-based, layer-based, etc.)
+      - Retorná resumen estructurado con todos los datos detectados.
+      Reportá en menos de 400 palabras."
 
-  Agent 2 (backend): "Analizá el subdirectorio {path_back}/:
-    - Lee {path_back}/package.json (o equivalente) completo
-    - Detectá: framework, versión, ORM, database, auth method, testing, validation lib
-    - Explorá la estructura de carpetas (src/, controllers/, services/, etc.)
-    - Leé archivos clave: main/app entry, un controller/service ejemplo, config de DB
-    - Retorná un resumen estructurado con todos los datos detectados"
+  Si SUBTYPE empieza con "backend:":
+    "Analizá el subdirectorio {path}/ (tipo detectado: {SUBTYPE}):
+      - Lee {path}/package.json (o requirements.txt / go.mod / pom.xml) completo
+      - Detectá: framework + versión, ORM, database, auth method, testing,
+        validation lib, HTTP layer (REST/GraphQL/gRPC)
+      - Explorá estructura (controllers/services/routes/handlers/models)
+      - Leé entry point (main.ts/app.py/main.go), 1 controller + 1 service
+        de ejemplo, config DB
+      - Identificá patrón (layered, hexagonal, DDD, MVC simple, etc.)
+      - Retorná resumen estructurado. Menos de 400 palabras."
+
+  Si SUBTYPE es "unknown" o algo distinto (shared lib, infra, tooling):
+    "Analizá el subdirectorio {path}/ (tipo: indeterminado):
+      - Lee package manifest principal
+      - Determiná qué hace este subproyecto (lib compartida, scripts, infra,
+        documentación, otra cosa)
+      - Reportá: rol del subproyecto, principales dependencias, si exporta
+        algo público o es interno. Menos de 250 palabras."
   ```
 
-- Los resultados de ambos agents se usan para construir el perfil extendido (paso 0.5)
-- **IMPORTANTE**: Los pasos 0.2, 0.3 y 0.4 se ejecutan igualmente para la raíz, pero los datos de cada subdirectorio vienen de los agents
-
-**Si `es_monorepo == false`**: continuar con el flujo normal (paso 0.2).
+- Los resultados de los N agents se consolidan en el perfil extendido (paso 0.5),
+  bajo `## Subprojects` con una sub-sección por cada uno.
+- Los pasos 0.2, 0.3, 0.4 se ejecutan **igualmente para la raíz** para complementar
+  con datos que los agents no cubren (env vars, dev branch, /docs/, openspec).
 
 ---
 
-## 0.2 — Exploración automática del codebase
+**Si `es_monorepo == false`**: ir a la sección 0.1d (team analysis del proyecto plano) y luego a 0.2.
 
-Ejecutá estos comandos en secuencia y procesá la salida:
+---
+
+## 0.1d — Team de análisis para proyectos planos
+
+> Cuando NO hay monorepo (proyecto en una sola raíz), igual usamos un team de
+> Explore agents para análisis profundo y paralelo. Cada agent tiene un foco
+> distinto, no se pisan, y el resultado consolidado da un perfil mucho más rico
+> que el bash secuencial.
+
+**Si `es_monorepo == false`**, lanzar **3 agents Explore en paralelo** con focos
+complementarios:
+
+> **CRÍTICO**: las 3 invocaciones de `Agent` deben ir en **un único mensaje** con
+> múltiples tool uses (un bloque `Agent` por cada uno). Si las mandás secuenciales
+> Claude las ejecuta una tras otra y perdés ~3x de tiempo.
+
+```
+Agent 1 — Stack & Dependencies (subagent_type: Explore):
+  "Analizá el stack del proyecto en la raíz:
+   - Lee el manifest principal (package.json / requirements.txt / go.mod /
+     pom.xml / Cargo.toml). Lista TODAS las deps directas y devDeps.
+   - Detectá con versión exacta: framework principal, lenguaje, build tool,
+     package manager, UI library (si aplica), HTTP client, server state lib,
+     auth state lib, form lib, validation lib, testing framework, ORM (si aplica),
+     database driver (si aplica).
+   - Lee tsconfig.json, .eslintrc / eslint.config.*, prettier config, .nvmrc.
+   - Reportá un resumen estructurado en formato:
+       framework_principal, lenguaje, build_tool, package_manager,
+       ui_library, http_client, server_state, auth_state, form_lib,
+       validation_lib, testing_framework, orm, database, type_checking_strict.
+   Menos de 350 palabras."
+
+Agent 2 — Arquitectura & Patrones (subagent_type: Explore):
+  "Analizá la arquitectura del codebase en la raíz:
+   - Mapeá la estructura de directorios (src/, app/, lib/, internal/,
+     controllers/, services/, components/, hooks/, etc.) — máximo 3 niveles
+     de profundidad, ignorando node_modules / dist / build / .git.
+   - Identificá el patrón de organización: feature-based, layer-based,
+     domain-driven, hexagonal, MVC, otro.
+   - Leé 2-3 archivos representativos de los tipos clave: un service,
+     un controller/handler, un hook, un component, un store/state.
+   - Detectá naming conventions (kebab-case / camelCase / PascalCase,
+     prefijos como use-/get-/Use, sufijos .service./.hook./.store.).
+   - Identificá cliente HTTP/API: leé axiosInstance.* / httpClient.* /
+     api-client.* si existen.
+   - Reportá: estructura_carpetas (resumen breve),
+     patron_organizacion, patron_componentes, patron_hooks, patron_api,
+     naming_conventions. Menos de 400 palabras."
+
+Agent 3 — Calidad & Testing (subagent_type: Explore):
+  "Analizá la calidad y setup de testing del proyecto:
+   - Buscá archivos de test (*.test.*, *.spec.*, __tests__/, e2e/, integration/).
+     Reportá cantidad por tipo (unit/integration/e2e) y si están al lado del
+     source o en carpetas separadas.
+   - Detectá testing framework (Jest, Vitest, Mocha, Playwright, Cypress,
+     pytest, go test, etc.) leyendo configs y devDeps.
+   - Detectá CI: .github/workflows/, .gitlab-ci.yml, circle.yml, jenkins,
+     bitbucket-pipelines.
+   - Linting/formatting: confirmá si eslint/prettier/biome/ruff/black están
+     activos y configurados.
+   - Type checking: si TypeScript, mirá strict mode en tsconfig. Si Python,
+     mirá mypy/pyright config.
+   - Estimá madurez de tests: 'sin tests' / 'esqueleto' / 'cobertura parcial' /
+     'cobertura amplia' (basado en ratio archivos de test vs source).
+   - Reportá: testing_framework, test_count_breakdown, ci_setup,
+     linting_setup, type_checking_strict, madurez_tests.
+   Menos de 350 palabras."
+```
+
+Los 3 reportes se consolidan en `PROYECTO_PERFIL` en paso 0.5. Los pasos 0.2, 0.3
+y 0.4 a continuación se vuelven **complementarios** (env vars, dev branch, docs/,
+detección de archivos config en raíz que el team no leyó).
+
+> **Por qué team también para proyectos planos**: análisis 3x más profundo y
+> en paralelo, sin penalización de tiempo. Mejora la calidad de los archivos
+> generados en Phase 2 (CLAUDE.md, develop-{tipo}.md, standards) porque parten
+> de un perfil más rico.
+
+---
+
+## 0.2 — Complemento bash (datos que el team no cubre)
+
+> El team analysis de 0.1c/0.1d ya cubrió stack, arquitectura, patrones y testing.
+> Este bloque ejecuta sólo los comandos que el team **no hace** y que sí necesitamos
+> para construir `PROYECTO_PERFIL`. Es deliberadamente liviano.
 
 ```bash
-# Estructura raíz
+# Estructura raíz (visión general — útil para mostrar al usuario en el resumen)
 ls -la
 
-# Package.json (fuente principal de verdad para el stack)
-# En monorepo: puede haber un package.json raíz con workspaces, o no haber ninguno
-cat package.json 2>/dev/null || cat build.gradle 2>/dev/null || cat pom.xml 2>/dev/null || cat Cargo.toml 2>/dev/null || cat requirements.txt 2>/dev/null || cat go.mod 2>/dev/null
-
-# Estructura src (en monorepo, esto estará en los subdirectorios — los agents ya lo analizaron)
-ls src/ 2>/dev/null || ls app/ 2>/dev/null || ls lib/ 2>/dev/null || ls internal/ 2>/dev/null
-
-# Archivos de configuración clave
-ls *.config.* *.json *.yaml *.yml *.toml 2>/dev/null | head -20
-
-# Variables de entorno (solo keys, nunca valores)
+# Variables de entorno (keys, nunca valores)
 cat .env.example 2>/dev/null || cat .env.local.example 2>/dev/null || cat .env.template 2>/dev/null
 
-# Detectar /docs existente
+# /docs existente
 test -d docs && echo "DOCS_DIR=EXISTS" || echo "DOCS_DIR=NOT_FOUND"
 ls docs/ 2>/dev/null | head -20
 ls docs/evidence/ 2>/dev/null | head -10
 ls docs/api/ 2>/dev/null | head -10
 
-# Detectar rama de desarrollo
+# Rama de desarrollo (auto-detectada de remotas)
 git branch -r --list 'origin/dev' 'origin/develop' 'origin/development' 2>/dev/null | sed 's|origin/||' | head -1 | xargs echo "DEV_BRANCH=" || echo "DEV_BRANCH=not_found"
-
-# Detectar tipo de proyecto (en monorepo, estos checks son para la raíz — pueden no matchear)
-test -f next.config.js -o -f next.config.ts && echo "NEXTJS"
-test -f vite.config.ts -o -f vite.config.js && echo "VITE"
-test -f expo.json -o -f app.json && echo "EXPO"
-test -f nest-cli.json && echo "NESTJS"
-test -f manage.py && echo "DJANGO"
-test -f artisan && echo "LARAVEL"
-test -f go.mod && echo "GOLANG"
-test -f Cargo.toml && echo "RUST"
 ```
 
-## 0.3 — Explorar estructura de carpetas relevantes
+## 0.3 — (deprecada — cubierta por team analysis)
 
-Según el tipo de proyecto detectado, explorá en profundidad:
+> Antes este paso buscaba estructura de carpetas y patrones de archivos.
+> Ahora lo hace **Agent 2 — Arquitectura & Patrones** (en proyectos planos)
+> o el agent de cada subproyecto (en monorepos). Mantenemos la sección como
+> placeholder histórico — no ejecutar comandos acá.
 
-```bash
-# Si tiene src/
-find src -maxdepth 3 -type d 2>/dev/null
+## 0.4 — (deprecada — cubierta por team analysis)
 
-# Si tiene app/ (Next.js App Router)
-find app -maxdepth 3 -type d 2>/dev/null
-
-# Buscar patrones de archivos existentes
-find . -maxdepth 4 -name "*.service.ts" -o -name "*.hook.ts" -o -name "use-*.ts" -o -name "*.store.ts" -o -name "axiosInstance*" -o -name "api.ts" -o -name "httpClient*" 2>/dev/null | grep -v node_modules | head -20
-
-# Buscar tests existentes para entender el framework
-find . -maxdepth 4 -name "*.test.*" -o -name "*.spec.*" 2>/dev/null | grep -v node_modules | head -10
-
-# Buscar archivos de tema/diseño
-find . -maxdepth 4 -name "theme.*" -o -name "*theme*" 2>/dev/null | grep -v node_modules | head -10
-```
-
-## 0.4 — Leer archivos clave del proyecto
-
-Leé estos archivos si existen (SIN mostrarlos al usuario — solo procesarlos internamente):
-
-```bash
-# Configuraciones de TypeScript/linting
-cat tsconfig.json 2>/dev/null
-cat .eslintrc* 2>/dev/null || cat eslint.config.* 2>/dev/null
-
-# Archivo de cliente HTTP (si existe)
-cat $(find . -maxdepth 5 -name "axiosInstance*" -o -name "httpClient*" -o -name "api-client*" 2>/dev/null | grep -v node_modules | head -1) 2>/dev/null
-
-# Store de auth (si existe)
-cat $(find . -maxdepth 5 -name "*auth*store*" -o -name "*auth*.zustand*" 2>/dev/null | grep -v node_modules | head -1) 2>/dev/null
-
-# Un ejemplo de hook de datos (si existe)
-find . -maxdepth 5 -name "use-*.ts" -o -name "use-*.tsx" 2>/dev/null | grep -v node_modules | head -3
-```
+> Antes leía tsconfig, eslint, axiosInstance, auth store, hooks de ejemplo.
+> Ahora lo hace **Agent 1 — Stack** y **Agent 2 — Arquitectura** en paralelo.
+> Mantenemos la sección como placeholder histórico — no ejecutar comandos acá.
 
 ## 0.5 — Construir el perfil del proyecto
 

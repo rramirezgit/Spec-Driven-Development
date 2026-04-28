@@ -10,6 +10,7 @@ está al tope.
 
 | Cambio | Impacto |
 |--------|---------|
+| Team analysis siempre activo en Phase 0b | 3 agents Explore en paralelo (stack / arquitectura / calidad) para proyectos planos. N agents (uno por subproyecto) para monorepos — escala automáticamente a microservicios. Reemplaza el bash secuencial. |
 | Plantilla estándar de evidencia | Comentario al ticket es una plantilla fija con dos secciones ("Qué se hizo" y "Cómo probarlo"), ambas en lenguaje no técnico. Misma plantilla para todos los tipos de proyecto (backend, frontend, fullstack, mobile, infra). |
 | Figma ya no es gate obligatorio | Eliminados `sdd_register_figma_link`, gate de IMPLEMENTACION y campo `figmaLink` del state. Figma sigue detectándose como MCP opcional en Phase 0. |
 | Screenshot ya no es gate obligatorio | Eliminados `sdd_register_screenshot`, gate de EVIDENCIA→COMMIT y campo `screenshotCaptured` del state. `/evidence` ya no usa Chrome DevTools/Playwright. |
