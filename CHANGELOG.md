@@ -6,6 +6,20 @@ está al tope.
 
 ---
 
+## V4.14 — Modo respeto de configuración preexistente (ADAM360-safe)
+
+| Cambio | Impacto |
+|--------|---------|
+| **Phase 0b — detección defensiva** | Nuevo bloque `0.1bb` registra `claude_md_bytes`, `claude_settings_json_exists`, listas de agents/skills/commands en `.claude/`, `commitlint_detected`, `husky_prepush_detected`. Permite que SDD respete configs preexistentes en repos con `.claude/` ya poblado (ej. ADAM360 con 3 agents y 6 skills propios). |
+| **Phase 0b — Nx + pnpm-workspace aware** | `0.1c` detecta `nx.json` y `pnpm-workspace.yaml`. Cuando aplica, los slugs candidatos para multi-target salen de `apps/*` y `services/*` con target deployable, en vez del walk genérico de directorios raíz. Packages workspace:* (libs internas) se ofrecen aparte y por default no entran al pipeline. |
+| **Phase 0b — commit style por git log** | Nuevo bloque `0.2b` analiza últimos 20 commits con regex de Conventional Commits. Si ≥70% matchean, propone `commitStyle = conventional`. Funciona en repos sin `commitlint.config.*` (ADAM360 caso). |
+| **Phase 0c — confirmación de preexistentes + commit style** | `1.0b` muestra apps/packages Nx detectados y pregunta cuáles entran al pipeline. `1.0c` reporta archivos `.claude/` preexistentes (informativo). `1.2` agrega pregunta `Estilo de commit` con default = inferido. Persiste a `project-profile.md` y `project-vars.sh` (`SDD_COMMIT_STYLE`, `SDD_EXISTING_CLAUDE_MD_BYTES`, `SDD_NX_DETECTED`). |
+| **Phase 2 — modo preserve para CLAUDE.md** | Si `EXISTING_CLAUDE_MD_BYTES > 2048`, no sobreescribe. Genera `CLAUDE.sdd.md` aparte y agrega referencia idempotente `<!-- sdd-ref --> Pipeline SDD: ver [CLAUDE.sdd.md](./CLAUDE.sdd.md)` al final del original. Repos con CLAUDE.md curado no pierden el trabajo del equipo. |
+| **`/commit` — adaptador Conventional Commits** | Nueva sección 4.0–4.2 lee `SDD_COMMIT_STYLE`. Modo `conventional`: subject `<type>(<scope>): <subject>` con type inferido del diff (feat/fix/chore/docs/refactor/test/perf/style/build/ci) y scope = slug multi-target o módulo afectado. Ticket ID baja al footer (`Refs: TICKET-ID`) para no romper commitlint. Modo `standard`: comportamiento histórico intacto. Bump `sdd-version: 1.0 → 1.1`. |
+| **MCP — campo `commitStyle` en ProjectConfig** | `types.ts` agrega `commitStyle?: "standard" \| "conventional"`. `config.ts` parsea la clave `Commit Style` del profile (case-insensitive, default = `standard`). `parseProfile` ahora exportada para tests unitarios. |
+| **Tests Vitest 34 → 41** | +7 tests en `tests/config.test.ts`: defaults a standard, parse explícito conventional/standard, case-insensitive, fallback a standard ante valor desconocido, trim de whitespace, backward-compat con multi-target + slugs. |
+| **Backwards-compat estricta** | Proyectos pre-V4.14 sin `Commit Style` en el profile → `commitStyle = standard` (comportamiento histórico). Repos sin `.claude/` preexistente → flujo intacto. Repos sin `nx.json` → walk genérico. Detección por git log es opt-in: solo dispara la pregunta, nunca cambia el default sin confirmación. |
+
 ## V4.13 — Cleanup de basura generada + reducción de overlap
 
 | Cambio | Impacto |

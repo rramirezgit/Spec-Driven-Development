@@ -40,7 +40,7 @@ function escapeRegex(str: string): string {
   return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-function parseProfile(content: string): ProjectConfig {
+export function parseProfile(content: string): ProjectConfig {
   /**
    * Searches for a key-value pair in the profile content.
    * Tries each key independently against multiple markdown patterns.
@@ -103,6 +103,12 @@ function parseProfile(content: string): ProjectConfig {
         .filter(Boolean)
     : undefined;
 
+  // V4.14: commit style (standard | conventional). Default = standard for backward-compat.
+  const commitStyleRaw = get("Commit Style", "commit_style", "CommitStyle");
+  const commitStyleNormalized = commitStyleRaw.toLowerCase().trim();
+  const commitStyle: "standard" | "conventional" =
+    commitStyleNormalized === "conventional" ? "conventional" : "standard";
+
   // Parse subprojects when relevant: multi-target OR classic monorepo-fullstack
   let subprojects: SubprojectConfig[] | undefined;
   if (multiTargetMode || tipo === "monorepo-fullstack") {
@@ -128,6 +134,7 @@ function parseProfile(content: string): ProjectConfig {
     subprojects,
     multiTargetMode: multiTargetMode || undefined,
     subprojectSlugs,
+    commitStyle,
   };
 }
 

@@ -36,7 +36,40 @@ Al generar archivos que referencian MCP tools (create-tickets, enrich-ticket, co
 
 ### `CLAUDE.md`
 
-> **Si MULTI_TARGET_MODE == true**: el CLAUDE.md incluye una **tabla de servicios** al inicio (después del título), una entrada por cada subproyecto del array `SDD_SUBPROJECT_SLUGS`. Formato:
+> **⚠️ V4.14 — Modo preserve**: si el repo host ya tiene un `CLAUDE.md` curado por el equipo, **no debe sobreescribirse**. La lógica de generación arranca con esta decisión:
+>
+> ```bash
+> source .ai-internal/project-vars.sh
+> EXISTING_BYTES="${SDD_EXISTING_CLAUDE_MD_BYTES:-0}"
+>
+> if [ "$EXISTING_BYTES" -gt 2048 ]; then
+>   CLAUDE_TARGET="CLAUDE.sdd.md"
+>   PRESERVE_MODE=true
+>   echo "🛡️  CLAUDE.md preexistente ($EXISTING_BYTES bytes) — generando CLAUDE.sdd.md aparte"
+> else
+>   CLAUDE_TARGET="CLAUDE.md"
+>   PRESERVE_MODE=false
+> fi
+> ```
+>
+> **Si `PRESERVE_MODE == true`**:
+> 1. Generar el contenido completo (mismas plantillas de abajo) en `$CLAUDE_TARGET` = `CLAUDE.sdd.md`.
+> 2. Después de escribirlo, agregar una línea de referencia idempotente al final del `CLAUDE.md` original — solo si todavía no existe:
+>
+>    ```bash
+>    if ! grep -q '<!-- sdd-ref -->' CLAUDE.md 2>/dev/null; then
+>      printf '\n<!-- sdd-ref --> Pipeline SDD: ver [CLAUDE.sdd.md](./CLAUDE.sdd.md)\n' >> CLAUDE.md
+>      echo "  ✅ Referencia a CLAUDE.sdd.md agregada al CLAUDE.md original"
+>    else
+>      echo "  ℹ️ Referencia <!-- sdd-ref --> ya presente en CLAUDE.md — sin cambios"
+>    fi
+>    ```
+>
+> 3. NO tocar el contenido existente del `CLAUDE.md` original (excepto el append idempotente).
+>
+> **Si `PRESERVE_MODE == false`** (no había CLAUDE.md o era stub <2KB): generar normalmente sobre `CLAUDE.md`.
+
+> **Si MULTI_TARGET_MODE == true**: el CLAUDE.md (o CLAUDE.sdd.md, según `PRESERVE_MODE`) incluye una **tabla de servicios** al inicio (después del título), una entrada por cada subproyecto del array `SDD_SUBPROJECT_SLUGS`. Formato:
 >
 > ```markdown
 > ## Subproyectos (modo multi-target)

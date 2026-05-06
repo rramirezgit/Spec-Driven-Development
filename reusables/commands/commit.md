@@ -1,4 +1,4 @@
-<!-- sdd-version: 1.0 -->
+<!-- sdd-version: 1.1 -->
 # Role
 Senior engineer. Create clear commits, merge to dev, and transition tickets aligned with project standards.
 
@@ -42,9 +42,73 @@ test -f "docs/evidence/${TICKET_ID}.md" && echo "EVIDENCE_EXISTS" || echo "NO_EV
 - **Include docs/ changes**: Si hay archivos nuevos/modificados en `docs/`, incluirlos en el commit.
 
 ## 4. Commit message
+
 **Idioma**: Usar el idioma definido en `AGENTS.md` § Language para commits/docs. Si no hay AGENTS.md, usar español.
+
+### 4.0. Resolver estilo de commit (V4.14)
+
+Leer `SDD_COMMIT_STYLE` desde `.ai-internal/project-vars.sh` (default: `standard`).
+
+```bash
+COMMIT_STYLE="standard"
+if [ -f .ai-internal/project-vars.sh ]; then
+  # shellcheck disable=SC1091
+  source .ai-internal/project-vars.sh
+  COMMIT_STYLE="${SDD_COMMIT_STYLE:-standard}"
+fi
+echo "COMMIT_STYLE=$COMMIT_STYLE"
+```
+
+### 4.1. Generar mensaje según estilo
+
+**Si `COMMIT_STYLE == "standard"`** (default histórico de SDD):
 - Subject: short imperative. Optional prefix: `TICKET-ID: Agregar filtros de candidatos`
 - Body: bullet points — qué cambió y por qué. Referenciar ticket IDs.
+
+**Si `COMMIT_STYLE == "conventional"`** (Conventional Commits):
+- Subject: `<type>(<scope>): <subject>` (lowercase type, max ~70 chars).
+  - **type** se infiere del diff:
+    - `feat`: archivos nuevos en src/ que agregan funcionalidad usuario-visible
+    - `fix`: cambios en src/ que arreglan comportamiento (busca palabras clave en el diff: "fix", "bug", "broken", o ticket marcado como bug)
+    - `docs`: solo cambios en `docs/`, `README.md`, `*.md`
+    - `test`: solo cambios en `*.test.*`, `*.spec.*`, `__tests__/`
+    - `refactor`: cambios en src/ sin cambio de comportamiento aparente
+    - `chore`: cambios en config (`package.json`, `tsconfig.json`, `.eslintrc`, `.github/`, etc.)
+    - `perf`: optimizaciones de performance explícitas
+    - `style`: solo formato/whitespace
+    - `build` / `ci`: cambios en pipeline/Docker/CI
+    - Si dudoso: preferir `chore`.
+  - **scope** se deriva así (en orden de prioridad):
+    1. Si multi-target Y hay `targetSubproject` registrado en pipeline-state.json → ese slug
+    2. Si los archivos modificados están bajo un único `apps/{x}/` o `packages/{x}/` → `x`
+    3. Si los archivos están bajo un solo módulo top-level (ej. `src/auth/`) → ese nombre
+    4. Si nada claro → omitir el scope: `<type>: <subject>`
+  - **subject**: imperativo, sin punto final, sin ticket ID (el ID va al footer)
+- Body (opcional): bullets — qué cambió y por qué. Referenciar tickets relacionados sin prefijo de subject.
+- Footer (si hay ticket ID): `Refs: TICKET-ID` (o `Closes: TICKET-ID` si el ticket cierra con este commit). NUNCA pongas el ticket ID al inicio del subject en este modo — rompe commitlint.
+
+**Ejemplos** modo conventional:
+```
+feat(auth-service): agregar verificación 2FA por TOTP
+
+- Endpoint POST /auth/2fa/verify
+- Genera y valida códigos de 6 dígitos con ventana de 30s
+- Persistencia en tabla user_mfa_secrets
+
+Refs: AUTH-123
+```
+
+```
+fix(core-api): evitar 500 cuando el header Authorization está vacío
+
+Refs: BUG-456
+```
+
+```
+chore: bump pnpm a 10.0.0 en .nvmrc y CI
+```
+
+### 4.2. Reglas comunes
 - **If docs were updated**: include "Docs: actualizado {files}" in body
 - Never commit: secrets, .env, generated artifacts
 

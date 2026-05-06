@@ -156,3 +156,12 @@ Prioridades:
 2. Elegir un item según prioridad y esfuerzo disponible.
 3. Implementar + test + bump versión + manifest + commit + push.
 4. Mover el item a `## Done en V4.X` al final de `BACKLOG.md` cuando se complete.
+
+---
+
+## Done en V4.14
+
+- **Modo respeto de configuración preexistente** (ADR-008): detección defensiva
+  de `.claude/` preexistente, Nx/pnpm-workspace aware, preserve mode para
+  `CLAUDE.md` curados, adaptador Conventional Commits en `/commit`. Habilita
+  instalar SDD en repos maduros como ADAM360 sin pisar trabajo del equipo.

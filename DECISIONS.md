@@ -164,3 +164,50 @@ multi-mantenedor, agregar GPG signing (item P3 en BACKLOG).
 **Alternativas descartadas**:
 - Mantener todo en un archivo con índice claro (mejora navegación pero no
   resuelve el problema de fragilidad para el LLM).
+
+---
+
+## ADR-008: Modo respeto de configuración preexistente — SDD se adapta al repo, no al revés (V4.14)
+
+**Decisión**: cuando el repo host ya tiene un `CLAUDE.md` curado (>2 KB),
+`.claude/settings.json`, agents/skills/commands propios, o un estilo de commit
+adoptado por el equipo (Conventional Commits inferido del git log), SDD
+**respeta lo existente** y se instala al lado en vez de sobreescribir.
+
+**Por qué**:
+- Repos maduros (ej. ADAM360 con 3 agents propios, 6 skills, settings.json con
+  hooks únicos) pierden trabajo curado si `/bootstrap` pisa archivos.
+- Sobreescribir un `CLAUDE.md` de 11 KB con la plantilla genérica de SDD destruye
+  contexto operacional que el equipo construyó manualmente.
+- Forzar al equipo a renombrar/respaldar antes de cada upgrade es frágil:
+  un olvido = pérdida de trabajo.
+- Backwards-compat estricta con proyectos simples (front/back separados) es
+  prioridad: la nueva detección no debe agregar fricción a flujos que ya
+  funcionan.
+
+**Implementación**:
+1. **Detección** (Phase 0b): `0.1bb` registra preexistentes; `0.1c` detecta
+   Nx/pnpm-workspace; `0.2b` infiere commit style desde `git log`.
+2. **Confirmación** (Phase 0c): `1.0b` y `1.0c` reportan al usuario qué se
+   detectó y cómo se respetará. La pregunta de commit style siempre pasa por
+   `AskUserQuestion` con el inferido como default — nunca se asume silenciosamente.
+3. **Preserve** (Phase 2): si `claude_md_bytes > 2048`, genera `CLAUDE.sdd.md`
+   aparte y agrega referencia idempotente al final del original (marcada con
+   `<!-- sdd-ref -->` para que re-ejecutar `/bootstrap` no duplique).
+4. **Adaptador commit** (`/commit`): lee `SDD_COMMIT_STYLE` del profile.
+   Modo `conventional` genera `<type>(<scope>): <subject>` + `Refs: TICKET-ID`
+   en footer (no rompe commitlint si el repo lo agrega más tarde).
+
+**Alternativas descartadas**:
+- **Flag manual `--respect-existing`**: agrega fricción y olvidos. Detección
+  automática es la opción correcta.
+- **Sobreescribir siempre con backup en `.bootstrap-backup/`**: backups crecen
+  sin rotación y no resuelven el problema de re-ejecución (cada bootstrap
+  sigue pisando el archivo curado).
+- **Detectar conventional commits por archivo de config (`commitlint.config.*`)**:
+  funciona solo si el repo tiene tooling. ADAM360 retiró husky+commitlint pero
+  mantiene la convención humana — la señal canónica es el historial.
+
+**Cuándo revisar**: si aparecen casos donde el threshold de 2048 bytes para
+`CLAUDE.md` no encaja (ej. stubs grandes pero genéricos), evaluar mover el
+threshold a un campo del profile o agregar heurística de contenido.

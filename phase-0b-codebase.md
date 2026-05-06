@@ -54,6 +54,68 @@ ESTADO_CONFIG:
 
 ---
 
+## 0.1bb — Detectar configuración existente de Claude Code y herramientas del repo (V4.14)
+
+> **Por qué**: si el repo ya tiene `.claude/` con agents, skills, settings.json o un `CLAUDE.md` curado por el equipo, **no debemos sobreescribirlos**. SDD se instala respetando lo que ya existe (modo *preserve*) y agrega lo suyo al lado.
+
+```bash
+echo "=== EXISTING .claude/ DETECTION ==="
+test -f .claude/settings.json && echo "CLAUDE_SETTINGS_JSON=EXISTS" || echo "CLAUDE_SETTINGS_JSON=NOT_FOUND"
+if [ -d .claude/agents ]; then
+  CLAUDE_AGENTS_LIST=$(find .claude/agents -maxdepth 1 -type f -name "*.md" 2>/dev/null | sed 's|^.claude/agents/||' | tr '\n' ',' | sed 's/,$//')
+  echo "CLAUDE_AGENTS_LIST=$CLAUDE_AGENTS_LIST"
+else
+  echo "CLAUDE_AGENTS_LIST="
+fi
+if [ -d .claude/skills ]; then
+  CLAUDE_SKILLS_LIST=$(find .claude/skills -maxdepth 2 -name "SKILL.md" 2>/dev/null | sed 's|^.claude/skills/||;s|/SKILL.md$||' | tr '\n' ',' | sed 's/,$//')
+  echo "CLAUDE_SKILLS_LIST=$CLAUDE_SKILLS_LIST"
+else
+  echo "CLAUDE_SKILLS_LIST="
+fi
+if [ -d .claude/commands ]; then
+  CLAUDE_COMMANDS_LIST=$(find .claude/commands -maxdepth 1 -type f -name "*.md" 2>/dev/null | sed 's|^.claude/commands/||' | tr '\n' ',' | sed 's/,$//')
+  echo "CLAUDE_COMMANDS_LIST=$CLAUDE_COMMANDS_LIST"
+else
+  echo "CLAUDE_COMMANDS_LIST="
+fi
+
+if [ -f CLAUDE.md ]; then
+  CLAUDE_MD_BYTES=$(wc -c < CLAUDE.md | tr -d ' ')
+  echo "CLAUDE_MD_BYTES=$CLAUDE_MD_BYTES"
+else
+  echo "CLAUDE_MD_BYTES=0"
+fi
+
+# Señales secundarias (legacy — algunos repos todavía las tienen)
+if ls commitlint.config.* >/dev/null 2>&1; then
+  echo "COMMITLINT_DETECTED=true"
+else
+  echo "COMMITLINT_DETECTED=false"
+fi
+test -f .husky/pre-push && echo "HUSKY_PREPUSH_DETECTED=true" || echo "HUSKY_PREPUSH_DETECTED=false"
+```
+
+Construí internamente:
+
+```
+EXISTING_CONFIG:
+  claude_settings_json_exists: [true | false]
+  claude_agents_list: [lista o vacía]
+  claude_skills_list: [lista o vacía]
+  claude_commands_list: [lista o vacía]
+  claude_md_bytes: [entero]
+  commitlint_detected: [true | false]
+  husky_prepush_detected: [true | false]
+```
+
+**Cuándo importa**:
+- `claude_md_bytes > 2048` → Phase 2 entra en **modo preserve**: no sobreescribe `CLAUDE.md`, genera `CLAUDE.sdd.md` al lado y agrega una línea de referencia idempotente al final del original.
+- `claude_settings_json_exists == true` → no escribir `.claude/settings.json` desde Phase 1/2 (SDD usa `settings.local.json`). Reportar al usuario en 0c.
+- Listas no vacías de agents/skills/commands → reportar al usuario que se respetan; los archivos generados por SDD conviven con prefijo claro (no colisionan por ser nombres distintos).
+
+---
+
 ## 0.1c — Detectar estructura monorepo (front + back en subdirectorios)
 
 > **Por qué**: Si el proyecto tiene frontend y backend en carpetas separadas (ej: `app-front/` y `app-back/`),
@@ -61,6 +123,49 @@ ESTADO_CONFIG:
 
 ```bash
 echo "=== MONOREPO DETECTION ==="
+
+# Detectar Nx + pnpm-workspace (monorepo formal). Si existe, los subprojects salen
+# de los paths declarados en pnpm-workspace.yaml (apps/*, packages/*, etc.) en vez
+# del walk genérico de directorios raíz.
+NX_DETECTED=false
+PNPM_WORKSPACE_DETECTED=false
+test -f nx.json && NX_DETECTED=true
+test -f pnpm-workspace.yaml -o -f pnpm-workspace.yml && PNPM_WORKSPACE_DETECTED=true
+echo "NX_DETECTED=$NX_DETECTED"
+echo "PNPM_WORKSPACE_DETECTED=$PNPM_WORKSPACE_DETECTED"
+
+# Si Nx + pnpm-workspace, expandir los globs (apps/*, packages/*) a subprojects reales.
+# Solo se proponen como slugs los apps deployables (con target serve/start/dev en
+# project.json). Los packages workspace:* (libs internas) se listan aparte y se
+# preguntan en 0c — por default NO entran al pipeline.
+NX_APPS=""
+NX_PACKAGES=""
+if [ "$NX_DETECTED" = "true" ] || [ "$PNPM_WORKSPACE_DETECTED" = "true" ]; then
+  for d in apps/*/ packages/*/ libs/*/ services/*/; do
+    [ -d "$d" ] || continue
+    sub="${d%/}"
+    name="${sub##*/}"
+    parent="${sub%%/*}"
+    # Considerar deployable solo si tiene project.json con target serve/start/dev
+    is_deployable=false
+    if [ -f "$sub/project.json" ]; then
+      if grep -qE '"(serve|start|dev)"[[:space:]]*:' "$sub/project.json" 2>/dev/null; then
+        is_deployable=true
+      fi
+    elif [ -f "$sub/package.json" ]; then
+      if grep -qE '"(dev|start|serve)"[[:space:]]*:' "$sub/package.json" 2>/dev/null; then
+        is_deployable=true
+      fi
+    fi
+    if [ "$parent" = "apps" ] || [ "$parent" = "services" ] || [ "$is_deployable" = "true" ]; then
+      NX_APPS="$NX_APPS $sub|$name"
+    else
+      NX_PACKAGES="$NX_PACKAGES $sub|$name"
+    fi
+  done
+  echo "NX_APPS=$NX_APPS"
+  echo "NX_PACKAGES=$NX_PACKAGES"
+fi
 
 # Buscar subdirectorios que tengan su propio package.json, requirements.txt, go.mod, etc.
 SUBPROJECTS=""
@@ -102,6 +207,35 @@ for dir in */; do
     SUBPROJECTS="$SUBPROJECTS $dir_name"
   fi
 done
+
+# Si Nx detectado, sobreescribir SUBPROJECTS con los apps deployables.
+# Los packages internos NO entran como SUBPROJECTS por default — Phase 0c puede
+# preguntar al usuario si quiere subir alguno al pipeline.
+if [ -n "$NX_APPS" ]; then
+  SUBPROJECTS=""
+  for entry in $NX_APPS; do
+    sub="${entry%%|*}"
+    name="${entry##*|}"
+    SUBTYPE="unknown"
+    if [ -f "$sub/next.config.js" ] || [ -f "$sub/next.config.ts" ] || [ -f "$sub/next.config.mjs" ]; then
+      SUBTYPE="frontend:nextjs"
+    elif [ -f "$sub/vite.config.ts" ] || [ -f "$sub/vite.config.js" ]; then
+      SUBTYPE="frontend:vite"
+    elif [ -f "$sub/nest-cli.json" ]; then
+      SUBTYPE="backend:nestjs"
+    elif [ -f "$sub/package.json" ]; then
+      if grep -q '"@storybook/' "$sub/package.json" 2>/dev/null; then
+        SUBTYPE="tooling:storybook"
+      elif grep -q '"react"\|"vue"\|"@angular/core"\|"next"\|"nuxt"\|"svelte"' "$sub/package.json" 2>/dev/null; then
+        SUBTYPE="frontend:react"
+      elif grep -q '"express"\|"fastify"\|"koa"\|"@nestjs/core"\|"hapi"' "$sub/package.json" 2>/dev/null; then
+        SUBTYPE="backend:node"
+      fi
+    fi
+    echo "SUBPROJECT=$sub|$SUBTYPE"
+    SUBPROJECTS="$SUBPROJECTS $sub"
+  done
+fi
 
 # Contar subproyectos detectados
 SUBPROJECT_COUNT=$(echo "$SUBPROJECTS" | wc -w | tr -d ' ')
@@ -269,6 +403,43 @@ ls docs/api/ 2>/dev/null | head -10
 git branch -r --list 'origin/dev' 'origin/develop' 'origin/development' 2>/dev/null | sed 's|origin/||' | head -1 | xargs echo "DEV_BRANCH=" || echo "DEV_BRANCH=not_found"
 ```
 
+## 0.2b — Inferir estilo de commit desde git log (V4.14)
+
+> **Por qué**: ya no podemos asumir que la presencia de `commitlint.config.*` indica conventional commits — algunos repos los usan por convención humana sin tooling. La señal canónica es el historial.
+
+```bash
+echo "=== COMMIT STYLE INFERENCE ==="
+COMMIT_TOTAL=$(git log --oneline -n 20 2>/dev/null | wc -l | tr -d ' ')
+if [ "$COMMIT_TOTAL" -gt 0 ]; then
+  COMMIT_CONVENTIONAL=$(git log --pretty=format:'%s' -n 20 2>/dev/null | grep -cE '^(feat|fix|chore|docs|refactor|test|perf|style|build|ci|revert)(\([^)]+\))?(!)?: ')
+  RATIO=$(awk "BEGIN { printf \"%.0f\", ($COMMIT_CONVENTIONAL / $COMMIT_TOTAL) * 100 }")
+  echo "COMMIT_TOTAL=$COMMIT_TOTAL"
+  echo "COMMIT_CONVENTIONAL=$COMMIT_CONVENTIONAL"
+  echo "COMMIT_CONVENTIONAL_RATIO=$RATIO"
+  if [ "$RATIO" -ge 70 ]; then
+    echo "COMMIT_STYLE_INFERRED=conventional"
+  else
+    echo "COMMIT_STYLE_INFERRED=standard"
+  fi
+else
+  echo "COMMIT_STYLE_INFERRED=standard"
+fi
+```
+
+Construí internamente:
+
+```
+COMMIT_STYLE_DETECTION:
+  inferred: [conventional | standard]
+  ratio: [0..100]
+  conventional_count: [entero]
+  total_sampled: [entero]
+```
+
+Phase 0c **siempre confirma** este valor con el usuario antes de persistirlo (no se asume silenciosamente).
+
+---
+
 ## 0.3 — (deprecada — cubierta por team analysis)
 
 > Antes este paso buscaba estructura de carpetas y patrones de archivos.
@@ -325,6 +496,12 @@ PROYECTO_PERFIL:
   openspec_version: [versión detectada en 0.0]
   mcps_disponibles: [del paso 0.0b]
   estado_config: [del paso 0.1b]
+  existing_config: [del paso 0.1bb — claude_md_bytes, claude_settings_json_exists, listas de agents/skills/commands]
+  nx_detected: [true | false — del paso 0.1c]
+  pnpm_workspace_detected: [true | false — del paso 0.1c]
+  nx_packages_offered: [lista de packages workspace:* propuestos al user en 0c — vacía si nx_detected==false]
+  commit_style_inferred: [conventional | standard — del paso 0.2b]
+  commit_style_ratio: [0..100]
   tiene_docs: [true | false]
   docs_estructura: [descripción si existe]
 ```

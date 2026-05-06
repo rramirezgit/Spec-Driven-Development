@@ -84,6 +84,9 @@ export interface ProjectConfig {
   multiTargetMode?: boolean;
   /** Slugs of subprojects (only set when multiTargetMode is true) */
   subprojectSlugs?: string[];
+  /** Commit message style. "conventional" → `<type>(<scope>): <subject>` + Refs footer.
+   *  "standard" → `TICKET-ID: <subject>` (default histórico de SDD). V4.14+ */
+  commitStyle?: "standard" | "conventional";
 }
 
 export const VALID_TRANSITIONS: Record<PipelineState, PipelineState[]> = {

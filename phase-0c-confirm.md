@@ -66,6 +66,61 @@ SUBPROJECT_SLUGS = lista ordenada de {path, slug, type, framework, ui_library, .
 
 > **Si MULTI_TARGET_CANDIDATE == false** (proyecto plano o fullstack-clásico 1+1): saltar este paso. `MULTI_TARGET_MODE = false` por default.
 
+### 1.0b — Modo Nx / pnpm-workspace (V4.14)
+
+Si Phase 0b detectó `nx_detected == true` o `pnpm_workspace_detected == true`:
+
+- Los slugs candidatos para multi-target salen de `NX_APPS` (apps/* y services/* con target deployable). Estos son los subprojects principales.
+- Si `NX_PACKAGES` no está vacío (libs internas, configs compartidos, design system), preguntar al user con **AskUserQuestion** (multi_select):
+
+  ```
+  Detecté un workspace Nx/pnpm con apps deployables y libs internas.
+
+  Apps que entran al pipeline (se generan comandos /develop-{slug} para cada una):
+    • {nombre_app_1} ({path_1})
+    • {nombre_app_2} ({path_2})
+    ...
+
+  ¿Querés incluir alguna de estas libs/packages compartidos como subproject del pipeline?
+  (Default: ninguna — las libs no suelen ser unidad de ticket.)
+  ```
+
+  Opciones: una por package detectado + "Ninguna". Multi-select.
+
+- Los packages elegidos se agregan a `SUBPROJECT_SLUGS` junto con los apps. Los no elegidos quedan registrados en `nx_packages_offered` del profile (informativo, no afecta comandos).
+
+> **Si no hay Nx/pnpm-workspace**: saltar este paso. El flujo normal de 0.1c (walk genérico) ya armó la lista.
+
+### 1.0c — Reportar configuración preexistente de Claude Code (V4.14)
+
+Si Phase 0b detectó archivos preexistentes en `.claude/` o un `CLAUDE.md` curado:
+
+```
+🛡️  CONFIGURACIÓN PREEXISTENTE DETECTADA
+
+   {si claude_md_bytes > 2048:}
+   • CLAUDE.md ({claude_md_bytes} bytes) — se preserva. SDD genera CLAUDE.sdd.md aparte.
+
+   {si claude_settings_json_exists:}
+   • .claude/settings.json — se preserva. SDD usa settings.local.json para sus permisos.
+
+   {si claude_agents_list no vacía:}
+   • {N} agents en .claude/agents/: {lista}
+     → Se respetan. Los agents que SDD genera viven en ai-specs/.agents/ (sin colisión).
+
+   {si claude_skills_list no vacía:}
+   • {N} skills en .claude/skills/: {lista}
+     → Se respetan. SDD no escribe en .claude/skills/.
+
+   {si claude_commands_list no vacía:}
+   • {N} commands en .claude/commands/: {lista}
+     → SDD agrega menu.md, bootstrap.md, create-{tracker}-tickets.md. Si alguno colisiona por nombre, se sobreescribe (commands del repo host conservan el resto).
+```
+
+Mostrar este bloque **antes** de las preguntas de 1.2. No requiere AskUserQuestion — es informativo. El usuario verá esto y sabrá que SDD respeta su trabajo previo.
+
+---
+
 ### 1.1 — Determinar qué preguntar
 
 Evaluá cada item:
@@ -133,7 +188,16 @@ Las preguntas SIEMPRE incluidas (estas no se pueden inferir):
 1. Idioma de tickets: ¿Los tickets van en español o inglés?
 
 2. Diseño: ¿El equipo usa Figma? (Sí / No / Otro)
+
+3. Estilo de commit (V4.14): ¿Usan Conventional Commits o estilo libre?
+   [Inferido del git log: {COMMIT_STYLE_INFERRED} (ratio {RATIO}% en últimos {COMMIT_TOTAL} commits)]
 ```
+
+Para la pregunta 3, usá **AskUserQuestion** (single_select) con:
+- `"Conventional Commits"` (recomendado si ratio ≥70%): subject `<type>(<scope>): <subject>`, ticket ID al footer (`Refs: TICKET-ID`)
+- `"Estilo libre"` (default tradicional de SDD): subject `TICKET-ID: <descripción>`
+
+Marcar como pre-seleccionado el valor de `COMMIT_STYLE_INFERRED`.
 
 > **Nota**: La pregunta sobre sistema de tickets y cloudId ya no se hace aquí — se resolvió automáticamente en el paso 0.0c via MCP.
 
@@ -292,6 +356,11 @@ Crear `.ai-internal/project-profile.md` con TODOS los datos reales del PROYECTO_
 # OpenSpec version: {version}
 # Es re-ejecución: {bool}
 # Archivos protegidos: {lista}
+# Commit Style: {conventional | standard}
+# Existing CLAUDE MD Bytes: {entero — 0 si no existía CLAUDE.md previo}
+# Existing Claude Settings JSON: {true | false}
+# Nx Detected: {true | false}
+# Pnpm Workspace Detected: {true | false}
 
 {Si tipo == monorepo-fullstack Y MULTI_TARGET_MODE == false, agregar sección de subprojects clásica (1 frontend + 1 backend):}
 
@@ -387,6 +456,16 @@ fi
 MULTI_TARGET_MODE=$(grep "^# Multi Target Mode:" .ai-internal/project-profile.md | sed 's/^# Multi Target Mode: //')
 SUBPROJECT_SLUGS=$(grep "^# Subproject Slugs:" .ai-internal/project-profile.md | sed 's/^# Subproject Slugs: //')
 
+# V4.14: nuevos campos de configuración preexistente y commit style
+COMMIT_STYLE=$(grep "^# Commit Style:" .ai-internal/project-profile.md | sed 's/^# Commit Style: //')
+[ -z "$COMMIT_STYLE" ] && COMMIT_STYLE="standard"
+EXISTING_CLAUDE_MD_BYTES=$(grep "^# Existing CLAUDE MD Bytes:" .ai-internal/project-profile.md | sed 's/^# Existing CLAUDE MD Bytes: //')
+[ -z "$EXISTING_CLAUDE_MD_BYTES" ] && EXISTING_CLAUDE_MD_BYTES="0"
+EXISTING_CLAUDE_SETTINGS=$(grep "^# Existing Claude Settings JSON:" .ai-internal/project-profile.md | sed 's/^# Existing Claude Settings JSON: //')
+[ -z "$EXISTING_CLAUDE_SETTINGS" ] && EXISTING_CLAUDE_SETTINGS="false"
+NX_DETECTED_VAR=$(grep "^# Nx Detected:" .ai-internal/project-profile.md | sed 's/^# Nx Detected: //')
+[ -z "$NX_DETECTED_VAR" ] && NX_DETECTED_VAR="false"
+
 cat > .ai-internal/project-vars.sh << VARSEOF
 # Auto-generated from project-profile.md — do not edit manually
 # Used by phase-2 templates for sed replacement
@@ -403,6 +482,10 @@ SDD_IDIOMA_TICKETS="$IDIOMA_TICKETS"
 SDD_CRITERIO_PROYECTO="$CRITERIO_PROYECTO"
 SDD_MULTI_TARGET_MODE="$MULTI_TARGET_MODE"
 SDD_SUBPROJECT_SLUGS="$SUBPROJECT_SLUGS"
+SDD_COMMIT_STYLE="$COMMIT_STYLE"
+SDD_EXISTING_CLAUDE_MD_BYTES="$EXISTING_CLAUDE_MD_BYTES"
+SDD_EXISTING_CLAUDE_SETTINGS_JSON="$EXISTING_CLAUDE_SETTINGS"
+SDD_NX_DETECTED="$NX_DETECTED_VAR"
 VARSEOF
 
 # Si multi-target, agregar bloque iterativo: una variable por subproject

@@ -1,11 +1,11 @@
 ---
 name: "Bootstrap: Setup AI Workflow"
-description: Configura el sistema completo de flujos AI en este proyecto (V4.13)
+description: Configura el sistema completo de flujos AI en este proyecto (V4.14)
 category: Setup
 tags: [bootstrap, setup, workflow]
 ---
 
-# Bootstrap AI Workflow V4.13
+# Bootstrap AI Workflow V4.14
 
 Sos el orquestador del bootstrap. Tu trabajo es ejecutar las fases en orden, una a la vez, cargando el archivo correspondiente.
 
@@ -24,7 +24,7 @@ test -f .bootstrap-meta.json && grep -o '"content_hash"[[:space:]]*:[[:space:]]*
 Determinar `UPGRADE_PENDING`:
 
 1. **Tier 1 — Archivo explícito**: Si `.ai-internal/.upgrade-pending` existe → `UPGRADE_PENDING=true` (leer `from_version`, `to_version`, `trigger`, `from_hash`, `to_hash` del JSON)
-2. **Tier 2 — Versión diferente**: Si no existe `.upgrade-pending` pero sí `.bootstrap-meta.json`: comparar la versión de este archivo (`bootstrap_version`) con la versión de este bootstrap (V4.13). Si son distintas → `UPGRADE_PENDING=true` (fallback)
+2. **Tier 2 — Versión diferente**: Si no existe `.upgrade-pending` pero sí `.bootstrap-meta.json`: comparar la versión de este archivo (`bootstrap_version`) con la versión de este bootstrap (V4.14). Si son distintas → `UPGRADE_PENDING=true` (fallback)
 3. **Tier 3 — Hash ausente**: Si la versión es igual PERO `content_hash` está vacío o no existe en `.bootstrap-meta.json` → `UPGRADE_PENDING=true` (el proyecto fue bootstrapped antes de la detección por hash; forzar upgrade para computar el hash inicial)
 4. Si no existe `.bootstrap-meta.json` → `UPGRADE_PENDING=false` (instalación nueva, flujo normal)
 
@@ -39,7 +39,7 @@ Si `UPGRADE_PENDING=false` → continuar con Paso 1 (flujo normal).
 > Este paso se ejecuta SOLO cuando se detecta un upgrade pendiente.
 > Ejecuta TODO en una sola invocación (no requiere múltiples runs de /bootstrap).
 
-### 0b.0 — Fail-safe pre-flight (V4.13)
+### 0b.0 — Fail-safe pre-flight (V4.14)
 
 Antes de empezar, verificar que el upgrade no esté huérfano de un intento previo:
 
@@ -105,7 +105,7 @@ echo "=== CHANGELOG ==="
 test -f .ai-internal/CHANGELOG.md && cat .ai-internal/CHANGELOG.md || cat .ai-internal/phases/phase-0-detect.md | head -50
 ```
 
-> Desde V4.13 el changelog vive en `CHANGELOG.md` (raíz del repo, descargado a `.ai-internal/CHANGELOG.md`). Para proyectos pre-V4.13 puede no existir todavía — fallback a leer las primeras líneas de `phase-0-detect.md` (que en versiones viejas tenía el changelog embebido).
+> Desde V4.14 el changelog vive en `CHANGELOG.md` (raíz del repo, descargado a `.ai-internal/CHANGELOG.md`). Para proyectos pre-V4.14 puede no existir todavía — fallback a leer las primeras líneas de `phase-0-detect.md` (que en versiones viejas tenía el changelog embebido).
 
 Parsear las entradas con formato `## VX.Y — ...` y sus tablas para extraer los cambios relevantes entre `from_version` y `to_version`. Incluir TODAS las versiones intermedias en orden cronológico.
 
@@ -596,7 +596,7 @@ Basándote en el estado:
 Mostrá:
 
 ```
-🔧 AI Workflow Bootstrap V4.13
+🔧 AI Workflow Bootstrap V4.14
 ==============================
 
 Estado:
