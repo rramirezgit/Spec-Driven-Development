@@ -24,9 +24,18 @@ Si Docusaurus NO está habilitado → este comando no se invoca. Cero overhead.
 
 ## 0. Recolectar contexto del ticket
 
+> **V4.17 — diff cache**: llamá `sdd_cache_diff` primero. Retorna el path al
+> diff cacheado en `.ai-internal/.cache/diff-{TICKET}.txt`. Si `cached=true`,
+> es el mismo diff que ya usó `/evidence` (o un comando anterior); cero
+> trabajo extra. Si `cached=false`, se regeneró por cambio de HEAD.
+
 ```bash
 # Ticket activo, branch, target subproject (multi-target), config Docusaurus
 # se obtienen del MCP via sdd_get_state.
+#
+# IMPORTANT: en V4.17+ leer el diff completo desde el path retornado por
+# sdd_cache_diff en lugar de re-correr git. Los siguientes git diff quedan
+# como fallback si el cache no está disponible.
 git diff $(git merge-base main HEAD)...HEAD --name-only
 git diff $(git merge-base main HEAD)...HEAD --stat
 git diff $(git merge-base main HEAD)...HEAD -- '*.env.example' '*.env.template'

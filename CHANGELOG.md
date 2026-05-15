@@ -6,6 +6,17 @@ está al tope.
 
 ---
 
+## V4.17 — Optimización de tokens (cache de diff, log trim, agents JSON)
+
+| Cambio | Impacto |
+|--------|---------|
+| **Cache de diff por ciclo de ticket** | Nuevo MCP tool `sdd_cache_diff` que ejecuta `git diff base...HEAD` una vez y guarda el output en `.ai-internal/.cache/diff-{TICKET}.txt` con metadata en `.meta.json` (HEAD sha, base sha, ticket, createdAt). Cache key = ticket + HEAD sha; auto-regenera si HEAD avanza. Cleanup automático al transicionar a IDLE o cyclar a TICKETS desde COMPLETADO (best-effort, errores silenciados). Sanitiza el ticket ID con regex `[A-Za-z0-9_-]+` para evitar path traversal. Buffer máximo del diff = 50 MB. |
+| **`/evidence`, `/update-docs`, `/commit` reusan el cache** | Los 3 comandos llaman `sdd_cache_diff` antes de re-correr git. Si `cached=true`, el diff ya está computado por un comando anterior del ciclo → cero trabajo. Fallback a `git diff` directo si el cache no está disponible (sin ticket activo, sin git, etc.). |
+| **`sdd_get_state` recorta el log a 5 entradas por default** | `getState({fullLog?: boolean})` retorna `log` truncado a los últimos 5 entries (last-N) por default. Nuevo campo `logTotal` indica el tamaño real persistido. `sdd_get_state` expone `fullLog: true` como opt-in para debugging. El log completo sigue en `pipeline-state.json` (max 100 entradas) — solo se recorta el output del tool. |
+| **Agents de Phase 0b devuelven JSON, no prosa** | Los 3 Explore agents de proyectos planos (`Stack & Dependencies`, `Arquitectura & Patrones`, `Calidad & Testing`) y los 3 agents de subproyectos monorepo (frontend, backend, unknown) tienen prompts reescritos con schema JSON explícito. El orquestador hace merge directo al perfil. `null` cuando un campo no se puede determinar (no omitir keys). Ahorro estimado: ~40% del payload de Phase 0b (~1500 tokens por bootstrap). |
+| **Tests** | +5 tests cubren las semánticas del `log.slice(-5)` (preserva orden, maneja logs vacíos, no padding para logs cortos, fullLog devuelve completo). Total: 53 tests pasando (48 previos + 5 nuevos). El comportamiento dinámico de `cacheDiff` se valida vía build + smoke (requiere FS + git, fuera del alcance unit). |
+| **Backwards-compat** | Cero breaking. `sdd_get_state` sin params devuelve menos data (positiva) — quien necesite el log completo pasa `fullLog: true`. El cache de diff es opt-in vía nuevo tool, no afecta flows existentes. Agents JSON: solo aplica a runs nuevos de Phase 0b; perfiles previos siguen siendo válidos (los campos del JSON son los mismos que la prosa cubría). |
+
 ## V4.16 — Integración Docusaurus con gate de docs crítica por ticket
 
 | Cambio | Impacto |

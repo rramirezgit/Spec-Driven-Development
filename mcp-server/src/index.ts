@@ -17,6 +17,7 @@ import {
   registerEvidence,
   setTargetSubproject,
   registerDocsDecision,
+  cacheDiff,
 } from "./pipeline.js";
 import type { MergeType } from "./types.js";
 import {
@@ -52,10 +53,18 @@ server.tool(
 
 server.tool(
   "sdd_get_state",
-  "Lee pipeline-state.json y retorna el estado actual del pipeline + qué acción sigue.",
-  {},
-  async () => {
-    const result = await getState();
+  "Lee pipeline-state.json y retorna el estado actual del pipeline + qué acción sigue. " +
+    "V4.17: el campo `log` viene recortado a las últimas 5 entradas por default para ahorrar tokens. " +
+    "Pasar `fullLog: true` para recibir el log completo (útil para debugging).",
+  {
+    fullLog: z
+      .boolean()
+      .optional()
+      .default(false)
+      .describe("Si true, retorna el log completo en vez de las últimas 5 entradas."),
+  },
+  async ({ fullLog }) => {
+    const result = await getState({ fullLog });
     return {
       content: [
         {
@@ -304,7 +313,31 @@ server.tool(
   },
 );
 
-// ─── Tool 12: sdd_register_docs_decision (V4.16 — Docusaurus gate) ──────────
+// ─── Tool 12: sdd_cache_diff (V4.17 — token-saving) ─────────────────────────
+
+server.tool(
+  "sdd_cache_diff",
+  "Cachea `git diff base...HEAD` del ticket activo en disco para que /evidence, /update-docs, /commit " +
+    "(y futuros como /auto-verify) lean el mismo diff una sola vez en vez de re-correr git en cada uno. " +
+    "Cache key = ticket ID + HEAD sha. Si HEAD avanza (nuevo commit en la rama), se regenera automáticamente. " +
+    "Cleanup automático al transicionar a IDLE o a TICKETS desde COMPLETADO. " +
+    "Retorna `{path, metaPath, headSha, sizeBytes, cached: bool}`. " +
+    "El campo `cached=true` indica que se reusó un cache previo; `cached=false` indica regeneración.",
+  {},
+  async () => {
+    const result = await cacheDiff();
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify(result, null, 2),
+        },
+      ],
+    };
+  },
+);
+
+// ─── Tool 13: sdd_register_docs_decision (V4.16 — Docusaurus gate) ──────────
 
 server.tool(
   "sdd_register_docs_decision",
@@ -352,7 +385,7 @@ server.tool(
   },
 );
 
-// ─── Tool 13: sdd_confirm_next ───────────────────────────────────────────────
+// ─── Tool 14: sdd_confirm_next ───────────────────────────────────────────────
 
 server.tool(
   "sdd_confirm_next",
@@ -375,7 +408,7 @@ server.tool(
   },
 );
 
-// ─── Tool 13: sdd_transition_ticket (+ alias sdd_transition_jira) ────────────
+// ─── Tool 15: sdd_transition_ticket (+ alias sdd_transition_jira) ────────────
 
 const VALID_STATES_FOR_TICKET_TRANSITION = [
   PipelineState.COMMIT,
@@ -427,7 +460,7 @@ server.tool(
   transitionTicketHandler,
 );
 
-// ─── Tool 14: sdd_comment_ticket (+ alias sdd_comment_jira) ─────────────────
+// ─── Tool 16: sdd_comment_ticket (+ alias sdd_comment_jira) ─────────────────
 
 const VALID_STATES_FOR_TICKET_COMMENT = [
   PipelineState.COMMIT,

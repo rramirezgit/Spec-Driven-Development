@@ -23,6 +23,12 @@ en `docs/evidence/{TICKET_ID}.md`.
 
 ## 1. Recopilar contexto
 
+> **V4.17 — diff cache**: antes de correr `git diff`, llamá `sdd_cache_diff`.
+> Retorna `{path, headSha, sizeBytes, cached}`. Si ya hay un cache vigente
+> (mismo HEAD), reusa el archivo en lugar de re-correr git. El path apunta
+> a `.ai-internal/.cache/diff-{TICKET}.txt` — leelo desde ahí. Si el cache
+> falla (sin ticket activo, etc.), caer a los comandos `git diff` directos.
+
 ```bash
 # Archivos modificados en este branch vs main
 git diff main...HEAD --name-only

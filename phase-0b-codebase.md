@@ -258,37 +258,80 @@ MONOREPO_DETECTION:
 
   Para cada subproyecto, usar `Agent` tool con `subagent_type: "Explore"` y prompt específico según su tipo detectado:
 
+  > **V4.17 — output JSON**: cada subproject agent devuelve JSON estructurado
+  > en vez de prosa. El orquestador hace merge directo al perfil. Usar `null`
+  > para campos no determinables.
+
   ```
   Si SUBTYPE empieza con "frontend:" o "mobile:":
-    "Analizá el subdirectorio {path}/ (tipo detectado: {SUBTYPE}):
-      - Lee {path}/package.json completo
-      - Detectá: framework + versión exacta, UI library, state management,
-        HTTP client, testing framework, form lib, validation lib
-      - Explorá estructura de carpetas (src/, app/, components/, hooks/, etc.)
-      - Leé archivos clave: tsconfig, theme/design tokens, auth store, 1-2
-        ejemplos de hook/component
-      - Identificá patrón de organización (feature-based, layer-based, etc.)
-      - Retorná resumen estructurado con todos los datos detectados.
-      Reportá en menos de 400 palabras."
+    "Analizá el subdirectorio {path}/ (tipo detectado: {SUBTYPE}). Tareas:
+      1. Leer {path}/package.json completo.
+      2. Detectar framework + versión, UI library, state management,
+         HTTP client, testing framework, form lib, validation lib.
+      3. Explorar estructura (src/, app/, components/, hooks/).
+      4. Leer tsconfig, theme/design tokens si existen, 1-2 hook/component
+         de ejemplo.
+      5. Identificar patrón (feature-based, layer-based, etc.).
+
+      FORMATO DE RESPUESTA: SOLO JSON, sin prosa:
+      {
+        \"path\": \"{path}\",
+        \"subtype\": \"{SUBTYPE}\",
+        \"framework\": { \"name\": string, \"version\": string },
+        \"ui_library\": string | null,
+        \"state_management\": string | null,
+        \"http_client\": string | null,
+        \"testing_framework\": string | null,
+        \"form_lib\": string | null,
+        \"validation_lib\": string | null,
+        \"patron_organizacion\": string,
+        \"estructura\": [ { \"path\": string, \"rol\": string } ],
+        \"archivos_clave\": [ string ],
+        \"notas\": string
+      }"
 
   Si SUBTYPE empieza con "backend:":
-    "Analizá el subdirectorio {path}/ (tipo detectado: {SUBTYPE}):
-      - Lee {path}/package.json (o requirements.txt / go.mod / pom.xml) completo
-      - Detectá: framework + versión, ORM, database, auth method, testing,
-        validation lib, HTTP layer (REST/GraphQL/gRPC)
-      - Explorá estructura (controllers/services/routes/handlers/models)
-      - Leé entry point (main.ts/app.py/main.go), 1 controller + 1 service
-        de ejemplo, config DB
-      - Identificá patrón (layered, hexagonal, DDD, MVC simple, etc.)
-      - Retorná resumen estructurado. Menos de 400 palabras."
+    "Analizá el subdirectorio {path}/ (tipo detectado: {SUBTYPE}). Tareas:
+      1. Leer {path}/package.json (o requirements.txt / go.mod / pom.xml).
+      2. Detectar framework + versión, ORM, database, auth method, testing,
+         validation lib, HTTP layer (REST/GraphQL/gRPC).
+      3. Explorar estructura (controllers/services/routes/handlers/models).
+      4. Leer entry point, 1 controller + 1 service de ejemplo, config DB.
+      5. Identificar patrón (layered, hexagonal, DDD, MVC).
+
+      FORMATO DE RESPUESTA: SOLO JSON, sin prosa:
+      {
+        \"path\": \"{path}\",
+        \"subtype\": \"{SUBTYPE}\",
+        \"framework\": { \"name\": string, \"version\": string },
+        \"orm\": string | null,
+        \"database\": string | null,
+        \"auth_method\": string | null,
+        \"http_layer\": \"REST\" | \"GraphQL\" | \"gRPC\" | \"mixed\" | null,
+        \"testing_framework\": string | null,
+        \"validation_lib\": string | null,
+        \"patron_arquitectura\": string,
+        \"estructura\": [ { \"path\": string, \"rol\": string } ],
+        \"entry_point\": string | null,
+        \"notas\": string
+      }"
 
   Si SUBTYPE es "unknown" o algo distinto (shared lib, infra, tooling):
-    "Analizá el subdirectorio {path}/ (tipo: indeterminado):
-      - Lee package manifest principal
-      - Determiná qué hace este subproyecto (lib compartida, scripts, infra,
-        documentación, otra cosa)
-      - Reportá: rol del subproyecto, principales dependencias, si exporta
-        algo público o es interno. Menos de 250 palabras."
+    "Analizá el subdirectorio {path}/ (tipo: indeterminado). Tareas:
+      1. Leer package manifest principal.
+      2. Determinar qué hace (lib compartida, scripts, infra, docs, otro).
+      3. Listar deps principales y si exporta algo público.
+
+      FORMATO DE RESPUESTA: SOLO JSON, sin prosa:
+      {
+        \"path\": \"{path}\",
+        \"subtype\": \"unknown\",
+        \"rol_detectado\": \"shared-lib\" | \"infra\" | \"tooling\" | \"docs\" | \"otro\",
+        \"descripcion_corta\": string,
+        \"deps_principales\": [ string ],
+        \"exporta_publico\": boolean,
+        \"notas\": string
+      }"
   ```
 
 - Los resultados de los N agents se consolidan en el perfil extendido (paso 0.5),
@@ -316,58 +359,99 @@ complementarios:
 > múltiples tool uses (un bloque `Agent` por cada uno). Si las mandás secuenciales
 > Claude las ejecuta una tras otra y perdés ~3x de tiempo.
 
+> **V4.17 — output JSON**: los agents devuelven JSON estructurado, no prosa.
+> El orquestador parsea el JSON directamente para construir `PROYECTO_PERFIL`.
+> Ahorra ~40% de tokens vs respuestas en prosa y elimina ambigüedad de parseo.
+> Si el agent no puede determinar un campo, debe devolver `null` (no omitir la key).
+
 ```
 Agent 1 — Stack & Dependencies (subagent_type: Explore):
-  "Analizá el stack del proyecto en la raíz:
-   - Lee el manifest principal (package.json / requirements.txt / go.mod /
-     pom.xml / Cargo.toml). Lista TODAS las deps directas y devDeps.
-   - Detectá con versión exacta: framework principal, lenguaje, build tool,
-     package manager, UI library (si aplica), HTTP client, server state lib,
-     auth state lib, form lib, validation lib, testing framework, ORM (si aplica),
-     database driver (si aplica).
-   - Lee tsconfig.json, .eslintrc / eslint.config.*, prettier config, .nvmrc.
-   - Reportá un resumen estructurado en formato:
-       framework_principal, lenguaje, build_tool, package_manager,
-       ui_library, http_client, server_state, auth_state, form_lib,
-       validation_lib, testing_framework, orm, database, type_checking_strict.
-   Menos de 350 palabras."
+  "Analizá el stack del proyecto en la raíz. Tareas:
+   1. Leer manifest principal (package.json / requirements.txt / go.mod /
+      pom.xml / Cargo.toml). Listar deps directas y devDeps con versión exacta.
+   2. Detectar framework principal, lenguaje, build tool, package manager,
+      UI library, HTTP client, server state lib, auth state lib, form lib,
+      validation lib, testing framework, ORM, database driver.
+   3. Leer tsconfig.json, eslint config, prettier config, .nvmrc.
+
+   FORMATO DE RESPUESTA: devolvé SOLO un bloque JSON con este shape (sin prosa,
+   sin markdown alrededor; usá null cuando no puedas determinar un campo):
+
+   {
+     \"framework_principal\": { \"name\": string, \"version\": string },
+     \"lenguaje\": string,
+     \"build_tool\": string | null,
+     \"package_manager\": string,
+     \"ui_library\": { \"name\": string, \"version\": string } | null,
+     \"http_client\": string | null,
+     \"server_state\": string | null,
+     \"auth_state\": string | null,
+     \"form_lib\": string | null,
+     \"validation_lib\": string | null,
+     \"testing_framework\": string | null,
+     \"orm\": string | null,
+     \"database\": string | null,
+     \"type_checking_strict\": boolean | null,
+     \"deps_clave\": [ { \"name\": string, \"version\": string } ],
+     \"notas\": string  // <=200 chars con cosas que el schema no captura
+   }"
 
 Agent 2 — Arquitectura & Patrones (subagent_type: Explore):
-  "Analizá la arquitectura del codebase en la raíz:
-   - Mapeá la estructura de directorios (src/, app/, lib/, internal/,
-     controllers/, services/, components/, hooks/, etc.) — máximo 3 niveles
-     de profundidad, ignorando node_modules / dist / build / .git.
-   - Identificá el patrón de organización: feature-based, layer-based,
-     domain-driven, hexagonal, MVC, otro.
-   - Leé 2-3 archivos representativos de los tipos clave: un service,
-     un controller/handler, un hook, un component, un store/state.
-   - Detectá naming conventions (kebab-case / camelCase / PascalCase,
-     prefijos como use-/get-/Use, sufijos .service./.hook./.store.).
-   - Identificá cliente HTTP/API: leé axiosInstance.* / httpClient.* /
-     api-client.* si existen.
-   - Reportá: estructura_carpetas (resumen breve),
-     patron_organizacion, patron_componentes, patron_hooks, patron_api,
-     naming_conventions. Menos de 400 palabras."
+  "Analizá la arquitectura del codebase en la raíz. Tareas:
+   1. Mapear estructura de directorios (máx 3 niveles, ignorando node_modules/
+      dist/build/.git).
+   2. Identificar patrón de organización (feature-based, layer-based, DDD,
+      hexagonal, MVC, otro).
+   3. Leer 2-3 archivos representativos (service, controller/handler, hook,
+      component, store/state).
+   4. Detectar naming conventions y cliente HTTP/API real.
+
+   FORMATO DE RESPUESTA: SOLO JSON:
+
+   {
+     \"estructura_carpetas\": [ { \"path\": string, \"rol\": string } ],
+     \"patron_organizacion\": \"feature-based\" | \"layer-based\" | \"domain-driven\" | \"hexagonal\" | \"mvc\" | \"otro\",
+     \"patron_componentes\": string | null,
+     \"patron_hooks\": string | null,
+     \"patron_api\": string | null,
+     \"naming_conventions\": {
+       \"files\": \"kebab-case\" | \"camelCase\" | \"PascalCase\" | \"snake_case\" | \"mixed\",
+       \"prefijos\": string[],
+       \"sufijos\": string[]
+     },
+     \"http_client_real\": { \"file\": string, \"library\": string } | null,
+     \"archivos_representativos\": [ { \"path\": string, \"tipo\": string } ],
+     \"notas\": string
+   }"
 
 Agent 3 — Calidad & Testing (subagent_type: Explore):
-  "Analizá la calidad y setup de testing del proyecto:
-   - Buscá archivos de test (*.test.*, *.spec.*, __tests__/, e2e/, integration/).
-     Reportá cantidad por tipo (unit/integration/e2e) y si están al lado del
-     source o en carpetas separadas.
-   - Detectá testing framework (Jest, Vitest, Mocha, Playwright, Cypress,
-     pytest, go test, etc.) leyendo configs y devDeps.
-   - Detectá CI: .github/workflows/, .gitlab-ci.yml, circle.yml, jenkins,
-     bitbucket-pipelines.
-   - Linting/formatting: confirmá si eslint/prettier/biome/ruff/black están
-     activos y configurados.
-   - Type checking: si TypeScript, mirá strict mode en tsconfig. Si Python,
-     mirá mypy/pyright config.
-   - Estimá madurez de tests: 'sin tests' / 'esqueleto' / 'cobertura parcial' /
-     'cobertura amplia' (basado en ratio archivos de test vs source).
-   - Reportá: testing_framework, test_count_breakdown, ci_setup,
-     linting_setup, type_checking_strict, madurez_tests.
-   Menos de 350 palabras."
+  "Analizá la calidad y setup de testing del proyecto. Tareas:
+   1. Buscar tests (*.test.*, *.spec.*, __tests__/, e2e/, integration/) y
+      reportar cantidad por tipo + ubicación (junto a source vs carpetas).
+   2. Detectar testing framework leyendo configs y devDeps.
+   3. Detectar CI (.github/workflows/, .gitlab-ci.yml, etc.).
+   4. Linting/formatting + type checking strict.
+   5. Estimar madurez de tests por ratio test/source.
+
+   FORMATO DE RESPUESTA: SOLO JSON:
+
+   {
+     \"testing_framework\": string | null,
+     \"test_count\": { \"unit\": number, \"integration\": number, \"e2e\": number },
+     \"test_location\": \"co-located\" | \"separate-folder\" | \"mixed\" | \"none\",
+     \"ci_setup\": { \"provider\": string, \"file\": string } | null,
+     \"linting\": { \"tool\": string, \"config_file\": string } | null,
+     \"formatting\": { \"tool\": string, \"config_file\": string } | null,
+     \"type_checking_strict\": boolean | null,
+     \"madurez_tests\": \"sin tests\" | \"esqueleto\" | \"cobertura parcial\" | \"cobertura amplia\",
+     \"notas\": string
+   }"
 ```
+
+> **Por qué JSON**: el orquestador después arma `PROYECTO_PERFIL` con merge
+> directo de los 3 JSONs. Sin re-parseo de prosa, sin pérdida de campos, sin
+> tokens gastados en redacción. El agent enfoca su capacidad en encontrar la
+> data, no en explicarla.
 
 Los 3 reportes se consolidan en `PROYECTO_PERFIL` en paso 0.5. Los pasos 0.2, 0.3
 y 0.4 a continuación se vuelven **complementarios** (env vars, dev branch, docs/,

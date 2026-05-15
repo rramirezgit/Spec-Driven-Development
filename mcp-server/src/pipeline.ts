@@ -1,4 +1,4 @@
-import { readFile, writeFile, mkdir, rename } from "node:fs/promises";
+import { readFile, writeFile, mkdir, rename, unlink, stat } from "node:fs/promises";
 import { execSync, execFileSync } from "node:child_process";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -25,6 +25,15 @@ const STATE_PATH = join(
   ".ai-internal",
   "pipeline-state.json",
 );
+
+const CACHE_DIR = join(PROJECT_ROOT, ".ai-internal", ".cache");
+
+/** Conservative sanitizer: only allow ticket IDs that look like tracker keys.
+ *  Prevents path traversal via crafted ticket strings. */
+function isSafeTicketId(id: string): boolean {
+  if (!id || id.length > 64) return false;
+  return /^[A-Za-z0-9_-]+$/.test(id);
+}
 
 export async function loadState(): Promise<PipelineData> {
   try {
@@ -289,6 +298,9 @@ export async function advance(
     data.awaitingUserConfirmation = true;
   }
 
+  // Capture previous ticket BEFORE resets so we can clear its diff cache.
+  const previousTicket = data.activeTicket;
+
   // Reset when going back to IDLE (full reset)
   if (to === PipelineState.IDLE) {
     data.activeTicket = null;
@@ -302,6 +314,7 @@ export async function advance(
     data.evidenceFilePath = null;
     data.targetSubproject = null;
     data.docsDecision = null;
+    await clearDiffCacheForTicket(previousTicket);
   }
 
   // Reset per-ticket state when cycling back to TICKETS from COMPLETADO
@@ -315,6 +328,7 @@ export async function advance(
     data.evidenceFilePath = null;
     data.targetSubproject = null;
     data.docsDecision = null;
+    await clearDiffCacheForTicket(previousTicket);
   }
 
   const logEntry: LogEntry = {
@@ -638,6 +652,148 @@ export function isSafeBranchName(name: string): boolean {
   return /^[A-Za-z0-9._/-]+$/.test(name);
 }
 
+// ─── Diff cache (V4.17 — token-saving) ──────────────────────────────────────
+
+export interface CacheDiffResult {
+  ok: boolean;
+  path?: string;
+  metaPath?: string;
+  headSha?: string;
+  baseSha?: string;
+  sizeBytes?: number;
+  cached?: boolean; // true if we reused an existing cache; false if we regenerated
+  error?: string;
+}
+
+/**
+ * Caches `git diff base...HEAD` for the active ticket on disk so multiple
+ * commands (/evidence, /update-docs, /commit, future /auto-verify) read the
+ * same diff once instead of re-running git per invocation.
+ *
+ * Cache key is the ticket ID + HEAD sha. If HEAD moves (new commit on the
+ * branch), the cache is regenerated automatically. If the ticket changes
+ * (next cycle), `clearDiffCacheForTicket()` is called by advance() on the
+ * IDLE/COMPLETADO transitions.
+ *
+ * Returns:
+ *   - path: where the diff content was written
+ *   - metaPath: companion .meta.json with { headSha, baseSha, ticket, createdAt }
+ *   - cached: true if reused, false if regenerated
+ */
+export async function cacheDiff(): Promise<CacheDiffResult> {
+  const data = await loadState();
+
+  if (!data.activeTicket) {
+    return {
+      ok: false,
+      error: "No hay ticket activo. Llamá sdd_set_active_ticket antes de cachear diff.",
+    };
+  }
+
+  if (!isSafeTicketId(data.activeTicket)) {
+    return {
+      ok: false,
+      error: `Ticket ID inválido para cache: "${data.activeTicket}". Solo se permiten letras, números, guion y guion-bajo.`,
+    };
+  }
+
+  let headSha: string;
+  let baseSha: string;
+  try {
+    headSha = execFileSync("git", ["rev-parse", "HEAD"], {
+      cwd: PROJECT_ROOT,
+      encoding: "utf-8",
+    }).trim();
+    // Use merge-base with the dev branch if registered, else main as fallback
+    const baseBranch = data.featureBranch ? "main" : "main";
+    baseSha = execFileSync("git", ["merge-base", baseBranch, "HEAD"], {
+      cwd: PROJECT_ROOT,
+      encoding: "utf-8",
+    }).trim();
+  } catch (err) {
+    return {
+      ok: false,
+      error: `No se pudo resolver HEAD/base sha vía git: ${(err as Error).message}`,
+    };
+  }
+
+  const ticketId = data.activeTicket;
+  const diffPath = join(CACHE_DIR, `diff-${ticketId}.txt`);
+  const metaPath = join(CACHE_DIR, `diff-${ticketId}.meta.json`);
+
+  // Reuse existing cache if HEAD sha matches
+  try {
+    const metaRaw = await readFile(metaPath, "utf-8");
+    const meta = JSON.parse(metaRaw) as { headSha: string; baseSha: string };
+    if (meta.headSha === headSha && meta.baseSha === baseSha) {
+      const st = await stat(diffPath);
+      return {
+        ok: true,
+        path: diffPath,
+        metaPath,
+        headSha,
+        baseSha,
+        sizeBytes: st.size,
+        cached: true,
+      };
+    }
+  } catch {
+    // No cache yet, or unreadable — regenerate below
+  }
+
+  // Regenerate cache
+  let diffContent: string;
+  try {
+    diffContent = execFileSync(
+      "git",
+      ["diff", `${baseSha}...HEAD`],
+      { cwd: PROJECT_ROOT, encoding: "utf-8", maxBuffer: 50 * 1024 * 1024 },
+    );
+  } catch (err) {
+    return {
+      ok: false,
+      error: `git diff falló: ${(err as Error).message}`,
+    };
+  }
+
+  await mkdir(CACHE_DIR, { recursive: true });
+  await writeFile(diffPath, diffContent, "utf-8");
+  await writeFile(
+    metaPath,
+    JSON.stringify(
+      {
+        ticket: ticketId,
+        headSha,
+        baseSha,
+        createdAt: new Date().toISOString(),
+        sizeBytes: Buffer.byteLength(diffContent, "utf-8"),
+      },
+      null,
+      2,
+    ),
+    "utf-8",
+  );
+
+  return {
+    ok: true,
+    path: diffPath,
+    metaPath,
+    headSha,
+    baseSha,
+    sizeBytes: Buffer.byteLength(diffContent, "utf-8"),
+    cached: false,
+  };
+}
+
+/** Removes the cache for a specific ticket (best-effort, errors swallowed). */
+async function clearDiffCacheForTicket(ticketId: string | null | undefined): Promise<void> {
+  if (!ticketId || !isSafeTicketId(ticketId)) return;
+  const diffPath = join(CACHE_DIR, `diff-${ticketId}.txt`);
+  const metaPath = join(CACHE_DIR, `diff-${ticketId}.meta.json`);
+  await unlink(diffPath).catch(() => {});
+  await unlink(metaPath).catch(() => {});
+}
+
 // ─── Docs decision registration (V4.16) ─────────────────────────────────────
 
 export interface RegisterDocsDecisionResult {
@@ -934,10 +1090,19 @@ export interface GetStateResult {
   evidenceFilePath: string | null;
   targetSubproject: string | null;
   docsDecision: DocsDecision | null;
+  /** Last N log entries. V4.17+ trims to 5 by default to save tokens.
+   *  Call sdd_get_state with fullLog=true to retrieve the entire persisted log. */
+  log: LogEntry[];
+  /** Total entries in the persisted log (file). Useful when log is trimmed. */
+  logTotal: number;
 }
 
-export async function getState(): Promise<GetStateResult> {
+/** V4.17: default tail size for the log in getState output. */
+const DEFAULT_LOG_TAIL = 5;
+
+export async function getState(options?: { fullLog?: boolean }): Promise<GetStateResult> {
   const data = await loadState();
+  const fullLog = options?.fullLog === true;
 
   // Resolve {tracker} and {tipo} placeholders in nextCommand using project config
   let nextCommand = NEXT_COMMANDS[data.state];
@@ -947,6 +1112,9 @@ export async function getState(): Promise<GetStateResult> {
       .replace(/\{tracker\}/g, config.tracker || "jira")
       .replace(/\{tipo\}/g, config.tipo || "fullstack");
   }
+
+  const totalLog = data.log.length;
+  const log = fullLog ? data.log : data.log.slice(-DEFAULT_LOG_TAIL);
 
   return {
     state: data.state,
@@ -964,5 +1132,7 @@ export async function getState(): Promise<GetStateResult> {
     evidenceFilePath: data.evidenceFilePath ?? null,
     targetSubproject: data.targetSubproject ?? null,
     docsDecision: data.docsDecision ?? null,
+    log,
+    logTotal: totalLog,
   };
 }

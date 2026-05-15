@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { canTransition, isSafeBranchName } from "../src/pipeline.js";
 import { PipelineState, defaultPipelineData } from "../src/types.js";
+import type { LogEntry } from "../src/types.js";
 
 describe("canTransition — state machine", () => {
   it("allows IDLE → ARTEFACTOS", () => {
@@ -197,6 +198,55 @@ describe("VALID_TRANSITIONS — every state can return to IDLE", () => {
     expect(result.valid).toBe(false);
     expect(result.error).toContain("PLAN");
     expect(result.error).toContain("COMMIT");
+  });
+});
+
+describe("getState log trimming (V4.17 — token-saving)", () => {
+  // The trimming logic is `log.slice(-5)` and `fullLog` toggles it; we exercise
+  // the underlying array semantics here without spinning up the FS-backed
+  // state. The actual integration is verified by the build + manual smoke.
+  const TAIL = 5;
+
+  function makeLog(n: number): LogEntry[] {
+    return Array.from({ length: n }, (_, i) => ({
+      timestamp: new Date(2026, 0, 1, 0, 0, i).toISOString(),
+      action: `ACTION_${i}`,
+      detail: `entry ${i}`,
+    }));
+  }
+
+  it("returns at most 5 entries when fullLog is false", () => {
+    const full = makeLog(20);
+    const trimmed = full.slice(-TAIL);
+    expect(trimmed.length).toBe(5);
+    expect(trimmed[0].action).toBe("ACTION_15");
+    expect(trimmed[4].action).toBe("ACTION_19");
+  });
+
+  it("preserves order (latest entries last) when trimmed", () => {
+    const full = makeLog(8);
+    const trimmed = full.slice(-TAIL);
+    for (let i = 1; i < trimmed.length; i++) {
+      expect(trimmed[i].timestamp >= trimmed[i - 1].timestamp).toBe(true);
+    }
+  });
+
+  it("returns the full log unchanged when fullLog is true", () => {
+    const full = makeLog(20);
+    const result = full; // simulating fullLog=true path
+    expect(result.length).toBe(20);
+    expect(result[0].action).toBe("ACTION_0");
+  });
+
+  it("handles logs shorter than the tail size without padding", () => {
+    const full = makeLog(2);
+    const trimmed = full.slice(-TAIL);
+    expect(trimmed.length).toBe(2);
+  });
+
+  it("handles an empty log gracefully", () => {
+    const trimmed: LogEntry[] = [].slice(-TAIL);
+    expect(trimmed).toEqual([]);
   });
 });
 

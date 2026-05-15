@@ -24,6 +24,13 @@ If user requested no git operations:
 ## 1. Inspect state
 `git status` + `git diff` (+ `git diff --staged`). Identify current branch.
 
+> **V4.17 — diff cache**: si hay ticket activo, llamá `sdd_cache_diff` antes
+> de correr `git diff`. Retorna el path a `.ai-internal/.cache/diff-{TICKET}.txt`
+> con el diff completo ya computado por `/evidence` o `/update-docs` durante el
+> ciclo. Cuando `cached=true`, leelo desde ahí en lugar de re-correr git. El
+> `git status` y `git diff --staged` siguen siendo necesarios (cubren cosas
+> que el cache no — estado de stage, archivos untracked).
+
 ## 2. Evidence check (opcional)
 
 If a ticket ID is identified (from args, branch name, or staged files), opcionalmente verificar si hay doc local de evidencia:
