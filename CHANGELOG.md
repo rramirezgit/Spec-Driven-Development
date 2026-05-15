@@ -6,6 +6,20 @@ está al tope.
 
 ---
 
+## V4.15 — `/menu` con una sola pregunta (auto-detección de contexto)
+
+| Cambio | Impacto |
+|--------|---------|
+| **Pre-detección de contexto antes del menú** | Cuando `state=IDLE` y no hay `$ARGUMENTS`, ejecutar `git branch --show-current` + `gh pr view` en paralelo. Derivar `detectedTicket` (parseo regex `(feature\|hotfix\|bugfix)/([A-Z]+-[0-9]+)-.*` sobre la rama) y `detectedPR` (PR abierto del branch). Si `gh` falla o no hay remoto → degradación silenciosa, no se aborta. |
+| **Etiquetas del menú con contexto** | Opciones 2 (Ticket) y 4 (Review PR) muestran el ID/PR detectado en la propia label, ej: `2. Ticket existente — detectado: AUTH-123`. Señaliza al usuario que esa selección NO va a re-preguntar. |
+| **Opción 2 — sin segunda pregunta** | Resolución del ticket en cascada: `$ARGUMENTS` → `detectedTicket` → preguntar. Solo se pregunta si ninguno está disponible. Mensaje `🎯 Ticket detectado desde la rama: {ID}` cuando viene del branch. |
+| **Opción 4 — sin segunda pregunta** | Cascada análoga: `$ARGUMENTS` → `detectedPR` → preguntar. Usa `gh pr view --json number,title,state` para detectar el PR del branch actual. |
+| **Opción 5 — sin segunda pregunta** | Cascada: `$ARGUMENTS` → `activeTicket` del pipeline state → `detectedTicket` → preguntar. Aprovecha el ticket activo del ciclo en curso cuando existe. |
+| **Opción 6 — sin segunda pregunta** | Default = buscar sprint activo automáticamente (Jira: `searchJiraIssuesUsingJql` con `sprint in openSprints()`; Notion: query por status). IDs explícitos solo vía `$ARGUMENTS` (`/menu sprint AUTH-1,AUTH-2`). |
+| **Opción 1 — atajo con descripción** | `/menu feature "notificaciones push"` ejecuta directo sin preguntar. Sin `$ARGUMENTS` mantiene la pregunta única original. |
+| **Atajos `$ARGUMENTS` ampliados** | Documentados todos los atajos parametrizables: `/menu <ID>`, `/menu pr <N>`, `/menu test <X>`, `/menu sprint <lista>`, `/menu feature <desc>`. |
+| **Compat** | Opciones 3 (Explorar) y 7 (Release) no cambian. Si no hay contexto detectado y no hay `$ARGUMENTS`, el comportamiento es idéntico a V4.14 (se pregunta una vez). |
+
 ## V4.14 — Modo respeto de configuración preexistente (ADAM360-safe)
 
 | Cambio | Impacto |

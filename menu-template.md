@@ -57,49 +57,81 @@ Cuando se identifica un ticket para trabajar (en Opción 2, en estado TICKETS, o
 ```
 1. sdd_check_config → si error, mostrar y HALT
 2. sdd_get_state → leer state, nextAction, nextCommand
-3. Si IDLE → mostrar menú (7 opciones)
-4. Si no → mostrar estado actual + "Siguiente: {nextAction}"
-5. Ejecutar el comando .md correspondiente (UNO solo)
-6. sdd_advance({nuevo_estado})
-7. HALT con resumen
+3. Si hay $ARGUMENTS → resolver atajo (ver abajo), saltear menú
+4. Si IDLE → detectar contexto (git branch + gh pr) → mostrar menú (7 opciones)
+5. Si no → mostrar estado actual + "Siguiente: {nextAction}"
+6. Ejecutar el comando .md correspondiente (UNO solo)
+7. sdd_advance({nuevo_estado})
+8. HALT con resumen
 ```
+
+# Pre-detección de contexto (antes del menú)
+
+**Objetivo**: que el menú pregunte UNA sola vez. Si el contexto del repo ya
+revela qué quiere hacer el usuario, no re-preguntes después de la selección.
+
+Antes de mostrar el menú (solo si state=IDLE y no hay `$ARGUMENTS`), ejecutar
+en paralelo:
+
+```bash
+git branch --show-current 2>/dev/null
+gh pr view --json number,title,state 2>/dev/null
+```
+
+Y derivar:
+- **`detectedTicket`**: si la rama matchea `(feature|hotfix|bugfix)/([A-Z]+-[0-9]+)-.*` → extraer el ID. Si no → `null`.
+- **`detectedPR`**: si `gh pr view` retorna un PR abierto del branch actual → guardar `{number, title}`. Si no → `null`.
+
+Estos valores se usan para evitar la segunda pregunta en Opciones 2 y 4 (ver abajo).
+
+> Si `gh` no está instalado o el repo no tiene remoto → ignorar silenciosamente, `detectedPR = null`. No abortar.
 
 # Atajo rápido ($ARGUMENTS)
 
-Si el usuario pasa un argumento directo, ir a ese flujo sin menú:
-- "1" / "nuevo" / "feature" → Pedir descripción, ejecutar SOLO artefactos
-- "2" / "ticket" / ID de ticket → Ejecutar SOLO enrich-ticket
-- "3" / "explorar" → Ejecutar SOLO exploración
-- "review" / "pr" → Ejecutar SOLO review-pr
-- "test" → Ejecutar SOLO test-plan
-- "sprint" / "6" → Flujo Sprint (ver abajo)
-- "release" / "7" → Ejecutar SOLO release-to-main
-- "status" → Llamar sdd_get_state y mostrar sin ejecutar nada
-- "evidence" / "evidencia" → Ejecutar SOLO evidence
-
-Para detectar si el argumento es un ID de ticket: cualquier string que contenga letras + guión + números (ej: `AUTH-123`, `BACK-45`, `FE-7`) se trata como ticket ID.
+Si el usuario pasa un argumento directo, ir a ese flujo **sin menú y sin re-preguntar**:
+- `"1"` / `"nuevo"` / `"feature"` → Si hay más texto después, usarlo como descripción y ejecutar artefactos. Si no, pedir descripción.
+- `"feature <descripción libre>"` → Ejecutar artefactos con esa descripción, sin preguntar.
+- `"2"` / `"ticket"` → Ejecutar enrich-ticket con `detectedTicket`. Si no hay → pedir ID.
+- **ID de ticket directo** (regex `[A-Z]+-[0-9]+`, ej: `AUTH-123`) → Ejecutar enrich-ticket con ese ID.
+- `"3"` / `"explorar"` → Ejecutar SOLO exploración.
+- `"review"` / `"pr"` → Ejecutar review-pr con `detectedPR`. Si no hay → pedir número.
+- `"review <N>"` / `"pr <N>"` → Ejecutar review-pr con ese número.
+- `"test"` → Ejecutar test-plan con `activeTicket` (si existe en el state) o `detectedTicket`. Si no → pedir.
+- `"test <ID|descripción>"` → Ejecutar test-plan con ese parámetro.
+- `"sprint"` / `"6"` → Ejecutar Sprint con búsqueda automática del sprint activo.
+- `"sprint <ID1,ID2,...>"` → Ejecutar Sprint con esa lista explícita.
+- `"release"` / `"7"` → Ejecutar release-to-main.
+- `"status"` → Llamar `sdd_get_state` y mostrar sin ejecutar nada.
+- `"evidence"` / `"evidencia"` → Ejecutar SOLO evidence.
 
 **IMPORTANTE**: Incluso con atajos, SIEMPRE llamar `sdd_check_config` primero.
 
 # Menú (solo cuando state=IDLE)
 
-AskUserQuestion (single_select):
+AskUserQuestion (single_select). Las etiquetas se enriquecen con `detectedTicket` y `detectedPR` cuando existen, para señalar que NO se va a re-preguntar:
+
 ```
 ¿Qué querés hacer?
 
 1. Feature nuevo — tengo una idea o requerimiento
-2. Ticket existente — ya tengo un ticket en __SDD_TRACKER__
+2. Ticket existente {— detectado: <detectedTicket> si existe}
 3. Explorar — pensar antes de planificar
-4. Review PR — revisar un pull request
+4. Review PR {— detectado: #<detectedPR.number> si existe}
 5. Test plan — generar plan de testing
-6. Sprint — planificar varios tickets en paralelo
+6. Sprint — buscar tickets del sprint activo
 7. Release a main — tickets aprobados por QA → PR a main
 ```
+
+**Regla UX**: si una opción tiene contexto detectado, la etiqueta debe dejarlo
+visible. Cuando el usuario la selecciona, ejecutar directamente — sin segunda
+pregunta. Si quiere overridear, puede invocar con atajo (`/menu AUTH-456`).
 
 ## Acciones del menú
 
 ### Opción 1: Feature nuevo
-Preguntar: "Contame qué querés construir."
+**Descripción**:
+- Si `$ARGUMENTS` ya trae la descripción (ej: `/menu feature "notificaciones push"`) → usarla, NO preguntar.
+- Si no → preguntar UNA sola vez: "Contame qué querés construir."
 
 > El usuario solo necesita describir la idea. Vos hacés todo: explorar el codebase, crear artefactos, tickets, plan, implementación, evidencia y commit — paso a paso, preguntando "¿seguimos?" entre cada uno. NUNCA le muestres la secuencia de pasos futuros ni le pidas que ejecute comandos.
 
@@ -130,7 +162,13 @@ Preguntar: "Contame qué querés construir."
 > **IMPORTANTE**: Nunca saltear la exploración. Los artefactos y tickets deben ser completos y precisos — solo es posible si se conoce el codebase en profundidad.
 
 ### Opción 2: Ticket existente
-Preguntar: "¿Cuál es el ID del ticket?"
+**Resolución del ID** (sin re-preguntar si hay contexto):
+1. Si `$ARGUMENTS` contiene un ID (regex `[A-Z]+-[0-9]+`) → usarlo.
+2. Si no, y `detectedTicket` está seteado (de la rama actual `feature/{ID}-slug`) → usar `detectedTicket` y mostrar:
+   ```
+   🎯 Ticket detectado desde la rama: {detectedTicket}
+   ```
+3. Solo si NO hay ID ni `detectedTicket` → preguntar UNA vez: "¿Cuál es el ID del ticket?"
 
 **Sprint Gate** — Validar que el ticket esté en un sprint activo (ver regla 9). Si no → BLOQUEAR.
 
@@ -147,19 +185,36 @@ Leer y ejecutar `/opsx:explore`. **HALT después.**
 (No afecta el pipeline — exploración es atómica.)
 
 ### Opción 4: Review PR
-Preguntar: "¿Número de PR o 'current'?"
+**Resolución del PR** (sin re-preguntar si hay contexto):
+1. Si `$ARGUMENTS` trae número (ej: `/menu pr 45`) → usarlo.
+2. Si no, y `detectedPR` está seteado (PR del branch actual via `gh pr view`) → usarlo y mostrar:
+   ```
+   🎯 PR detectado: #{detectedPR.number} — {detectedPR.title}
+   ```
+3. Solo si NO hay número ni `detectedPR` → preguntar UNA vez: "¿Número de PR?"
+
 Leer y ejecutar `/review-pr`. **HALT después.**
 (No afecta el pipeline — review es atómico.)
 
 ### Opción 5: Test plan
-Preguntar: "¿Ticket ID o feature?"
+**Resolución del target** (sin re-preguntar si hay contexto):
+1. Si `$ARGUMENTS` trae ID o descripción → usarlo.
+2. Si hay `activeTicket` en el pipeline state → usarlo.
+3. Si no, y `detectedTicket` está seteado → usarlo.
+4. Solo si NO hay nada → preguntar UNA vez: "¿Ticket ID o feature?"
+
 Leer y ejecutar `/test-plan`. **HALT después.**
 (No afecta el pipeline — test plan es atómico.)
 
 ### Opción 6: Modo sprint
-Preguntar: "¿IDs de tickets separados por coma, o busco el sprint activo?"
-Si busca sprint activo → `searchJiraIssuesUsingJql` con `project = {project_key} AND sprint in openSprints()`.
-> **Si tracker=notion**: En vez de JQL, usar query en la database de Notion con filter por status = "In Progress" o similar. Notion no tiene sprints nativos.
+**Resolución de tickets** (sin re-preguntar):
+1. Si `$ARGUMENTS` trae una lista (ej: `/menu sprint AUTH-1,AUTH-2`) → usar esos IDs.
+2. Si no → **default: buscar sprint activo automáticamente** (no preguntar).
+   - Jira: `searchJiraIssuesUsingJql` con `project = {project_key} AND sprint in openSprints()`.
+   - Notion: query en la database con filter por status = "In Progress" o similar (Notion no tiene sprints nativos).
+
+Mostrar la lista de tickets encontrados antes de planificar. Si la lista está vacía → informar y HALT (no asumir).
+
 Lanzar subagentes en paralelo (máximo 5) — **SOLO planificación** (enrich + plan técnico), **NUNCA implementación**.
 **HALT después**. Mostrar resumen de tickets planificados y ofrecer empezar a implementar **de a uno**.
 
