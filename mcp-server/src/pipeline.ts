@@ -10,7 +10,7 @@ import {
   STATE_DESCRIPTIONS,
   defaultPipelineData,
 } from "./types.js";
-import type { PipelineData, LogEntry, TicketEntry, MergeType } from "./types.js";
+import type { PipelineData, LogEntry, TicketEntry, MergeType, DocsDecision, DocsDecisionStatus } from "./types.js";
 import { loadProjectConfig } from "./config.js";
 
 const MAX_LOG_ENTRIES = 100;
@@ -179,6 +179,25 @@ export async function advance(
           "registralo con sdd_register_evidence.",
       };
     }
+
+    // Gate V4.16: EVIDENCIA → COMMIT requires a docs decision when Docusaurus is enabled.
+    // The decision can be "updated" (docs were written) or "skipped" (with explicit reason).
+    // This forces deliberate doc choices per ticket; never silent. The classifier is in
+    // /update-docs and is intentionally conservative — most tickets land on "skipped".
+    const config = await loadProjectConfig();
+    if (config?.docusaurus?.enabled && !data.docsDecision) {
+      return {
+        ok: false,
+        from,
+        to,
+        error:
+          "⛔ No se puede avanzar a COMMIT sin decisión de docs registrada. " +
+          "Docusaurus está habilitado en este proyecto. " +
+          "Ejecutá /update-docs (clasificador conservador del diff) y registrá la decisión " +
+          "con sdd_register_docs_decision. La decisión puede ser 'updated' (docs generados) " +
+          "o 'skipped' con razón explícita (ej: 'refactor interno sin cambio de contratos').",
+      };
+    }
   }
 
   // Gate: COMMIT → COMPLETADO requires correct merge type registered
@@ -282,6 +301,7 @@ export async function advance(
     data.sprintValidated = false;
     data.evidenceFilePath = null;
     data.targetSubproject = null;
+    data.docsDecision = null;
   }
 
   // Reset per-ticket state when cycling back to TICKETS from COMPLETADO
@@ -294,6 +314,7 @@ export async function advance(
     data.sprintValidated = false;
     data.evidenceFilePath = null;
     data.targetSubproject = null;
+    data.docsDecision = null;
   }
 
   const logEntry: LogEntry = {
@@ -617,6 +638,107 @@ export function isSafeBranchName(name: string): boolean {
   return /^[A-Za-z0-9._/-]+$/.test(name);
 }
 
+// ─── Docs decision registration (V4.16) ─────────────────────────────────────
+
+export interface RegisterDocsDecisionResult {
+  ok: boolean;
+  decision?: DocsDecision;
+  error?: string;
+}
+
+const MAX_DOCS_REASON_LEN = 280;
+const MAX_DOCS_FILES = 20;
+
+export async function registerDocsDecision(
+  status: DocsDecisionStatus,
+  reason: string,
+  files: string[],
+): Promise<RegisterDocsDecisionResult> {
+  const data = await loadState();
+
+  if (data.state !== PipelineState.EVIDENCIA) {
+    return {
+      ok: false,
+      error: `Solo se puede registrar la decisión de docs en estado EVIDENCIA. Estado actual: ${data.state}.`,
+    };
+  }
+
+  const trimmedReason = (reason ?? "").trim();
+  if (!trimmedReason) {
+    return {
+      ok: false,
+      error:
+        "⛔ La razón es obligatoria. " +
+        "Si status='updated', describí qué se documentó y por qué (ej: 'nuevo endpoint POST /sessions'). " +
+        "Si status='skipped', describí por qué se omite (ej: 'refactor interno sin cambio de contratos').",
+    };
+  }
+  if (trimmedReason.length > MAX_DOCS_REASON_LEN) {
+    return {
+      ok: false,
+      error: `⛔ La razón excede ${MAX_DOCS_REASON_LEN} caracteres. Resumila.`,
+    };
+  }
+
+  const cleanFiles = (files ?? []).map((f) => f.trim()).filter(Boolean);
+  if (status === "updated" && cleanFiles.length === 0) {
+    return {
+      ok: false,
+      error:
+        "⛔ status='updated' requiere al menos un archivo en `files`. " +
+        "Si no escribiste docs, usá status='skipped' con razón.",
+    };
+  }
+  if (status === "skipped" && cleanFiles.length > 0) {
+    return {
+      ok: false,
+      error:
+        "⛔ status='skipped' no debe traer archivos. Si escribiste docs, usá status='updated'.",
+    };
+  }
+  if (cleanFiles.length > MAX_DOCS_FILES) {
+    return {
+      ok: false,
+      error: `⛔ Demasiados archivos (${cleanFiles.length}). Máximo ${MAX_DOCS_FILES} — un solo ticket no debería tocar más.`,
+    };
+  }
+
+  // When status="updated", verify each file exists on disk (mirrors the evidence gate).
+  if (status === "updated") {
+    for (const f of cleanFiles) {
+      const fullPath = join(PROJECT_ROOT, f);
+      try {
+        await readFile(fullPath, "utf-8");
+      } catch {
+        return {
+          ok: false,
+          error: `⛔ El archivo de docs no existe: ${f}. Generalo antes de registrar la decisión.`,
+        };
+      }
+    }
+  }
+
+  const decision: DocsDecision = {
+    status,
+    reason: trimmedReason,
+    files: cleanFiles,
+  };
+  data.docsDecision = decision;
+
+  const logEntry: LogEntry = {
+    timestamp: new Date().toISOString(),
+    action: "REGISTER_DOCS_DECISION",
+    detail:
+      status === "updated"
+        ? `docs updated for ${data.activeTicket}: ${cleanFiles.join(", ")} — ${trimmedReason}`
+        : `docs skipped for ${data.activeTicket}: ${trimmedReason}`,
+  };
+  data.log.push(logEntry);
+
+  await saveState(data);
+  return { ok: true, decision };
+}
+
 // ─── Merge registration ─────────────────────────────────────────────────────
 
 export interface RegisterMergeResult {
@@ -811,6 +933,7 @@ export interface GetStateResult {
   sprintValidated: boolean;
   evidenceFilePath: string | null;
   targetSubproject: string | null;
+  docsDecision: DocsDecision | null;
 }
 
 export async function getState(): Promise<GetStateResult> {
@@ -840,5 +963,6 @@ export async function getState(): Promise<GetStateResult> {
     sprintValidated: data.sprintValidated ?? false,
     evidenceFilePath: data.evidenceFilePath ?? null,
     targetSubproject: data.targetSubproject ?? null,
+    docsDecision: data.docsDecision ?? null,
   };
 }

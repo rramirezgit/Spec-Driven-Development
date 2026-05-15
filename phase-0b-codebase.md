@@ -440,6 +440,105 @@ Phase 0c **siempre confirma** este valor con el usuario antes de persistirlo (no
 
 ---
 
+## 0.2c — Detectar Docusaurus (V4.16)
+
+> **Por qué**: Si el proyecto ya tiene un site de Docusaurus, SDD debería actualizar
+> esa documentación (no la flat de `docs/`) cuando un ticket toca contratos públicos,
+> flujos o procesos. La detección habilita un gate adicional EVIDENCIA → COMMIT que
+> obliga a registrar una decisión explícita de docs por ticket (no doc por defecto;
+> doc solo cuando lo amerita).
+
+```bash
+echo "=== DOCUSAURUS DETECTION ==="
+DOCUSAURUS_CONFIG=""
+DOCUSAURUS_ROOT=""
+DOCUSAURUS_DOCS_PATH=""
+DOCUSAURUS_HAS_SIDEBAR=false
+
+# 1) Buscar docusaurus.config.{js,ts,mjs,cjs} en ubicaciones canónicas.
+#    Limitar profundidad a 3 para evitar walks costosos.
+for cfg in $(find . -maxdepth 4 -type f \
+    \( -name 'docusaurus.config.js' \
+       -o -name 'docusaurus.config.ts' \
+       -o -name 'docusaurus.config.mjs' \
+       -o -name 'docusaurus.config.cjs' \) \
+    -not -path '*/node_modules/*' \
+    -not -path '*/.git/*' \
+    -not -path '*/dist/*' \
+    -not -path '*/build/*' 2>/dev/null); do
+  DOCUSAURUS_CONFIG="$cfg"
+  break
+done
+
+# 2) Fallback: grep en package.json por @docusaurus/core (cuando el config no está
+#    en una ubicación estándar). Solo el primer match.
+if [ -z "$DOCUSAURUS_CONFIG" ]; then
+  PKG=$(grep -rlE '"@docusaurus/core"' --include=package.json \
+        --exclude-dir=node_modules --exclude-dir=.git . 2>/dev/null | head -1)
+  if [ -n "$PKG" ]; then
+    DOCUSAURUS_ROOT=$(dirname "$PKG")
+    # Asumir docusaurus.config.* en el mismo dir
+    for ext in js ts mjs cjs; do
+      [ -f "$DOCUSAURUS_ROOT/docusaurus.config.$ext" ] && \
+        DOCUSAURUS_CONFIG="$DOCUSAURUS_ROOT/docusaurus.config.$ext" && break
+    done
+  fi
+fi
+
+# 3) Si hay config, resolver root y docs path.
+if [ -n "$DOCUSAURUS_CONFIG" ]; then
+  DOCUSAURUS_ROOT=$(dirname "$DOCUSAURUS_CONFIG")
+  # Leer el path de docs del config (default 'docs'). Buscar patrón path: 'X'.
+  DOCUSAURUS_DOCS_PATH=$(grep -oE "path:[[:space:]]*['\"][^'\"]+['\"]" "$DOCUSAURUS_CONFIG" 2>/dev/null \
+                        | head -1 | sed -E "s/.*['\"]([^'\"]+)['\"].*/\1/")
+  [ -z "$DOCUSAURUS_DOCS_PATH" ] && DOCUSAURUS_DOCS_PATH="docs"
+  # ¿Existe sidebar config? (señal de docs curados por humanos — SDD no toca el sidebar)
+  if [ -f "$DOCUSAURUS_ROOT/sidebars.js" ] || \
+     [ -f "$DOCUSAURUS_ROOT/sidebars.ts" ] || \
+     [ -f "$DOCUSAURUS_ROOT/sidebars.json" ]; then
+    DOCUSAURUS_HAS_SIDEBAR=true
+  fi
+  echo "DOCUSAURUS_DETECTED=true"
+  echo "DOCUSAURUS_CONFIG=$DOCUSAURUS_CONFIG"
+  echo "DOCUSAURUS_ROOT=$DOCUSAURUS_ROOT"
+  echo "DOCUSAURUS_DOCS_PATH=$DOCUSAURUS_DOCS_PATH"
+  echo "DOCUSAURUS_FULL_PATH=$DOCUSAURUS_ROOT/$DOCUSAURUS_DOCS_PATH"
+  echo "DOCUSAURUS_HAS_SIDEBAR=$DOCUSAURUS_HAS_SIDEBAR"
+else
+  echo "DOCUSAURUS_DETECTED=false"
+fi
+```
+
+Construí internamente:
+
+```
+DOCUSAURUS_DETECTION:
+  detected: [true | false]
+  config_path: [path al docusaurus.config.* o vacío]
+  root: [carpeta del config — ej. "apps/docs", "website", "."]
+  docs_path: [carpeta de docs leída del config — default "docs"]
+  full_path: [root + "/" + docs_path]
+  has_sidebar_config: [true | false]  # si true, no tocar sidebars.* — solo agregar archivos
+  in_monorepo: [true si root != "."]
+```
+
+**Cuándo importa**:
+- Si `detected == true` → Phase 0c pregunta al usuario si quiere habilitar el gate
+  de docs por ticket. Si confirma, se persiste `Docusaurus Enabled: true` +
+  `Docusaurus Root` + `Docusaurus Docs Path` en `project-profile.md` y el MCP server
+  activa el gate EVIDENCIA → COMMIT.
+- Si `detected == false` → SDD se comporta exactamente como V4.15 (no hay gate de
+  docs, `/update-docs` no se invoca).
+
+> **Comportamiento conservador**: aunque Docusaurus se detecte y habilite, el
+> clasificador del comando `/update-docs` está diseñado para skip por default.
+> Solo se escriben docs cuando hay un trigger de alta confianza (ver
+> `reusables/commands/update-docs.md` §Triggers). La intención es evitar ruido:
+> mejor un falso negativo (el dev documenta a mano) que un falso positivo
+> (entradas vacías o triviales en el site).
+
+---
+
 ## 0.3 — (deprecada — cubierta por team analysis)
 
 > Antes este paso buscaba estructura de carpetas y patrones de archivos.
@@ -504,6 +603,10 @@ PROYECTO_PERFIL:
   commit_style_ratio: [0..100]
   tiene_docs: [true | false]
   docs_estructura: [descripción si existe]
+  docusaurus_detected: [true | false — del paso 0.2c]
+  docusaurus_root: [path al root del site Docusaurus, si detected]
+  docusaurus_docs_path: [path relativo de docs en el site Docusaurus, si detected]
+  docusaurus_has_sidebar_config: [true | false]
 ```
 
 ---

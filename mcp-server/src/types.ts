@@ -53,6 +53,18 @@ export interface PipelineData {
   evidenceFilePath?: string | null;
   /** Slug of the active subproject target (only used when project is in multi-target mode) */
   targetSubproject?: string | null;
+  /** Docs decision for the active ticket (V4.16+). Required before COMMIT when docusaurus is enabled. */
+  docsDecision?: DocsDecision | null;
+}
+
+export type DocsDecisionStatus = "updated" | "skipped";
+
+export interface DocsDecision {
+  status: DocsDecisionStatus;
+  /** Trigger that fired (when updated) or reason for skipping. Human-readable, short. */
+  reason: string;
+  /** Files written/updated when status="updated". Empty when status="skipped". */
+  files: string[];
 }
 
 export interface SubprojectConfig {
@@ -87,6 +99,19 @@ export interface ProjectConfig {
   /** Commit message style. "conventional" → `<type>(<scope>): <subject>` + Refs footer.
    *  "standard" → `TICKET-ID: <subject>` (default histórico de SDD). V4.14+ */
   commitStyle?: "standard" | "conventional";
+  /** Docusaurus integration (V4.16+). Present when phase 0b detected docusaurus.config.* */
+  docusaurus?: DocusaurusConfig;
+}
+
+export interface DocusaurusConfig {
+  /** Root folder containing docusaurus.config.* — e.g. "apps/docs", "website", or "." */
+  root: string;
+  /** Folder inside root where docs live — usually "docs". Resolved from config or default. */
+  docsPath: string;
+  /** Whether SDD should write docs here. Default true once detected; user can disable in phase 0c. */
+  enabled: boolean;
+  /** "critical" (default): only document when a high-confidence trigger fires. */
+  mode: "critical";
 }
 
 export const VALID_TRANSITIONS: Record<PipelineState, PipelineState[]> = {
@@ -158,5 +183,6 @@ export function defaultPipelineData(): PipelineData {
     sprintValidated: false,
     evidenceFilePath: null,
     targetSubproject: null,
+    docsDecision: null,
   };
 }

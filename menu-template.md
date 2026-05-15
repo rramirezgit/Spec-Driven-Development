@@ -328,8 +328,22 @@ Secuencia obligatoria:
 El server **verifica que el archivo existe en disco** — no se puede falsear.
 Secuencia: generar `/evidence` → `sdd_register_evidence("docs/evidence/{TICKET_ID}.md")`
 
-## EVIDENCIA → commit + merge a dev (obligatorio)
+## EVIDENCIA → docs (si Docusaurus) → commit + merge a dev (obligatorio)
 Mostrar evidencia generada.
+
+**⛔ GATE DE DOCS (V4.16 — enforced por el MCP server, solo si Docusaurus habilitado)**:
+Si `project-profile.md` tiene `Docusaurus Enabled: true`, `sdd_advance(COMMIT)` fallará
+hasta que se llame `sdd_register_docs_decision`. Secuencia:
+
+1. Leer y ejecutar `/update-docs`. El comando clasifica el diff con la tabla de
+   triggers (ver `reusables/commands/update-docs.md` §2). Es **conservador por default**:
+   la mayoría de tickets terminan en `skipped` con razón específica.
+2. Si hay triggers detectados → mostrar al usuario qué se va a escribir y pedir
+   confirmación antes de tocar archivos. NUNCA documentar sin confirmar.
+3. El comando llama `sdd_register_docs_decision({status, reason, files})` al final.
+
+> **Si Docusaurus NO está habilitado** (no detectado en phase 0b, o el usuario lo
+> deshabilitó en 0c) → saltar este paso por completo. El gate no aplica.
 
 **Esto NO es opcional** — el commit y merge a dev son parte del ciclo del ticket.
 Leer y ejecutar `/commit`. Después: `sdd_advance(COMMIT)`.

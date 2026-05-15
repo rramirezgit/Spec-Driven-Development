@@ -119,6 +119,36 @@ Si Phase 0b detectó archivos preexistentes en `.claude/` o un `CLAUDE.md` curad
 
 Mostrar este bloque **antes** de las preguntas de 1.2. No requiere AskUserQuestion — es informativo. El usuario verá esto y sabrá que SDD respeta su trabajo previo.
 
+### 1.0d — Confirmar integración con Docusaurus (V4.16)
+
+Si Phase 0b detectó `DOCUSAURUS_DETECTED == true`:
+
+```
+📚 DOCUSAURUS DETECTADO
+
+Site:           {DOCUSAURUS_ROOT}/  (config: {DOCUSAURUS_CONFIG})
+Carpeta docs:   {DOCUSAURUS_ROOT}/{DOCUSAURUS_DOCS_PATH}/
+Sidebar curado: {DOCUSAURUS_HAS_SIDEBAR ? "sí — SDD no toca sidebars.*" : "no — generado automático"}
+
+¿Habilitar gate de documentación crítica por ticket?
+
+  Al habilitarlo, SDD agrega un paso entre EVIDENCIA y COMMIT que clasifica el
+  diff del ticket y decide si requiere doc en Docusaurus. El clasificador es
+  CONSERVADOR: skip por default; documenta SOLO cuando hay un trigger claro
+  (endpoint nuevo, breaking change, env var nueva, nuevo flow de usuario,
+  cambio de deploy, etc). La idea es evitar entradas triviales en el site.
+```
+
+**AskUserQuestion** (single_select):
+- `"Sí, habilitar (modo crítico)"` (recomendado): se agrega el gate, se genera `Docusaurus Enabled: true` en el profile, SDD invoca `/update-docs` automáticamente durante el ciclo del ticket.
+- `"No, ignorar Docusaurus"`: SDD se comporta como V4.15. Útil si tu equipo cura el site a mano y no querés interferencia.
+
+Persistir según respuesta:
+- Si sí → `DOCUSAURUS_ENABLED = true`, `DOCUSAURUS_ROOT`, `DOCUSAURUS_DOCS_PATH` van al perfil y a `project-vars.sh`.
+- Si no → `DOCUSAURUS_ENABLED = false`. No se escribe `Docusaurus Enabled` al profile (default = ausente = deshabilitado en el MCP server).
+
+> **Si DOCUSAURUS_DETECTED == false**: saltar este paso por completo. No mostrar nada.
+
 ---
 
 ### 1.1 — Determinar qué preguntar
@@ -361,6 +391,11 @@ Crear `.ai-internal/project-profile.md` con TODOS los datos reales del PROYECTO_
 # Existing Claude Settings JSON: {true | false}
 # Nx Detected: {true | false}
 # Pnpm Workspace Detected: {true | false}
+{Si Phase 0b detectó Docusaurus Y el usuario habilitó en 1.0d, agregar estas 3 líneas:}
+# Docusaurus Enabled: true
+# Docusaurus Root: {DOCUSAURUS_ROOT}
+# Docusaurus Docs Path: {DOCUSAURUS_DOCS_PATH}
+{Si no detectado o usuario rechazó: omitir las 3 líneas anteriores — la ausencia = deshabilitado.}
 
 {Si tipo == monorepo-fullstack Y MULTI_TARGET_MODE == false, agregar sección de subprojects clásica (1 frontend + 1 backend):}
 
@@ -466,6 +501,12 @@ EXISTING_CLAUDE_SETTINGS=$(grep "^# Existing Claude Settings JSON:" .ai-internal
 NX_DETECTED_VAR=$(grep "^# Nx Detected:" .ai-internal/project-profile.md | sed 's/^# Nx Detected: //')
 [ -z "$NX_DETECTED_VAR" ] && NX_DETECTED_VAR="false"
 
+# V4.16: Docusaurus (opcional). Default = deshabilitado si las líneas no existen.
+DOCUSAURUS_ENABLED=$(grep "^# Docusaurus Enabled:" .ai-internal/project-profile.md | sed 's/^# Docusaurus Enabled: //')
+[ -z "$DOCUSAURUS_ENABLED" ] && DOCUSAURUS_ENABLED="false"
+DOCUSAURUS_ROOT_VAR=$(grep "^# Docusaurus Root:" .ai-internal/project-profile.md | sed 's/^# Docusaurus Root: //')
+DOCUSAURUS_DOCS_PATH_VAR=$(grep "^# Docusaurus Docs Path:" .ai-internal/project-profile.md | sed 's/^# Docusaurus Docs Path: //')
+
 cat > .ai-internal/project-vars.sh << VARSEOF
 # Auto-generated from project-profile.md — do not edit manually
 # Used by phase-2 templates for sed replacement
@@ -486,6 +527,9 @@ SDD_COMMIT_STYLE="$COMMIT_STYLE"
 SDD_EXISTING_CLAUDE_MD_BYTES="$EXISTING_CLAUDE_MD_BYTES"
 SDD_EXISTING_CLAUDE_SETTINGS_JSON="$EXISTING_CLAUDE_SETTINGS"
 SDD_NX_DETECTED="$NX_DETECTED_VAR"
+SDD_DOCUSAURUS_ENABLED="$DOCUSAURUS_ENABLED"
+SDD_DOCUSAURUS_ROOT="$DOCUSAURUS_ROOT_VAR"
+SDD_DOCUSAURUS_DOCS_PATH="$DOCUSAURUS_DOCS_PATH_VAR"
 VARSEOF
 
 # Si multi-target, agregar bloque iterativo: una variable por subproject

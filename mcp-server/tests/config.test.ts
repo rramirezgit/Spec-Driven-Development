@@ -56,6 +56,71 @@ describe("parseProfile — commitStyle (V4.14)", () => {
   });
 });
 
+describe("parseProfile — docusaurus (V4.16)", () => {
+  it("leaves docusaurus undefined when no keys present (V4.15 behavior preserved)", () => {
+    const profile = `# Proyecto: demo
+# Tipo: backend
+# Tracker: jira
+# Idioma: es`;
+    const config = parseProfile(profile);
+    expect(config.docusaurus).toBeUndefined();
+  });
+
+  it("leaves docusaurus undefined when Docusaurus Enabled is 'false'", () => {
+    const profile = `# Proyecto: demo
+# Tracker: jira
+# Docusaurus Enabled: false
+# Docusaurus Root: apps/docs
+# Docusaurus Docs Path: docs`;
+    const config = parseProfile(profile);
+    expect(config.docusaurus).toBeUndefined();
+  });
+
+  it("parses docusaurus config when enabled", () => {
+    const profile = `# Proyecto: demo
+# Tracker: jira
+# Docusaurus Enabled: true
+# Docusaurus Root: apps/docs
+# Docusaurus Docs Path: docs`;
+    const config = parseProfile(profile);
+    expect(config.docusaurus).toBeDefined();
+    expect(config.docusaurus?.enabled).toBe(true);
+    expect(config.docusaurus?.root).toBe("apps/docs");
+    expect(config.docusaurus?.docsPath).toBe("docs");
+    expect(config.docusaurus?.mode).toBe("critical");
+  });
+
+  it("uses sensible defaults when only Enabled is set", () => {
+    const profile = `# Proyecto: demo
+# Tracker: jira
+# Docusaurus Enabled: true`;
+    const config = parseProfile(profile);
+    expect(config.docusaurus?.root).toBe(".");
+    expect(config.docusaurus?.docsPath).toBe("docs");
+  });
+
+  it("is case-insensitive on the Enabled flag", () => {
+    const profile = `# Proyecto: demo
+# Tracker: jira
+# Docusaurus Enabled: TRUE
+# Docusaurus Root: website`;
+    const config = parseProfile(profile);
+    expect(config.docusaurus?.enabled).toBe(true);
+    expect(config.docusaurus?.root).toBe("website");
+  });
+
+  it("trims whitespace around root and docsPath", () => {
+    const profile = `# Proyecto: demo
+# Tracker: jira
+# Docusaurus Enabled: true
+# Docusaurus Root:   apps/docs
+# Docusaurus Docs Path:   content/docs   `;
+    const config = parseProfile(profile);
+    expect(config.docusaurus?.root).toBe("apps/docs");
+    expect(config.docusaurus?.docsPath).toBe("content/docs");
+  });
+});
+
 describe("parseProfile — backward compat preserved", () => {
   it("still parses Multi Target Mode and slugs alongside commitStyle", () => {
     const profile = `# Proyecto: adam360

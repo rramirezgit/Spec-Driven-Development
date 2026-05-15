@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { ProjectConfig, SubprojectConfig } from "./types.js";
+import type { ProjectConfig, SubprojectConfig, DocusaurusConfig } from "./types.js";
 
 // Resolve project root from the compiled JS location:
 // dist/config.js → dist/ → mcp-server/ → .ai-internal/ → PROJECT_ROOT
@@ -109,6 +109,25 @@ export function parseProfile(content: string): ProjectConfig {
   const commitStyle: "standard" | "conventional" =
     commitStyleNormalized === "conventional" ? "conventional" : "standard";
 
+  // V4.16: Docusaurus integration. Only populated if phase 0b detected docusaurus.config.*
+  // and the user confirmed in phase 0c. Default = absent (no docs gate, full backward-compat).
+  let docusaurus: DocusaurusConfig | undefined;
+  const docusaurusEnabledRaw = get(
+    "Docusaurus Enabled",
+    "docusaurus_enabled",
+    "DocusaurusEnabled",
+  );
+  if (docusaurusEnabledRaw && docusaurusEnabledRaw.toLowerCase().trim() === "true") {
+    const root = get("Docusaurus Root", "docusaurus_root", "DocusaurusRoot") || ".";
+    const docsPath = get("Docusaurus Docs Path", "docusaurus_docs_path", "DocusaurusDocsPath") || "docs";
+    docusaurus = {
+      root,
+      docsPath,
+      enabled: true,
+      mode: "critical",
+    };
+  }
+
   // Parse subprojects when relevant: multi-target OR classic monorepo-fullstack
   let subprojects: SubprojectConfig[] | undefined;
   if (multiTargetMode || tipo === "monorepo-fullstack") {
@@ -135,6 +154,7 @@ export function parseProfile(content: string): ProjectConfig {
     multiTargetMode: multiTargetMode || undefined,
     subprojectSlugs,
     commitStyle,
+    docusaurus,
   };
 }
 

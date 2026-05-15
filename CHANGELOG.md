@@ -6,6 +6,23 @@ está al tope.
 
 ---
 
+## V4.16 — Integración Docusaurus con gate de docs crítica por ticket
+
+| Cambio | Impacto |
+|--------|---------|
+| **Phase 0b — detección de Docusaurus** | Nuevo bloque `0.2c` busca `docusaurus.config.{js,ts,mjs,cjs}` con `find` (depth 4, excluyendo `node_modules`/`dist`/`build`/`.git`). Fallback: grep en `package.json` por `@docusaurus/core`. Si encuentra, parsea `path:` del config para resolver `docs_path` (default `docs`). Registra `DOCUSAURUS_DETECTED`, `DOCUSAURUS_ROOT`, `DOCUSAURUS_DOCS_PATH`, `DOCUSAURUS_HAS_SIDEBAR`. Proyectos sin Docusaurus: la detección retorna `false` y el flujo es idéntico a V4.15. |
+| **Phase 0c — confirmación del usuario** | Nuevo paso `1.0d` (solo si detected): pregunta si habilitar el gate de docs crítica. Default recomendado = sí. Persiste `Docusaurus Enabled: true` + `Docusaurus Root` + `Docusaurus Docs Path` en `project-profile.md`. Si el user rechaza → no se escriben las keys (ausencia = deshabilitado, default-safe). |
+| **MCP server — `ProjectConfig.docusaurus`** | Nuevo campo opcional en `types.ts`: `{root, docsPath, enabled, mode: "critical"}`. `config.ts` parsea las keys del profile con la misma estrategia que `Commit Style` (case-insensitive, 3 patrones de markdown). Si la key `Docusaurus Enabled` está ausente → `docusaurus` queda `undefined` (no gate). |
+| **MCP server — nuevo gate EVIDENCIA → COMMIT** | `sdd_advance(COMMIT)` rechaza la transición si Docusaurus está habilitado y `data.docsDecision` no está registrado. Mensaje de error guía al uso de `/update-docs` + `sdd_register_docs_decision`. Proyectos sin Docusaurus: gate inactivo, comportamiento idéntico a V4.15. |
+| **MCP server — nuevo tool `sdd_register_docs_decision`** | Acepta `{status: "updated"\|"skipped", reason: string (1-280 chars), files: string[]}`. Validaciones: razón obligatoria; `updated` requiere ≥1 archivo y verifica que cada archivo existe en disco; `skipped` rechaza si vienen archivos; máximo 20 archivos por decisión. Solo válido en estado EVIDENCIA. Registra en el log con detalle por tipo. |
+| **Pipeline state — `docsDecision`** | Nuevo campo en `PipelineData` que se resetea en cycle restart (COMPLETADO→TICKETS) y en reset a IDLE. Expuesto en `getState` para que el menú pueda mostrar la decisión actual. |
+| **Nuevo comando `/update-docs` — clasificador conservador** | `reusables/commands/update-docs.md` implementa la tabla de triggers (T1-T8): endpoint público nuevo, breaking change API, env var nueva, CLI nuevo, cambio de deploy/CI, webhook/evento nuevo, ruta de usuario nueva, migración DB. Anti-triggers explícitos: tests, lint, deps, comentarios, renames puros, archivos generados. **Default es skip**; documenta solo cuando hay trigger claro. Plantillas mínimas (sin marketing, sin "este PR", sin TOC/badges). Multi-target aware: routea a `services/{slug}/api.md` o equivalente según `targetSubproject`. |
+| **Protecciones del clasificador** | NO toca `docusaurus.config.*` ni `sidebars.*` curados. NO escribe en `versioned_docs/` ni `i18n/`. NO ejecuta `npm run build`. Si el sidebar es manual y la carpeta destino no existe → skip con razón "carpeta no en sidebar curado". Si 5+ triggers disparan → warning al usuario (probablemente el ticket es demasiado grande). |
+| **menu-template.md — integración EVIDENCIA** | Sección EVIDENCIA describe el gate y el flujo: `/update-docs` clasifica → muestra triggers detectados → confirma con `AskUserQuestion` antes de escribir → registra decisión. Si Docusaurus no habilitado, sección invariante. |
+| **`project-vars.sh` — nuevas exports** | `SDD_DOCUSAURUS_ENABLED`, `SDD_DOCUSAURUS_ROOT`, `SDD_DOCUSAURUS_DOCS_PATH`. Disponibles para templates de Phase 2 y para `/update-docs`. Defaults seguros si keys ausentes. |
+| **Bootstrap manifest + installer** | `install-bootstrap.sh` ahora copia `reusables/commands/update-docs.md` a `.ai-internal/reusables/commands/update-docs.md`. Manifest regenerado. Bump V4.14 → V4.16 (V4.15 fue solo de templates, sin cambios de installer). |
+| **Backwards-compat estricta** | Proyectos pre-V4.16 sin `Docusaurus Enabled` en el profile → `docusaurus` queda undefined → ningún gate adicional → comportamiento exacto de V4.15. Re-ejecutar bootstrap en un proyecto existente: Phase 0b detecta Docusaurus si presente, Phase 0c pregunta si habilitar (opt-in explícito). |
+
 ## V4.15 — `/menu` con una sola pregunta (auto-detección de contexto)
 
 | Cambio | Impacto |

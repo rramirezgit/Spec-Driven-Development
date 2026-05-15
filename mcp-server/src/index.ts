@@ -16,6 +16,7 @@ import {
   confirmSprint,
   registerEvidence,
   setTargetSubproject,
+  registerDocsDecision,
 } from "./pipeline.js";
 import type { MergeType } from "./types.js";
 import {
@@ -303,7 +304,55 @@ server.tool(
   },
 );
 
-// ─── Tool 12: sdd_confirm_next ───────────────────────────────────────────────
+// ─── Tool 12: sdd_register_docs_decision (V4.16 — Docusaurus gate) ──────────
+
+server.tool(
+  "sdd_register_docs_decision",
+  "Registra la decisión de documentación para el ticket activo. " +
+    "OBLIGATORIO antes de sdd_advance(COMMIT) cuando Docusaurus está habilitado en el proyecto " +
+    "(project-profile.md con `Docusaurus Enabled: true`). " +
+    "Solo válido en estado EVIDENCIA. " +
+    "Status: 'updated' (se escribieron docs — incluir `files`) o 'skipped' (no aplica — `files` vacío). " +
+    "La razón es OBLIGATORIA y debe ser específica. Ejemplos válidos para 'skipped': " +
+    "'refactor interno sin cambio de contratos', 'fix sin cambio de API público', " +
+    "'tests adicionales sin nueva superficie'. " +
+    "Ejemplos válidos para 'updated': 'nuevo endpoint POST /sessions', " +
+    "'cambio breaking en respuesta de /users/{id}'. " +
+    "PROHIBIDO: razones vagas tipo 'no hace falta' o 'cambios menores'. " +
+    "El clasificador del comando /update-docs es conservador — si no hay trigger claro, " +
+    "skip es la respuesta correcta.",
+  {
+    status: z
+      .enum(["updated", "skipped"])
+      .describe("'updated' = docs escritos en Docusaurus; 'skipped' = no aplica documentar"),
+    reason: z
+      .string()
+      .min(1)
+      .max(280)
+      .describe("Razón específica (qué se documentó o por qué se omite). Obligatorio."),
+    files: z
+      .array(z.string())
+      .default([])
+      .describe(
+        "Lista de archivos de Docusaurus escritos/actualizados (paths relativos al repo). " +
+          "Obligatorio cuando status='updated'. Vacío cuando status='skipped'. " +
+          "Cada archivo debe existir en disco — el server lo verifica.",
+      ),
+  },
+  async ({ status, reason, files }) => {
+    const result = await registerDocsDecision(status, reason, files ?? []);
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify(result, null, 2),
+        },
+      ],
+    };
+  },
+);
+
+// ─── Tool 13: sdd_confirm_next ───────────────────────────────────────────────
 
 server.tool(
   "sdd_confirm_next",

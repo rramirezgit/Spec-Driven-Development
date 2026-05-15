@@ -148,6 +148,11 @@ describe("defaultPipelineData — schema contract", () => {
     expect(d.sprintValidated).toBe(false);
   });
 
+  it("includes docsDecision field initialized to null (V4.16 — docs gate schema)", () => {
+    const d = defaultPipelineData();
+    expect(d.docsDecision).toBeNull();
+  });
+
   it("schema contract: every per-ticket field is null/false (no leftover from a previous ticket)", () => {
     // Si este test falla cuando se agrega un campo nuevo al state, hay que
     // recordar agregarlo a defaultPipelineData() Y a los resets en advance().
@@ -158,6 +163,7 @@ describe("defaultPipelineData — schema contract", () => {
       "mergeRecord",
       "evidenceFilePath",
       "targetSubproject",
+      "docsDecision",
     ] as const;
     for (const field of perTicketFields) {
       expect(d[field], `Field ${field} debe estar null en estado inicial`).toBeNull();
