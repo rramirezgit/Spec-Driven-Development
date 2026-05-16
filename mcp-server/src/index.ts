@@ -23,6 +23,9 @@ import {
   registerChangeDecisions,
   registerRisk,
   registerAutoVerification,
+  registerGoal,
+  updateGoalProgress,
+  abortGoal,
 } from "./pipeline.js";
 import type { MergeType } from "./types.js";
 import {
@@ -482,7 +485,100 @@ server.tool(
   },
 );
 
-// ─── Tool 16: sdd_validate_ticket_dor (V4.18 — Definition of Ready) ────────
+// ─── Tools 16-18: V4.21 /goal batch ─────────────────────────────────────────
+
+server.tool(
+  "sdd_register_goal",
+  "Inicia una sesión de /goal batch con una lista ordenada de tickets. " +
+    "Solo válido en IDLE o TICKETS (no se permite anidamiento de batches). " +
+    "Modes: 'supervised' (default, pausa solo en pre-flight fail o auto-verify fail; commits locales, sin push/merge), " +
+    "'auto-merge-final' (igual a supervised pero al final ofrece merge batch a dev), " +
+    "'yolo' (con safeguards: no toca prod, push manual). " +
+    "Max 30 tickets por batch. Ticket IDs sanitizados.",
+  {
+    tickets: z
+      .array(z.string())
+      .min(1)
+      .max(30)
+      .describe("Lista ordenada de ticket IDs (ej: ['AUTH-1', 'AUTH-2'])"),
+    mode: z
+      .enum(["supervised", "auto-merge-final", "yolo"])
+      .describe("Modo de autonomía del batch"),
+  },
+  async ({ tickets, mode }) => {
+    const result = await registerGoal(tickets, mode);
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify(result, null, 2),
+        },
+      ],
+    };
+  },
+);
+
+server.tool(
+  "sdd_update_goal_progress",
+  "Reporta el outcome de un ticket dentro del batch /goal activo. " +
+    "Status: 'pending' (no empezó), 'in_progress' (cycle en curso), 'completed' (cycle ok), " +
+    "'paused' (necesita user input — pre-flight fail, auto-verify fail, error recuperable), " +
+    "'failed' (error irrecuperable), 'skipped' (pre-flight bloqueante, user lo dejó pasar). " +
+    "Cuando todos los tickets están en estado terminal (completed/failed/skipped), la sesión se cierra automáticamente.",
+  {
+    ticketId: z.string().describe("ID del ticket"),
+    status: z
+      .enum(["pending", "in_progress", "completed", "paused", "failed", "skipped"])
+      .describe("Nuevo status del ticket"),
+    reason: z
+      .string()
+      .max(280)
+      .optional()
+      .describe("Razón de pausa/fallo/skip (opcional para completed/in_progress)"),
+    autoVerify: z
+      .enum(["passed", "failed", "inconclusive", "skipped"])
+      .optional()
+      .describe("Outcome de auto-verify si corrió para este ticket"),
+  },
+  async ({ ticketId, status, reason, autoVerify }) => {
+    const result = await updateGoalProgress(ticketId, status, reason, autoVerify);
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify(result, null, 2),
+        },
+      ],
+    };
+  },
+);
+
+server.tool(
+  "sdd_abort_goal",
+  "Aborta la sesión de /goal activa. Marca aborted=true + abortReason. " +
+    "Los tickets que ya estaban completed quedan así; los pending/in_progress no se tocan en el tracker " +
+    "(el dev decide qué hacer manualmente con cada uno).",
+  {
+    reason: z
+      .string()
+      .min(5)
+      .max(280)
+      .describe("Razón del abort (≥5 chars). Ej: 'usuario abortó', 'critical pre-flight fail'."),
+  },
+  async ({ reason }) => {
+    const result = await abortGoal(reason);
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify(result, null, 2),
+        },
+      ],
+    };
+  },
+);
+
+// ─── Tool 19: sdd_validate_ticket_dor (V4.18 — Definition of Ready) ────────
 
 server.tool(
   "sdd_validate_ticket_dor",
@@ -556,7 +652,7 @@ server.tool(
   },
 );
 
-// ─── Tool 18: sdd_register_docs_decision (V4.16 — Docusaurus gate) ──────────
+// ─── Tool 21: sdd_register_docs_decision (V4.16 — Docusaurus gate) ──────────
 
 server.tool(
   "sdd_register_docs_decision",
@@ -604,7 +700,7 @@ server.tool(
   },
 );
 
-// ─── Tool 19: sdd_confirm_next ───────────────────────────────────────────────
+// ─── Tool 22: sdd_confirm_next ───────────────────────────────────────────────
 
 server.tool(
   "sdd_confirm_next",
@@ -627,7 +723,7 @@ server.tool(
   },
 );
 
-// ─── Tool 20: sdd_transition_ticket (+ alias sdd_transition_jira) ────────────
+// ─── Tool 23: sdd_transition_ticket (+ alias sdd_transition_jira) ────────────
 
 const VALID_STATES_FOR_TICKET_TRANSITION = [
   PipelineState.COMMIT,
@@ -679,7 +775,7 @@ server.tool(
   transitionTicketHandler,
 );
 
-// ─── Tool 21: sdd_comment_ticket (+ alias sdd_comment_jira) ─────────────────
+// ─── Tool 24: sdd_comment_ticket (+ alias sdd_comment_jira) ─────────────────
 
 const VALID_STATES_FOR_TICKET_COMMENT = [
   PipelineState.COMMIT,

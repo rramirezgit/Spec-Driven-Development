@@ -54,6 +54,7 @@ FILES=(
   "reusables/commands/update-docs.md|.ai-internal/reusables/commands/update-docs.md"
   "reusables/commands/refine-ticket.md|.ai-internal/reusables/commands/refine-ticket.md"
   "reusables/commands/auto-verify.md|.ai-internal/reusables/commands/auto-verify.md"
+  "reusables/commands/goal.md|.ai-internal/reusables/commands/goal.md"
   "reusables/commands/release-to-main.md|.ai-internal/reusables/commands/release-to-main.md"
   "reusables/agents/product-strategy-analyst.md|.ai-internal/reusables/agents/product-strategy-analyst.md"
   "hooks/pre-compact-marker.sh|.ai-internal/hooks/pre-compact-marker.sh"
@@ -62,7 +63,7 @@ FILES=(
 )
 
 echo ""
-echo "🔧 Spec-Driven Development — Bootstrap V4.20"
+echo "🔧 Spec-Driven Development — Bootstrap V4.21"
 echo "============================================="
 echo ""
 

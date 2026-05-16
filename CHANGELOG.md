@@ -6,6 +6,21 @@ está al tope.
 
 ---
 
+## V4.21 — /goal (batch supervisado de tickets con safeguards)
+
+| Cambio | Impacto |
+|--------|---------|
+| **Nuevo comando `/goal`** | Orquestador batch: toma una lista de tickets (sprint completo, lista explícita, o IDs sueltos) y ejecuta el cycle SDD completo por cada uno (DoR → branch → plan → develop → auto-verify → evidence → docs → commit local). Pausas explícitas en pre-flight fail y zonas de riesgo. Reporte final obligatorio con sección de seguridad. |
+| **3 modes** | `supervised` (default): pre-flight + 1 confirmación humana per-ticket en sdd_confirm_implementation; sin push automático. `auto-merge-final`: igual a supervised pero al final ofrece dashboard de aprobación + merge batch a dev. `yolo`: sin confirmación per-ticket (requiere `--yolo --i-accept-the-risks` — dos flags), pero HIGH risk sigue bloqueando + safeguards non-negociables. |
+| **MCP server — 3 tools nuevos (16-18)** | `sdd_register_goal({tickets, mode})` arranca sesión (solo IDLE/TICKETS, max 30 tickets, sanitización + dedup). `sdd_update_goal_progress({ticketId, status, reason?, autoVerify?})` reporta outcome per-ticket; cierre automático cuando todos terminan. `sdd_abort_goal({reason})` aborta con razón obligatoria (≥5 chars). |
+| **GoalSession en PipelineData** | Persiste {tickets, mode, progress{}, startedAt, finishedAt, aborted, abortReason}. Por-ticket: status (pending\|in_progress\|completed\|paused\|failed\|skipped), reason, autoVerify outcome, timestamps. Cleared en IDLE; sobrevive cycle restarts COMPLETADO→TICKETS. |
+| **Pre-flight checks por ticket** | DoR validation (si falla y mode≠yolo → pause + `/refine-ticket`); risk classification (HIGH + supervised → AskUserQuestion; HIGH + yolo → bloquea); paths sensibles explícitos (auth/payment/migration/secrets); test cases declarados ≥3. |
+| **Safeguards non-negociables (aún en yolo)** | Nunca push automático a remoto. Nunca merge a main/master/production. Si 2 tickets seguidos fallan auto-verify → abort. Si tests del proyecto se rompen → abort. Paths bloqueados (.env, secrets/, migrations/) requieren DoR completa. Reporte de seguridad final SIEMPRE se genera. |
+| **menu-template Opción 8** | Nueva opción "Goal" en el menú con sub-opciones (sprint, IDs explícitos, modo). Atajos `$ARGUMENTS` ampliados: `/menu goal`, `/menu goal sprint`, `/menu goal AUTH-1,AUTH-2`. |
+| **Reporte final** | Dashboard con COMPLETED / PAUSED / FAILED + reporte de seguridad. Por cada completed: ticket + risk level + smoke status. Por cada paused: razón concreta. Auto-merge-final: pregunta merge con opciones "Todos / Uno por uno / Solo X / Ninguno". |
+| **Bootstrap** | Bump V4.20 → V4.21. `install-bootstrap.sh` registra `reusables/commands/goal.md`. Manifest regenerado (49 archivos). |
+| **Backwards-compat** | `goalSession=null` default. Sin batch activo, comportamiento idéntico a V4.20. La sesión bloquea inicio de otra hasta finishedAt o aborted (no anidamiento). |
+
 ## V4.20 — Auto-verify (smoke tests post-implementación, L1)
 
 | Cambio | Impacto |

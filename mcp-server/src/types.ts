@@ -75,6 +75,9 @@ export interface PipelineData {
    *  In enforced mode, IMPLEMENTACION → EVIDENCIA requires status to be
    *  "passed", "inconclusive" (degrade gracefully), or "skipped". */
   autoVerifyResult?: AutoVerifyResult | null;
+  /** V4.21: /goal batch session (if active). Persists across cycle restarts
+   *  for the duration of the batch. Cleared on IDLE or batch finish. */
+  goalSession?: GoalSession | null;
 }
 
 export type DocsDecisionStatus = "updated" | "skipped";
@@ -85,6 +88,49 @@ export interface DocsDecision {
   reason: string;
   /** Files written/updated when status="updated". Empty when status="skipped". */
   files: string[];
+}
+
+/** V4.21 — /goal batch session. Track el progreso de un batch de tickets
+ *  ejecutados con autonomía limitada. Modes:
+ *  - "supervised": pausa solo en risk/pre-flight fail; commits locales; sin push/merge.
+ *  - "auto-merge-final": como supervised pero al final ofrece merge batch a dev.
+ *  - "yolo": con safeguards (no toca prod, no push automático).
+ *
+ *  Cada ticket termina en uno de cuatro estados:
+ *  - "completed": cycle full ran, ready to be merged
+ *  - "paused": user input required (pre-flight fail, auto-verify fail, etc.)
+ *  - "failed": unrecoverable error
+ *  - "skipped": pre-flight clasificó alto riesgo y el user decidió saltarlo
+ */
+export type GoalMode = "supervised" | "auto-merge-final" | "yolo";
+export type GoalTicketStatus = "pending" | "in_progress" | "completed" | "paused" | "failed" | "skipped";
+
+export interface GoalTicketProgress {
+  ticketId: string;
+  status: GoalTicketStatus;
+  /** Razón de pausa/fallo. Vacío cuando completed/pending. */
+  reason?: string;
+  /** Outcome del auto-verify de este ticket, si corrió. */
+  autoVerify?: AutoVerifyStatus;
+  /** ISO timestamps de cuándo se inició y completó (si aplica). */
+  startedAt?: string;
+  finishedAt?: string;
+}
+
+export interface GoalSession {
+  /** Lista ordenada de tickets que forman el batch. */
+  tickets: string[];
+  mode: GoalMode;
+  /** Progreso por ticket, keyed por ticketId. */
+  progress: Record<string, GoalTicketProgress>;
+  /** Cuándo arrancó el batch. */
+  startedAt: string;
+  /** Cuándo terminó (todos los tickets resueltos o batch abortado). null mientras corre. */
+  finishedAt?: string | null;
+  /** Si el batch fue abortado por el user u por error catastrófico. */
+  aborted?: boolean;
+  /** Razón del abort, si aborted=true. */
+  abortReason?: string;
 }
 
 /** V4.20 — Auto-verify smoke test result. */
@@ -306,5 +352,6 @@ export function defaultPipelineData(): PipelineData {
     changeRisk: null,
     ticketRisks: {},
     autoVerifyResult: null,
+    goalSession: null,
   };
 }

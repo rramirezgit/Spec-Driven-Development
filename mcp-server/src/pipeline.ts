@@ -25,6 +25,10 @@ import type {
   AutoVerifyResult,
   AutoVerifyStatus,
   AutoVerifyTestCase,
+  GoalSession,
+  GoalMode,
+  GoalTicketProgress,
+  GoalTicketStatus,
 } from "./types.js";
 import { loadProjectConfig } from "./config.js";
 
@@ -391,6 +395,7 @@ export async function advance(
     data.changeRisk = null;
     data.ticketRisks = {};
     data.autoVerifyResult = null;
+    data.goalSession = null;
     await clearDiffCacheForTicket(previousTicket);
   }
 
@@ -871,6 +876,211 @@ async function clearDiffCacheForTicket(ticketId: string | null | undefined): Pro
   const metaPath = join(CACHE_DIR, `diff-${ticketId}.meta.json`);
   await unlink(diffPath).catch(() => {});
   await unlink(metaPath).catch(() => {});
+}
+
+// ─── Goal session (V4.21 — batch supervisado) ───────────────────────────────
+
+export interface RegisterGoalResult {
+  ok: boolean;
+  session?: GoalSession;
+  error?: string;
+}
+
+const MAX_GOAL_TICKETS = 30;
+
+export async function registerGoal(
+  tickets: string[],
+  mode: GoalMode,
+): Promise<RegisterGoalResult> {
+  const data = await loadState();
+
+  // Solo arrancar batch desde TICKETS o IDLE (sin pipeline activo)
+  if (
+    data.state !== PipelineState.TICKETS &&
+    data.state !== PipelineState.IDLE
+  ) {
+    return {
+      ok: false,
+      error: `Solo se puede iniciar un /goal en estado IDLE o TICKETS. Estado actual: ${data.state}.`,
+    };
+  }
+
+  if (data.goalSession && !data.goalSession.finishedAt && !data.goalSession.aborted) {
+    return {
+      ok: false,
+      error:
+        "⛔ Ya hay una sesión de /goal activa con " +
+        `${Object.keys(data.goalSession.progress).length} tickets. ` +
+        "Terminala (todos los tickets resueltos o aborted) antes de iniciar una nueva.",
+    };
+  }
+
+  if (tickets.length === 0) {
+    return {
+      ok: false,
+      error: "⛔ Lista de tickets vacía.",
+    };
+  }
+  if (tickets.length > MAX_GOAL_TICKETS) {
+    return {
+      ok: false,
+      error: `⛔ Demasiados tickets (${tickets.length}). Máximo ${MAX_GOAL_TICKETS} por batch — partilo en lotes.`,
+    };
+  }
+
+  // Validar todos los IDs (sanitización)
+  const seen = new Set<string>();
+  for (const t of tickets) {
+    if (!isSafeTicketId(t)) {
+      return {
+        ok: false,
+        error: `⛔ Ticket ID inválido: "${t}". Solo letras, números, guion y guion-bajo.`,
+      };
+    }
+    if (seen.has(t)) {
+      return {
+        ok: false,
+        error: `⛔ Ticket "${t}" aparece duplicado en la lista.`,
+      };
+    }
+    seen.add(t);
+  }
+
+  const now = new Date().toISOString();
+  const progress: Record<string, GoalTicketProgress> = {};
+  for (const t of tickets) {
+    progress[t] = { ticketId: t, status: "pending" };
+  }
+
+  const session: GoalSession = {
+    tickets,
+    mode,
+    progress,
+    startedAt: now,
+    finishedAt: null,
+    aborted: false,
+  };
+  data.goalSession = session;
+  data.log.push({
+    timestamp: now,
+    action: "REGISTER_GOAL",
+    detail: `Goal session iniciada: mode=${mode}, ${tickets.length} tickets: ${tickets.join(", ")}.`,
+  });
+  await saveState(data);
+  return { ok: true, session };
+}
+
+export interface UpdateGoalProgressResult {
+  ok: boolean;
+  remaining?: number;
+  done?: number;
+  error?: string;
+}
+
+export async function updateGoalProgress(
+  ticketId: string,
+  status: GoalTicketStatus,
+  reason?: string,
+  autoVerify?: AutoVerifyStatus,
+): Promise<UpdateGoalProgressResult> {
+  const data = await loadState();
+  if (!data.goalSession) {
+    return {
+      ok: false,
+      error: "⛔ No hay goal session activa. Llamá sdd_register_goal primero.",
+    };
+  }
+  if (data.goalSession.aborted || data.goalSession.finishedAt) {
+    return {
+      ok: false,
+      error: "⛔ La goal session ya terminó. Iniciá una nueva con sdd_register_goal.",
+    };
+  }
+
+  if (!isSafeTicketId(ticketId)) {
+    return {
+      ok: false,
+      error: `⛔ Ticket ID inválido: "${ticketId}".`,
+    };
+  }
+
+  if (!data.goalSession.progress[ticketId]) {
+    return {
+      ok: false,
+      error: `⛔ Ticket "${ticketId}" no está en el batch. Tickets del batch: ${data.goalSession.tickets.join(", ")}.`,
+    };
+  }
+
+  const now = new Date().toISOString();
+  const entry = data.goalSession.progress[ticketId];
+  const prev = entry.status;
+  entry.status = status;
+  if (reason !== undefined) entry.reason = reason.slice(0, 280);
+  if (autoVerify) entry.autoVerify = autoVerify;
+  if (status === "in_progress" && !entry.startedAt) entry.startedAt = now;
+  if (
+    (status === "completed" || status === "failed" || status === "skipped") &&
+    !entry.finishedAt
+  ) {
+    entry.finishedAt = now;
+  }
+
+  data.log.push({
+    timestamp: now,
+    action: "GOAL_PROGRESS",
+    detail: `${ticketId}: ${prev} → ${status}${reason ? ` (${reason})` : ""}`,
+  });
+
+  // Si todos los tickets están en estado terminal → cerrar la sesión.
+  const allDone = Object.values(data.goalSession.progress).every((p) =>
+    ["completed", "failed", "skipped"].includes(p.status),
+  );
+  if (allDone) {
+    data.goalSession.finishedAt = now;
+    data.log.push({
+      timestamp: now,
+      action: "GOAL_FINISHED",
+      detail: `Goal batch completo. ${Object.values(data.goalSession.progress).filter((p) => p.status === "completed").length} ok / ${Object.values(data.goalSession.progress).filter((p) => p.status === "failed").length} failed / ${Object.values(data.goalSession.progress).filter((p) => p.status === "skipped").length} skipped.`,
+    });
+  }
+
+  const done = Object.values(data.goalSession.progress).filter((p) =>
+    ["completed", "failed", "skipped"].includes(p.status),
+  ).length;
+  const remaining = data.goalSession.tickets.length - done;
+
+  await saveState(data);
+  return { ok: true, remaining, done };
+}
+
+export interface AbortGoalResult {
+  ok: boolean;
+  error?: string;
+}
+
+export async function abortGoal(reason: string): Promise<AbortGoalResult> {
+  const data = await loadState();
+  if (!data.goalSession) {
+    return { ok: false, error: "⛔ No hay goal session activa." };
+  }
+  const trimmed = (reason ?? "").trim();
+  if (!trimmed || trimmed.length < 5) {
+    return {
+      ok: false,
+      error: "⛔ Razón obligatoria (≥5 chars). Ej: 'usuario abortó', 'pre-flight fail crítico'.",
+    };
+  }
+  const now = new Date().toISOString();
+  data.goalSession.aborted = true;
+  data.goalSession.abortReason = trimmed.slice(0, 280);
+  data.goalSession.finishedAt = now;
+  data.log.push({
+    timestamp: now,
+    action: "GOAL_ABORTED",
+    detail: trimmed,
+  });
+  await saveState(data);
+  return { ok: true };
 }
 
 // ─── Auto-verify registration (V4.20) ───────────────────────────────────────
@@ -1883,6 +2093,8 @@ export interface GetStateResult {
   ticketRisks: Record<string, RiskClassification>;
   /** V4.20: auto-verify result for active ticket. null if not run. */
   autoVerifyResult: AutoVerifyResult | null;
+  /** V4.21: /goal batch session (if any). null if no active batch. */
+  goalSession: GoalSession | null;
   /** Last N log entries. V4.17+ trims to 5 by default to save tokens.
    *  Call sdd_get_state with fullLog=true to retrieve the entire persisted log. */
   log: LogEntry[];
@@ -1930,6 +2142,7 @@ export async function getState(options?: { fullLog?: boolean }): Promise<GetStat
     changeRisk: data.changeRisk ?? null,
     ticketRisks: data.ticketRisks ?? {},
     autoVerifyResult: data.autoVerifyResult ?? null,
+    goalSession: data.goalSession ?? null,
     log,
     logTotal: totalLog,
   };

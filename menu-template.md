@@ -101,6 +101,11 @@ Si el usuario pasa un argumento directo, ir a ese flujo **sin menú y sin re-pre
 - `"sprint"` / `"6"` → Ejecutar Sprint con búsqueda automática del sprint activo.
 - `"sprint <ID1,ID2,...>"` → Ejecutar Sprint con esa lista explícita.
 - `"release"` / `"7"` → Ejecutar release-to-main.
+- `"goal"` / `"8"` → Ejecutar `/goal` (preguntar tickets + modo).
+- `"goal sprint"` → Ejecutar `/goal sprint` modo supervised.
+- `"goal <ID1,ID2,...>"` → Ejecutar `/goal` con esos IDs específicos.
+- `"goal sprint --auto-merge"` → Goal con merge batch a dev al final.
+- `"goal sprint --yolo --i-accept-the-risks"` → Yolo (dos flags, no slip).
 - `"status"` → Llamar `sdd_get_state` y mostrar sin ejecutar nada.
 - `"evidence"` / `"evidencia"` → Ejecutar SOLO evidence.
 
@@ -120,6 +125,7 @@ AskUserQuestion (single_select). Las etiquetas se enriquecen con `detectedTicket
 5. Test plan — generar plan de testing
 6. Sprint — buscar tickets del sprint activo
 7. Release a main — tickets aprobados por QA → PR a main
+8. Goal — batch supervisado de tickets (V4.21)
 ```
 
 **Regla UX**: si una opción tiene contexto detectado, la etiqueta debe dejarlo
@@ -303,6 +309,23 @@ Lanzar subagentes en paralelo (máximo 5) — **SOLO planificación** (enrich + 
 **HALT después**. Mostrar resumen de tickets planificados y ofrecer empezar a implementar **de a uno**.
 
 > **IMPORTANTE**: Sprint mode planifica en paralelo pero la implementación es siempre secuencial — un ticket a la vez, ciclo completo (ver regla 10).
+
+### Opción 8: Goal (batch supervisado — V4.21)
+
+Leer y ejecutar `/goal`. Pregunta al usuario qué tickets resolver:
+
+- `sprint` → todos los del sprint activo
+- `AUTH-1,AUTH-2,...` → lista explícita
+- IDs sueltos como argumento directo
+
+Pregunta también el modo:
+- **Supervised** (default): cycle completo por ticket con verificación humana, sin merge automático.
+- **Auto-merge-final**: igual que supervised pero al final ofrece merge batch a dev.
+- **Yolo (`--yolo --i-accept-the-risks`)**: sin verificación humana per-ticket, pero HIGH risk sigue bloqueando.
+
+Pre-flight checks por ticket (DoR + risk + paths sensibles + test cases). Pausa solo en señal clara de riesgo.
+
+Reporte final obligatorio con secciones COMPLETED / PAUSED / FAILED + reporte de seguridad.
 
 ### Opción 7: Release a main
 Leer y ejecutar `/release-to-main`. **HALT después.**
