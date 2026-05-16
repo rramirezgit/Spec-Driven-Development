@@ -19,6 +19,9 @@ import {
   registerDocsDecision,
   cacheDiff,
   validateAndRegisterDor,
+  classifyRisk,
+  registerChangeDecisions,
+  registerRisk,
 } from "./pipeline.js";
 import type { MergeType } from "./types.js";
 import {
@@ -314,7 +317,113 @@ server.tool(
   },
 );
 
-// ─── Tool 12: sdd_validate_ticket_dor (V4.18 — Definition of Ready) ────────
+// ─── Tools 12-14: V4.19 — Change definition quality ────────────────────────
+
+server.tool(
+  "sdd_classify_risk",
+  "Clasifica el riesgo de un change o ticket. Función pura: recibe paths y/o " +
+    "descripción, retorna {level: 'low'|'medium'|'high', reasons: string[]}. " +
+    "Levels: HIGH = auth/payments/migrations/secrets/cron/iam/webhooks/breaking; " +
+    "MEDIUM = api/routes/controllers/components/screens/hooks/services; " +
+    "LOW = todo lo demás. Conservadora: prefiere over-classify a under-classify. " +
+    "El resultado NO se persiste — usar sdd_register_risk para persistir.",
+  {
+    paths: z
+      .array(z.string())
+      .optional()
+      .describe("Paths que el change/ticket va a tocar (relativos al repo). Opcional."),
+    description: z
+      .string()
+      .optional()
+      .describe(
+        "Descripción libre (ticket body, plan, change desc). Se escanea por keywords de alto riesgo (breaking, rotation, expire, delete all, drop table, etc.).",
+      ),
+  },
+  async ({ paths, description }) => {
+    const result = classifyRisk({ paths, description });
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify(result, null, 2),
+        },
+      ],
+    };
+  },
+);
+
+server.tool(
+  "sdd_register_risk",
+  "Persiste una clasificación de riesgo en pipeline-state.json. " +
+    "scope='change' → guarda en changeRisk (global al change). " +
+    "scope='ticket' → guarda en ticketRisks[ticketId] (requiere ticketId). " +
+    "Pasar el resultado de sdd_classify_risk como `level` + `reasons`. " +
+    "scope='change' válido entre ARTEFACTOS y COMMIT; scope='ticket' válido cuando el ticket existe en el batch.",
+  {
+    scope: z.enum(["change", "ticket"]).describe("Nivel del registro"),
+    ticketId: z
+      .string()
+      .optional()
+      .describe("ID del ticket (requerido si scope='ticket'). Solo letras/números/guion/guion-bajo."),
+    level: z.enum(["low", "medium", "high"]).describe("Nivel de riesgo a persistir"),
+    reasons: z
+      .array(z.string())
+      .max(10)
+      .describe("Razones concretas que justificaron el nivel. Máx 10."),
+  },
+  async ({ scope, ticketId, level, reasons }) => {
+    const result = await registerRisk(scope, ticketId, { level, reasons });
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify(result, null, 2),
+        },
+      ],
+    };
+  },
+);
+
+server.tool(
+  "sdd_register_change_decisions",
+  "Persiste decisiones del PO tomadas durante el gap analysis (menu Opción 1, antes de crear tickets). " +
+    "Cada decisión es {question, answer, affectsTickets?}. Se persisten en changeDecisions[] " +
+    "del pipeline-state.json y son consumidas por /create-tickets-* para incrustarlas en los Story bodies. " +
+    "Válido solo en estado ARTEFACTOS o TICKETS (durante /refine-ticket también puede agregarse). " +
+    "Máx 25 decisiones por change; max 500 chars por question/answer.",
+  {
+    decisions: z
+      .array(
+        z.object({
+          question: z
+            .string()
+            .min(1)
+            .max(500)
+            .describe("Pregunta hecha al usuario (corta, una oración)"),
+          answer: z.string().min(1).max(500).describe("Respuesta del usuario"),
+          affectsTickets: z
+            .array(z.string())
+            .optional()
+            .describe("IDs de tickets afectados (informativo). Vacío = global al change."),
+        }),
+      )
+      .min(1)
+      .describe("Lista de decisiones a registrar"),
+  },
+  async ({ decisions }) => {
+    const result = await registerChangeDecisions(decisions);
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify(result, null, 2),
+        },
+      ],
+    };
+  },
+);
+
+// ─── Tool 15: sdd_validate_ticket_dor (V4.18 — Definition of Ready) ────────
 
 server.tool(
   "sdd_validate_ticket_dor",
@@ -364,7 +473,7 @@ server.tool(
   },
 );
 
-// ─── Tool 13: sdd_cache_diff (V4.17 — token-saving) ─────────────────────────
+// ─── Tool 16: sdd_cache_diff (V4.17 — token-saving) ─────────────────────────
 
 server.tool(
   "sdd_cache_diff",
@@ -388,7 +497,7 @@ server.tool(
   },
 );
 
-// ─── Tool 14: sdd_register_docs_decision (V4.16 — Docusaurus gate) ──────────
+// ─── Tool 17: sdd_register_docs_decision (V4.16 — Docusaurus gate) ──────────
 
 server.tool(
   "sdd_register_docs_decision",
@@ -436,7 +545,7 @@ server.tool(
   },
 );
 
-// ─── Tool 15: sdd_confirm_next ───────────────────────────────────────────────
+// ─── Tool 18: sdd_confirm_next ───────────────────────────────────────────────
 
 server.tool(
   "sdd_confirm_next",
@@ -459,7 +568,7 @@ server.tool(
   },
 );
 
-// ─── Tool 16: sdd_transition_ticket (+ alias sdd_transition_jira) ────────────
+// ─── Tool 19: sdd_transition_ticket (+ alias sdd_transition_jira) ────────────
 
 const VALID_STATES_FOR_TICKET_TRANSITION = [
   PipelineState.COMMIT,
@@ -511,7 +620,7 @@ server.tool(
   transitionTicketHandler,
 );
 
-// ─── Tool 17: sdd_comment_ticket (+ alias sdd_comment_jira) ─────────────────
+// ─── Tool 20: sdd_comment_ticket (+ alias sdd_comment_jira) ─────────────────
 
 const VALID_STATES_FOR_TICKET_COMMENT = [
   PipelineState.COMMIT,

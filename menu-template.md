@@ -155,9 +155,93 @@ pregunta. Si quiere overridear, puede invocar con atajo (`/menu AUTH-456`).
    Riesgos identificados: {complejidad, side effects, migrations}
    ```
 
-3. **Crear artefactos con contexto completo** → leer y ejecutar `/opsx:ff` pasándole el contexto de la exploración para que los artefactos reflejen la realidad del codebase.
+3. **Gap Analysis (V4.19 — definición robusta del feature)**
+
+   Antes de crear artefactos o tickets, surfaceá las ambigüedades del feature
+   con preguntas concretas al usuario. **Esto evita re-trabajo downstream**:
+   las decisiones se toman acá UNA vez, no goteo por cada ticket.
+
+   Analizá descripción del feature + hallazgos de exploración. Identificá
+   preguntas en estas categorías (no preguntar las que ya son obvias del
+   contexto):
+
+   - **Ambigüedad de scope** — el feature menciona X pero X podría significar
+     A, B o C — ¿cuál es?
+   - **Comportamiento del usuario** — qué pasa en {edge case detectado en
+     el codebase existente}?
+   - **Puntos de integración** — usar el módulo existente `auth/Y` o crear nuevo?
+   - **Modelo de datos** — campo `X` debería ser required/optional/nullable?
+   - **Feature flag / rollout** — está detrás de flag? beta? todos los users?
+   - **Out of scope** — surfaceamos X, Y, Z relacionados — ¿cuáles son parte de este feature?
+   - **Error handling** — qué pasa en {error condition encontrado}?
+
+   **Usar AskUserQuestion con máximo 5 preguntas en UNA tanda.** No goteo.
+   Si hay más de 5 preguntas críticas, priorizá: las que afectan múltiples
+   tickets primero. Las menores se pueden resolver durante enrich.
+
+   Después de recibir respuestas:
+
+   ```
+   sdd_register_change_decisions({
+     decisions: [
+       { question: "...", answer: "...", affectsTickets: ["AUTH-100", "AUTH-101"] },
+       ...
+     ]
+   })
+   ```
+
+   > **Si no hay preguntas críticas** (feature muy simple, contexto claro):
+   > saltear este paso y registrar `decisions: [{question: "Sin ambigüedades
+   > críticas detectadas", answer: "ok"}]` para que el log lo refleje.
+
+4. **Risk Classification (V4.19)**
+
+   Clasificá el cambio overall según los paths/keywords identificados en la
+   exploración:
+
+   ```
+   sdd_classify_risk({
+     paths: [<lista de paths que el feature va a tocar>],
+     description: <descripción libre del feature + decisiones del gap analysis>
+   })
+   ```
+
+   El resultado es `{level: 'low'|'medium'|'high', reasons: [...]}`. Persistir:
+
+   ```
+   sdd_register_risk({
+     scope: "change",
+     level: <de classify_risk>,
+     reasons: <de classify_risk>
+   })
+   ```
+
+   **Si el resultado es HIGH** → mostrar al usuario explícitamente:
+   ```
+   ⚠️ Risk: HIGH
+   Razones:
+     • Path matches high-risk token "auth/"
+     • Description mentions "rotation"
+
+   Este change toca paths sensibles. Recomendaciones:
+     - PR review obligatoria
+     - Tests cubriendo auth path
+     - Considerar feature flag
+   ```
+
+   El usuario puede continuar igual; la clasificación queda registrada para
+   que `/goal` (futuro) la respete y para que el reporte final lo destaque.
+
+5. **Crear artefactos con contexto completo** → leer y ejecutar `/opsx:ff`
+   pasándole exploración + decisiones + clasificación de riesgo para que los
+   artefactos y futuros tickets reflejen TODO.
 
 **Después**: `sdd_advance(ARTEFACTOS)` con el nombre del change. **HALT.**
+
+> **Por qué este orden**: la definición del change ocurre acá, en menu Opción 1,
+> NO durante `/create-tickets`. Cuando llega el momento de crear tickets, los
+> artefactos ya tienen respuestas concretas — `/create-tickets-*` los inlinea
+> en cada Story sin re-preguntar.
 
 > **IMPORTANTE**: Nunca saltear la exploración. Los artefactos y tickets deben ser completos y precisos — solo es posible si se conoce el codebase en profundidad.
 

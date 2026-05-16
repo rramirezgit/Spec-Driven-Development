@@ -6,6 +6,22 @@ está al tope.
 
 ---
 
+## V4.19 — Gap analysis + risk classification dentro de menu Opción 1
+
+| Cambio | Impacto |
+|--------|---------|
+| **Gap analysis durante feature definition (menu Opción 1)** | Después de exploración y antes de `/opsx:ff`, agent identifica ambigüedades del feature (scope, integraciones, modelo de datos, rollout, error handling) y pregunta al usuario en UNA tanda de ≤5 preguntas. Las respuestas se persisten en `data.changeDecisions[]` y son consumidas por `/create-tickets-*` para inlinearlas en cada Story. Esto evita el goteo de re-preguntas durante enrich/plan/implement. |
+| **Risk classification automática** | Función pura `classifyRisk({paths, description})` retorna `{level: 'low'\|'medium'\|'high', reasons}`. Triggers HIGH: auth/oauth/session/jwt/payment/billing/migrations/secrets/crypto/cron/webhook/iam/rbac + keywords (breaking, rotation, delete all, drop table). Triggers MEDIUM: api/routes/controllers/components/hooks/services. Conservadora: prefiere over-classify. |
+| **3 nuevos MCP tools (12-14)** | `sdd_classify_risk` (pura, no persiste), `sdd_register_risk` (persiste change o ticket level), `sdd_register_change_decisions` (persiste Q&A batch). Validaciones: max 25 decisiones por change, 500 chars por Q/A, ticket ID sanitizado, max 10 razones por classification. |
+| **PipelineData extendido** | Nuevos campos: `changeDecisions[]` + `changeRisk` + `ticketRisks{}`. Se persisten across el change (NO se borran en cycle restart per-ticket); se limpian solo en IDLE. Permite acumular contexto a través de los tickets del mismo change. |
+| **menu-template Opción 1 — 2 sub-pasos nuevos** | Pasos 3 (Gap Analysis) y 4 (Risk Classification) insertados entre síntesis de exploración y `/opsx:ff`. Documentados categóricamente: tipos de preguntas a hacer (scope, user behavior, integraciones, etc.). Si feature simple sin ambigüedades, agent puede registrar `[{question: "Sin ambigüedades", answer: "ok"}]` para log explícito. |
+| **create-tickets-* — Step 3b nuevo** | Antes de redactar Stories: `sdd_get_state` para leer `changeDecisions` + `changeRisk`, `sdd_classify_risk` per-Story con sus paths, `sdd_register_risk(scope: 'ticket')`. Filtra decisiones por `affectsTickets` para incluir solo las relevantes en cada Story. Templates Jira + Notion sincronizados byte-por-byte. |
+| **Template Story V4.19 — secciones nuevas** | Stories ahora terminan con: `## Decisiones del PO` (Q&A del gap analysis relevantes a este ticket) + `## Riesgo` (level + razones, con callout especial si HIGH). Si no hay decisiones aplicables, sección se omite. |
+| **Nuevo comando `/refine-ticket`** | Comando interactivo y liviano (no toca codebase). Valida ticket contra DoR, identifica gaps, pregunta al usuario en una tanda (≤5), actualiza tracker, revalida. **Diferencia con `/enrich-ticket`**: enrich explora codebase y completa inferible; refine pregunta al humano lo que solo él sabe. Casos: tickets pre-V4.18, tickets creados fuera de SDD, gaps que el agent no puede inferir. |
+| **Tests** | +25 tests en `risk.test.ts` cubren: HIGH triggers (auth, payment, migrations, secrets, cron, webhooks, breaking, drop table), MEDIUM (api, components, hooks), LOW default, mixing rules (high > medium > low), explicabilidad (reasons no vacío). Total: 96 tests pasando (71 V4.18 + 25 V4.19). |
+| **Bootstrap** | Bump V4.18 → V4.19. `install-bootstrap.sh` registra `reusables/commands/refine-ticket.md`. Manifest regenerado (47 archivos). |
+| **Backwards-compat** | `changeDecisions=[]` y `changeRisk=null` son defaults seguros. Proyectos pre-V4.19 que re-corran el menu Opción 1 obtienen el nuevo flujo automáticamente. Tickets creados fuera del flujo (sin gap analysis) siguen funcionando — el create-tickets avisa pero no bloquea. |
+
 ## V4.18 — Definition of Ready (schema obligatorio + gate de validación)
 
 | Cambio | Impacto |

@@ -59,6 +59,17 @@ export interface PipelineData {
    *  In strict mode, sdd_advance(PLAN) requires status === "passed" or "skipped".
    *  Cleared automatically on cycle reset (COMPLETADO→TICKETS, IDLE). */
   dorValidation?: DorValidation | null;
+  /** V4.19: change-level decisions captured during gap analysis in menu Opción 1.
+   *  Persisted across the entire change (NOT cleared on per-ticket cycle reset);
+   *  cleared only on IDLE. Read by /create-tickets to bake into Story bodies. */
+  changeDecisions?: ChangeDecision[];
+  /** V4.19: change-level risk classification (set during menu Opción 1 risk pass).
+   *  Per-ticket risk overrides this for individual ticket gating. */
+  changeRisk?: RiskClassification | null;
+  /** V4.19: per-ticket risk classification, keyed by ticket ID.
+   *  Used by /goal for autonomy decisions; populated as tickets are created or
+   *  refined. Cleared on IDLE only (we want the map to persist across the change). */
+  ticketRisks?: Record<string, RiskClassification>;
 }
 
 export type DocsDecisionStatus = "updated" | "skipped";
@@ -69,6 +80,35 @@ export interface DocsDecision {
   reason: string;
   /** Files written/updated when status="updated". Empty when status="skipped". */
   files: string[];
+}
+
+/** V4.19 — Change-level decision made during gap analysis (menu Opción 1).
+ *  Persisted in PipelineData.changeDecisions; consumed by /create-tickets to
+ *  bake answers into each ticket Story (so we don't ask the same questions
+ *  per-ticket during enrich). */
+export interface ChangeDecision {
+  /** The original question the agent asked (short, one sentence). */
+  question: string;
+  /** The user's selected answer or free-text response. */
+  answer: string;
+  /** Which future ticket(s) this decision affects — informational, used to
+   *  inline the relevant decisions into each Story. Empty = global to change. */
+  affectsTickets?: string[];
+  /** ISO timestamp when registered. */
+  timestamp: string;
+}
+
+/** V4.19 — Risk classification levels for a change or ticket.
+ *  Drives autonomy decisions in /goal and surfacing in evidence. */
+export type RiskLevel = "low" | "medium" | "high";
+
+export interface RiskClassification {
+  level: RiskLevel;
+  /** Concrete reasons (path matches, keyword hits) that produced this level.
+   *  Used to explain the classification to the human, not for re-derivation. */
+  reasons: string[];
+  /** ISO timestamp when classified. */
+  timestamp: string;
 }
 
 /** V4.18 — Definition of Ready validation result.
@@ -216,5 +256,8 @@ export function defaultPipelineData(): PipelineData {
     targetSubproject: null,
     docsDecision: null,
     dorValidation: null,
+    changeDecisions: [],
+    changeRisk: null,
+    ticketRisks: {},
   };
 }

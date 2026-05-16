@@ -20,6 +20,7 @@ en el otro** y reflejarse acá.
 | `## Step 0: Preflight — verificar MCP disponible` | Check de disponibilidad del MCP del tracker, fallback a generación de texto si no está disponible. | Idéntico salvo el nombre del tracker (`__SDD_TRACKER__`). |
 | `## Step 2: Leer fuente` | Path → archivo. Change OpenSpec → leer `openspec/changes/<name>/`. Texto libre → usar directamente. | Idéntico. |
 | `## Step 3: Diseñar estructura` | Epic (opcional), Stories (por funcionalidad), Sub-tasks (técnicas). | Idéntico. Notion agrega nota sobre relación parent/sub-item si la DB lo permite. |
+| `## Step 3b: Cargar decisiones + clasificar riesgo` | V4.19: `sdd_get_state` → `changeDecisions` + `changeRisk`. Para cada Story: `sdd_classify_risk` + `sdd_register_risk` + filtrar decisiones por `affectsTickets`. | **Idéntico byte-por-byte.** Pre-Step 4. |
 | `## Step 4: Redactar en __SDD_IDIOMA_TICKETS__` | Template Story V4.18 (8 secciones DoR: Como/Quiero/Para, Objetivo, Contexto técnico, Criterios de aceptación GWT, Fuera de scope, Dependencias, Riesgos, Test cases, Definition of Done) + Template Sub-task simplificado. | **Idéntico byte-por-byte.** V4.18+ obligatorio para validador `sdd_validate_ticket_dor`. |
 | `## Step 5: Mostrar resumen — esperar confirmación explícita` | Una línea. | Idéntico. |
 | `## Step 7: Resumen final` | Tabla con columnas, formato URL específico por tracker. | Estructura idéntica, columnas se adaptan. |

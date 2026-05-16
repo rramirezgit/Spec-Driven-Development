@@ -19,6 +19,9 @@ import type {
   DocsDecisionStatus,
   DorValidation,
   DorStatus,
+  ChangeDecision,
+  RiskClassification,
+  RiskLevel,
 } from "./types.js";
 import { loadProjectConfig } from "./config.js";
 
@@ -349,6 +352,10 @@ export async function advance(
     data.targetSubproject = null;
     data.docsDecision = null;
     data.dorValidation = null;
+    // V4.19: change-level data clears only at IDLE (persists across tickets).
+    data.changeDecisions = [];
+    data.changeRisk = null;
+    data.ticketRisks = {};
     await clearDiffCacheForTicket(previousTicket);
   }
 
@@ -828,6 +835,279 @@ async function clearDiffCacheForTicket(ticketId: string | null | undefined): Pro
   const metaPath = join(CACHE_DIR, `diff-${ticketId}.meta.json`);
   await unlink(diffPath).catch(() => {});
   await unlink(metaPath).catch(() => {});
+}
+
+// ─── Change decisions + risk classification (V4.19) ─────────────────────────
+
+/** Pure heuristic: classify a set of paths/keywords into low/medium/high risk.
+ *  Used during menu Opción 1 (change-level) and during /create-tickets
+ *  (per-ticket). Designed to be conservative — false positives (high-classify
+ *  something benign) are recoverable; false negatives (auto-merge auth bug)
+ *  are not. */
+
+/** Path/keyword tokens that ALWAYS trigger HIGH risk regardless of context.
+ *  Match is substring + lowercase. Order doesn't matter; first hit wins for
+ *  reason reporting. */
+const HIGH_RISK_TOKENS = [
+  "auth/",
+  "oauth/",
+  "session/",
+  "/jwt",
+  "/token",
+  "payment",
+  "billing",
+  "invoice",
+  "subscription",
+  "migration",
+  "prisma/migrations",
+  "schema.prisma",
+  "secrets/",
+  ".env.production",
+  "crypto/",
+  "encryption/",
+  "/cron",
+  "scheduler/",
+  "worker/",
+  "iam/",
+  "rbac/",
+  "permissions/",
+  "webhook",
+];
+
+const MEDIUM_RISK_TOKENS = [
+  "api/",
+  "routes/",
+  "controllers/",
+  "handlers/",
+  "resolvers/",
+  "components/",
+  "screens/",
+  "pages/",
+  "hooks/",
+  "services/",
+  "store/",
+  "reducers/",
+];
+
+/** Keywords (not paths) that bump risk by one notch when found in descriptions. */
+const HIGH_RISK_KEYWORDS = [
+  "breaking",
+  "rotation",
+  "expire",
+  "revoke",
+  "ratelimit",
+  "rate-limit",
+  "delete\\s+all",
+  "drop\\s+table",
+  "truncate",
+  "mass\\s+update",
+  "backfill",
+  "production",
+];
+
+export interface RiskClassifyInput {
+  /** Paths the change/ticket is expected to touch (relative to repo root). */
+  paths?: string[];
+  /** Free-text descriptor (ticket body, plan, change description). */
+  description?: string;
+}
+
+export interface RiskClassifyOutput {
+  level: RiskLevel;
+  reasons: string[];
+}
+
+export function classifyRisk(input: RiskClassifyInput): RiskClassifyOutput {
+  const reasons: string[] = [];
+  const pathsLower = (input.paths ?? []).map((p) => p.toLowerCase());
+  const descLower = (input.description ?? "").toLowerCase();
+
+  // HIGH triggers
+  for (const tok of HIGH_RISK_TOKENS) {
+    const tokenL = tok.toLowerCase();
+    if (pathsLower.some((p) => p.includes(tokenL))) {
+      reasons.push(`Path matches high-risk token "${tok}"`);
+    }
+  }
+  for (const kw of HIGH_RISK_KEYWORDS) {
+    const re = new RegExp(`\\b${kw}\\b`, "i");
+    if (re.test(descLower)) {
+      reasons.push(`Description mentions high-risk concept "${kw}"`);
+    }
+  }
+  if (reasons.length > 0) {
+    return { level: "high", reasons };
+  }
+
+  // MEDIUM triggers
+  for (const tok of MEDIUM_RISK_TOKENS) {
+    if (pathsLower.some((p) => p.includes(tok.toLowerCase()))) {
+      reasons.push(`Path matches medium-risk token "${tok}"`);
+    }
+  }
+  if (reasons.length > 0) {
+    return { level: "medium", reasons };
+  }
+
+  // Default
+  return {
+    level: "low",
+    reasons: ["Sin paths o keywords que disparen medium/high"],
+  };
+}
+
+// ─── Change decisions registration ──────────────────────────────────────────
+
+export interface RegisterChangeDecisionsResult {
+  ok: boolean;
+  totalDecisions: number;
+  error?: string;
+}
+
+const MAX_DECISIONS_PER_CHANGE = 25;
+const MAX_DECISION_LEN = 500; // chars per Q or A
+
+export async function registerChangeDecisions(
+  decisions: Array<{
+    question: string;
+    answer: string;
+    affectsTickets?: string[];
+  }>,
+): Promise<RegisterChangeDecisionsResult> {
+  const data = await loadState();
+
+  // Only valid during ARTEFACTOS (gap analysis happens before tickets exist).
+  // Also allow TICKETS for late corrections (during /refine-ticket).
+  if (
+    data.state !== PipelineState.ARTEFACTOS &&
+    data.state !== PipelineState.TICKETS
+  ) {
+    return {
+      ok: false,
+      totalDecisions: data.changeDecisions?.length ?? 0,
+      error: `Solo se pueden registrar decisiones en estado ARTEFACTOS o TICKETS. Estado actual: ${data.state}.`,
+    };
+  }
+
+  if (decisions.length === 0) {
+    return {
+      ok: false,
+      totalDecisions: data.changeDecisions?.length ?? 0,
+      error: "⛔ Lista de decisiones vacía. Pasá al menos una decisión {question, answer}.",
+    };
+  }
+
+  const existing = data.changeDecisions ?? [];
+  if (existing.length + decisions.length > MAX_DECISIONS_PER_CHANGE) {
+    return {
+      ok: false,
+      totalDecisions: existing.length,
+      error: `⛔ Demasiadas decisiones (${existing.length + decisions.length}). Máximo ${MAX_DECISIONS_PER_CHANGE} por change.`,
+    };
+  }
+
+  const now = new Date().toISOString();
+  const cleaned: ChangeDecision[] = [];
+  for (const d of decisions) {
+    const q = (d.question ?? "").trim();
+    const a = (d.answer ?? "").trim();
+    if (!q || !a) {
+      return {
+        ok: false,
+        totalDecisions: existing.length,
+        error: "⛔ Cada decisión requiere question y answer no vacíos.",
+      };
+    }
+    if (q.length > MAX_DECISION_LEN || a.length > MAX_DECISION_LEN) {
+      return {
+        ok: false,
+        totalDecisions: existing.length,
+        error: `⛔ question o answer excede ${MAX_DECISION_LEN} chars. Resumí.`,
+      };
+    }
+    cleaned.push({
+      question: q,
+      answer: a,
+      affectsTickets: d.affectsTickets?.length ? d.affectsTickets : undefined,
+      timestamp: now,
+    });
+  }
+
+  data.changeDecisions = [...existing, ...cleaned];
+  data.log.push({
+    timestamp: now,
+    action: "REGISTER_CHANGE_DECISIONS",
+    detail: `${cleaned.length} decisiones registradas. Total: ${data.changeDecisions.length}.`,
+  });
+  await saveState(data);
+  return { ok: true, totalDecisions: data.changeDecisions.length };
+}
+
+// ─── Risk classification registration ───────────────────────────────────────
+
+export interface RegisterRiskResult {
+  ok: boolean;
+  scope: "change" | "ticket";
+  level?: RiskLevel;
+  error?: string;
+}
+
+export async function registerRisk(
+  scope: "change" | "ticket",
+  ticketId: string | undefined,
+  classification: RiskClassifyOutput,
+): Promise<RegisterRiskResult> {
+  const data = await loadState();
+  const now = new Date().toISOString();
+  const rc: RiskClassification = {
+    level: classification.level,
+    reasons: classification.reasons.slice(0, 10), // cap reasons
+    timestamp: now,
+  };
+
+  if (scope === "change") {
+    if (
+      data.state === PipelineState.IDLE ||
+      data.state === PipelineState.COMPLETADO
+    ) {
+      return {
+        ok: false,
+        scope,
+        error: `Risk de change solo se puede registrar entre ARTEFACTOS y COMMIT. Estado actual: ${data.state}.`,
+      };
+    }
+    data.changeRisk = rc;
+    data.log.push({
+      timestamp: now,
+      action: "REGISTER_CHANGE_RISK",
+      detail: `Change risk: ${rc.level}. Reasons: ${rc.reasons.join("; ")}.`,
+    });
+  } else {
+    if (!ticketId) {
+      return {
+        ok: false,
+        scope,
+        error: "⛔ scope=ticket requiere ticketId.",
+      };
+    }
+    if (!isSafeTicketId(ticketId)) {
+      return {
+        ok: false,
+        scope,
+        error: `⛔ ticketId inválido: "${ticketId}".`,
+      };
+    }
+    data.ticketRisks = data.ticketRisks ?? {};
+    data.ticketRisks[ticketId] = rc;
+    data.log.push({
+      timestamp: now,
+      action: "REGISTER_TICKET_RISK",
+      detail: `Ticket ${ticketId} risk: ${rc.level}.`,
+    });
+  }
+
+  await saveState(data);
+  return { ok: true, scope, level: rc.level };
 }
 
 // ─── Definition of Ready validator (V4.18) ──────────────────────────────────
@@ -1431,6 +1711,12 @@ export interface GetStateResult {
   docsDecision: DocsDecision | null;
   /** V4.18: DoR validation snapshot for the active ticket. null if not validated yet. */
   dorValidation: DorValidation | null;
+  /** V4.19: change-level decisions captured during gap analysis. */
+  changeDecisions: ChangeDecision[];
+  /** V4.19: change-level risk classification. */
+  changeRisk: RiskClassification | null;
+  /** V4.19: per-ticket risk classifications, keyed by ticket ID. */
+  ticketRisks: Record<string, RiskClassification>;
   /** Last N log entries. V4.17+ trims to 5 by default to save tokens.
    *  Call sdd_get_state with fullLog=true to retrieve the entire persisted log. */
   log: LogEntry[];
@@ -1474,6 +1760,9 @@ export async function getState(options?: { fullLog?: boolean }): Promise<GetStat
     targetSubproject: data.targetSubproject ?? null,
     docsDecision: data.docsDecision ?? null,
     dorValidation: data.dorValidation ?? null,
+    changeDecisions: data.changeDecisions ?? [],
+    changeRisk: data.changeRisk ?? null,
+    ticketRisks: data.ticketRisks ?? {},
     log,
     logTotal: totalLog,
   };

@@ -70,6 +70,40 @@ Si múltiples proyectos: preguntar en cuál crear.
 - **Stories**: una por funcionalidad / flujo de usuario
 - **Sub-tasks**: tareas técnicas específicas
 
+## Step 3b: Cargar decisiones del change + clasificar riesgo por ticket (V4.19)
+
+```
+sdd_get_state()
+```
+
+Del response, extraer:
+- `changeDecisions[]` — decisiones tomadas en menu Opción 1 durante el gap analysis.
+- `changeRisk` — clasificación global del change.
+
+> **Si `changeDecisions` está vacío**: el feature no pasó por el gap analysis
+> de Opción 1. Eso solo debería ocurrir en flows manuales (creación directa
+> de tickets sin `/menu`). Procedé igual pero **avisá al usuario** que el
+> proceso recomendado es vía `/menu` Opción 1 para preguntas batch.
+
+Para CADA Story que vas a crear, antes de redactarla:
+
+1. Identificar los paths/módulos que la Story va a tocar (basado en el plan inicial).
+2. Clasificar riesgo del ticket:
+   ```
+   sdd_classify_risk({paths: [...], description: <título + descripción breve>})
+   ```
+3. Persistir:
+   ```
+   sdd_register_risk({scope: "ticket", ticketId: <ID_que_se_creará>, level, reasons})
+   ```
+   > Nota: si el ticket todavía no fue creado en el tracker, podés diferir
+   > este `sdd_register_risk` a justo después de `createJiraIssue`, cuando
+   > ya tenés el ID real.
+
+4. Filtrar `changeDecisions` por las que aplican a esta Story:
+   - Si `decision.affectsTickets` incluye el ID o el slug de esta Story → incluir.
+   - Si `affectsTickets` está vacío (decisión global) → incluir.
+
 ## Step 4: Redactar en __SDD_IDIOMA_TICKETS__
 
 > **V4.18 — Definition of Ready**: cada Story debe tener las 8 secciones de
@@ -126,6 +160,19 @@ del 40% al 25%"). NO técnico.]
 - [ ] Tests declarados pasan
 - [ ] [requisito específico del ticket: doc actualizada, feature flag agregada,
        migration corrida en staging, credentials configuradas, etc.]
+
+## Decisiones del PO (V4.19 — gap analysis)
+{Si hay changeDecisions relevantes a este ticket, incluir como Q/A:}
+- **¿{question}?** → {answer}
+- ...
+{Si no hay decisiones relevantes: omitir esta sección.}
+
+## Riesgo
+{Insertar level + razones de sdd_classify_risk para este ticket:}
+**Nivel**: {low | medium | high}
+{Si level=high, agregar:}
+> ⚠️ Ticket clasificado como HIGH risk. Razones: {reasons separadas por coma}.
+> Requiere review obligatoria + tests cubriendo paths sensibles.
 ```
 
 ### Template Sub-task:
