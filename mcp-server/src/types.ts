@@ -70,6 +70,11 @@ export interface PipelineData {
    *  Used by /goal for autonomy decisions; populated as tickets are created or
    *  refined. Cleared on IDLE only (we want the map to persist across the change). */
   ticketRisks?: Record<string, RiskClassification>;
+  /** V4.20: smoke-test outcome for the active ticket.
+   *  Cleared on cycle restart (COMPLETADO→TICKETS) and IDLE.
+   *  In enforced mode, IMPLEMENTACION → EVIDENCIA requires status to be
+   *  "passed", "inconclusive" (degrade gracefully), or "skipped". */
+  autoVerifyResult?: AutoVerifyResult | null;
 }
 
 export type DocsDecisionStatus = "updated" | "skipped";
@@ -80,6 +85,31 @@ export interface DocsDecision {
   reason: string;
   /** Files written/updated when status="updated". Empty when status="skipped". */
   files: string[];
+}
+
+/** V4.20 — Auto-verify smoke test result. */
+export type AutoVerifyStatus = "passed" | "failed" | "inconclusive" | "skipped";
+
+export interface AutoVerifyTestCase {
+  /** Trigger del clasificador que originó este test (T1, T2, T7, etc.). */
+  trigger: string;
+  /** Descripción humana corta. */
+  description: string;
+  /** Outcome individual. */
+  outcome: "passed" | "failed" | "inconclusive";
+  /** Detalle conciso (status code, error, observación). Máx 200 chars. */
+  detail?: string;
+}
+
+export interface AutoVerifyResult {
+  status: AutoVerifyStatus;
+  /** Razón del status global (ej. "dev server no respondió en :3000" si inconclusive). */
+  reason: string;
+  /** Casos individuales corridos. Vacío si status=skipped o inconclusive temprano. */
+  cases: AutoVerifyTestCase[];
+  /** Lista de blockers (issues que el dev debe revisar antes de evidence). */
+  blockers: string[];
+  timestamp: string;
 }
 
 /** V4.19 — Change-level decision made during gap analysis (menu Opción 1).
@@ -172,6 +202,22 @@ export interface ProjectConfig {
    *  - "warn": validator corre, warnings se muestran pero NO bloquean PLAN.
    *  - "strict": validator corre, errors bloquean sdd_advance(PLAN). */
   dorEnforcement?: "off" | "warn" | "strict";
+  /** Auto-verify config (V4.20+). Present when phase 0b detectó dev server
+   *  capability y el user habilitó en phase 0c. Si ausente, /auto-verify no
+   *  corre y el gate está inactivo. */
+  autoVerify?: AutoVerifyConfig;
+}
+
+export interface AutoVerifyConfig {
+  enabled: boolean;
+  /** Default dev server port leído del config del framework o del .env. */
+  devPort?: number;
+  /** Endpoint de health/ping si fue detectado (ej: "/health", "/ping"). */
+  healthEndpoint?: string;
+  /** Si true, IMPLEMENTACION → EVIDENCIA exige que `autoVerifyResult.status`
+   *  sea passed/skipped. Si false (default = warn-equivalent), el resultado
+   *  es informativo: no bloquea. */
+  enforced: boolean;
 }
 
 export interface DocusaurusConfig {
@@ -259,5 +305,6 @@ export function defaultPipelineData(): PipelineData {
     changeDecisions: [],
     changeRisk: null,
     ticketRisks: {},
+    autoVerifyResult: null,
   };
 }

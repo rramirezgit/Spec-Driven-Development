@@ -413,17 +413,37 @@ Ofrecer implementar:
 
 Después: `sdd_register_branch(rama)` + `sdd_advance(IMPLEMENTACION)`.
 
-## IMPLEMENTACION → verificar y generar evidencia
+## IMPLEMENTACION → auto-verify (si habilitado) → verificar y generar evidencia
 
-**⛔ GATE DE VERIFICACIÓN (enforced por el MCP server)**:
+**🧪 AUTO-VERIFY (V4.20 — solo si `Auto Verify Enabled: true` en el profile)**:
+
+Antes de pedir confirmación humana, correr `/auto-verify` para smoke-testear
+los endpoints/rutas afectados por el diff. El comando:
+1. Cachea el diff (V4.17), aplica el clasificador (V4.16) para identificar T1/T2/T7.
+2. Ping al dev server. Si no responde → registra `inconclusive` (NO bloquea).
+3. Si responde → smoke con curl. Reporta passed/failed por caso.
+4. Llama `sdd_register_auto_verification`.
+
+**Si `Auto Verify Enforced: true`** y el resultado es `failed`, el gate
+EVIDENCIA bloquea hasta resolver blockers.
+**Si modo informativo** (enforced=false), el resultado solo se muestra al
+usuario para que decida confirmar o ajustar.
+
+NUNCA toca prod/staging — solo localhost. NUNCA arranca el dev server.
+
+**⛔ GATE DE VERIFICACIÓN HUMANA (enforced por el MCP server)**:
 `sdd_advance(EVIDENCIA)` fallará si no se llamó `sdd_confirm_implementation`.
 Y `sdd_confirm_implementation` SOLO se puede llamar DESPUÉS de que el usuario confirmó.
 Secuencia obligatoria:
-1. Mostrar archivos modificados y tests ejecutados
-2. AskUserQuestion: "¿Funciona correctamente?" / "Necesito ajustes"
-3. **ESPERAR respuesta del usuario**
-4. Si funciona → `sdd_confirm_implementation` → ejecutar `/evidence` → `sdd_advance(EVIDENCIA)`
-5. Si necesita ajustes → hacer cambios, volver a preguntar. NO avanzar.
+1. Mostrar archivos modificados y tests ejecutados.
+2. Si auto-verify corrió, mostrar el resumen de smokes (passed/failed/inconclusive).
+3. AskUserQuestion: "¿Funciona correctamente?" / "Necesito ajustes"
+4. **ESPERAR respuesta del usuario**
+5. Si funciona → `sdd_confirm_implementation` → ejecutar `/evidence` → `sdd_advance(EVIDENCIA)`
+6. Si necesita ajustes → hacer cambios, volver a preguntar. NO avanzar.
+
+> **Importante**: auto-verify NO reemplaza al gate humano. Lo enriquece. El
+> humano sigue siendo el que firma "esto funciona como esperábamos".
 
 **⛔ GATE DE EVIDENCIA (enforced por el MCP server)**:
 `sdd_advance(COMMIT)` fallará si no se registró evidencia con `sdd_register_evidence`.

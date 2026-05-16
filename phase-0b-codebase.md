@@ -623,6 +623,104 @@ DOCUSAURUS_DETECTION:
 
 ---
 
+## 0.2d — Detectar capacidad de auto-verify (V4.20)
+
+> **Por qué**: V4.20 introduce smoke testing post-implementación con
+> `/auto-verify`. Necesitamos detectar si hay dev server convencional,
+> qué puerto usa, y si hay endpoint de health/ping conocido. Si nada de
+> esto está, el feature se ofrece como deshabilitado por default.
+
+```bash
+echo "=== AUTO-VERIFY CAPABILITY DETECTION ==="
+
+# 1) Script de dev en package.json
+DEV_SCRIPT_FOUND=false
+if [ -f package.json ]; then
+  if grep -qE '"(dev|start|serve)"\s*:' package.json 2>/dev/null; then
+    DEV_SCRIPT_FOUND=true
+  fi
+fi
+echo "DEV_SCRIPT_FOUND=$DEV_SCRIPT_FOUND"
+
+# 2) Puerto inferido del config del framework
+DEV_PORT=""
+for cfg in next.config.js next.config.ts next.config.mjs vite.config.ts vite.config.js; do
+  [ -f "$cfg" ] || continue
+  P=$(grep -oE 'port:\s*[0-9]+' "$cfg" 2>/dev/null | head -1 | grep -oE '[0-9]+')
+  [ -n "$P" ] && DEV_PORT="$P" && break
+done
+# Fallback: leer PORT/NEXT_PUBLIC_PORT/VITE_PORT del .env.example
+if [ -z "$DEV_PORT" ] && [ -f .env.example ]; then
+  DEV_PORT=$(grep -oE '^(PORT|NEXT_PUBLIC_PORT|VITE_PORT|APP_PORT)=[0-9]+' .env.example | head -1 | grep -oE '[0-9]+$')
+fi
+# Default por framework
+if [ -z "$DEV_PORT" ]; then
+  if [ -f next.config.js ] || [ -f next.config.ts ] || [ -f next.config.mjs ]; then
+    DEV_PORT="3000"
+  elif [ -f vite.config.ts ] || [ -f vite.config.js ]; then
+    DEV_PORT="5173"
+  elif [ -f nest-cli.json ]; then
+    DEV_PORT="3000"
+  fi
+fi
+echo "DEV_PORT=$DEV_PORT"
+
+# 3) Endpoint de health/ping
+HEALTH_ENDPOINT=""
+for pattern in "'/health'" "'/healthz'" "'/ping'" "'/api/health'" "/_health"; do
+  if grep -rqE "Get\(\s*$pattern|router\.get\(\s*$pattern|app\.get\(\s*$pattern" src/ 2>/dev/null | head -1; then
+    HEALTH_ENDPOINT=$(echo "$pattern" | tr -d "'")
+    break
+  fi
+done
+echo "HEALTH_ENDPOINT=$HEALTH_ENDPOINT"
+
+# 4) Playwright/Cypress instalado (para futuro L2 — Chrome DevTools)
+PLAYWRIGHT_INSTALLED=false
+CYPRESS_INSTALLED=false
+if [ -f package.json ]; then
+  grep -q '"@playwright/test"' package.json 2>/dev/null && PLAYWRIGHT_INSTALLED=true
+  grep -q '"cypress"' package.json 2>/dev/null && CYPRESS_INSTALLED=true
+fi
+echo "PLAYWRIGHT_INSTALLED=$PLAYWRIGHT_INSTALLED"
+echo "CYPRESS_INSTALLED=$CYPRESS_INSTALLED"
+
+# 5) Config de testing aparte
+ENV_TEST_EXISTS=false
+test -f .env.test && ENV_TEST_EXISTS=true
+echo "ENV_TEST_EXISTS=$ENV_TEST_EXISTS"
+
+# Decisión: si hay dev script Y puerto inferido → capability=true
+AUTO_VERIFY_CAPABLE=false
+if [ "$DEV_SCRIPT_FOUND" = "true" ] && [ -n "$DEV_PORT" ]; then
+  AUTO_VERIFY_CAPABLE=true
+fi
+echo "AUTO_VERIFY_CAPABLE=$AUTO_VERIFY_CAPABLE"
+```
+
+Construí internamente:
+
+```
+AUTO_VERIFY_DETECTION:
+  capable: [true | false]
+  dev_script_found: [true | false]
+  dev_port: [número o ""]
+  health_endpoint: [path o ""]
+  playwright_installed: [true | false]
+  cypress_installed: [true | false]
+  env_test_exists: [true | false]
+```
+
+**Cuándo importa**:
+- Si `capable == true` → Phase 0c pregunta si habilitar auto-verify.
+- Si `capable == false` → no se pregunta. Feature queda deshabilitado.
+
+> **Comportamiento conservador**: aunque auto-verify se habilite, el modo default
+> es **no enforced** (resultado informativo, no bloqueante). El user puede subir
+> a enforced cuando confíe en los smokes.
+
+---
+
 ## 0.3 — (deprecada — cubierta por team analysis)
 
 > Antes este paso buscaba estructura de carpetas y patrones de archivos.
@@ -691,6 +789,11 @@ PROYECTO_PERFIL:
   docusaurus_root: [path al root del site Docusaurus, si detected]
   docusaurus_docs_path: [path relativo de docs en el site Docusaurus, si detected]
   docusaurus_has_sidebar_config: [true | false]
+  auto_verify_capable: [true | false — del paso 0.2d]
+  auto_verify_dev_port: [número o vacío]
+  auto_verify_health_endpoint: [path o vacío]
+  auto_verify_playwright: [true | false]
+  auto_verify_env_test_exists: [true | false]
 ```
 
 ---

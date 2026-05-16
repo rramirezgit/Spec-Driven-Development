@@ -6,6 +6,21 @@ está al tope.
 
 ---
 
+## V4.20 — Auto-verify (smoke tests post-implementación, L1)
+
+| Cambio | Impacto |
+|--------|---------|
+| **Nuevo comando `/auto-verify`** | Smoke tests HTTP automáticos para endpoints/rutas que cambiaron en el ticket. Reusa diff cache (V4.17) + clasificador de `/update-docs` (V4.16) para identificar T1/T2 (endpoint nuevo/modificado). Para cada uno: ping al dev server local, curl con payload mínimo del schema, valida status + shape de response. Reporta passed/failed/inconclusive/skipped. **L1 = solo smoke API**; L2 (Chrome DevTools UI) queda para V4.21. |
+| **MCP server — `sdd_register_auto_verification`** | Tool con schema `{status, reason, cases[], blockers[]}`. Validaciones: razón obligatoria; `passed` requiere cero failed cases; `failed` requiere ≥1 failed case o blocker; max 50 cases por ticket; detail por case truncado a 200 chars. Solo válido en IMPLEMENTACION. Persiste en `data.autoVerifyResult`. |
+| **MCP server — gate opcional IMPLEMENTACION → EVIDENCIA** | Si `autoVerify.enforced=true` y `autoVerifyResult.status="failed"` → bloquea con guía de blockers. `inconclusive` (dev server down) NO bloquea — degrade gracefully. Sin enforced, resultado es informativo. |
+| **`AutoVerifyConfig` en ProjectConfig** | Nuevo campo opcional `{enabled, devPort, healthEndpoint, enforced}`. Parser case-insensitive con misma estrategia que otras V4.* configs. Ausente = inactive. |
+| **Phase 0b — detección de capability** | Nuevo bloque `0.2d`: detecta script de dev en `package.json`, puerto del config del framework (Next/Vite/Nest) o `.env.example`, endpoint de health/ping si existe, Playwright/Cypress instalado, `.env.test` presente. Decisión `AUTO_VERIFY_CAPABLE = dev_script_found AND dev_port`. |
+| **Phase 0c — pregunta de habilitación** | Solo si capability detected. AskUserQuestion con 3 opciones: informativo (default — corre pero no bloquea), enforced (bloquea EVIDENCIA si fails), deshabilitado. Persiste `Auto Verify Enabled/Enforced/Dev Port/Health Endpoint` en profile + exporta `SDD_AUTO_VERIFY_*` a vars. |
+| **menu-template — paso /auto-verify antes del gate humano** | Sección IMPLEMENTACION ahora documenta: si `Auto Verify Enabled=true`, correr `/auto-verify` ANTES de `sdd_confirm_implementation`. El resultado se muestra al humano para que confirme con contexto. **Auto-verify NO reemplaza al gate humano** — lo enriquece. |
+| **Protecciones del comando** | Nunca toca prod/staging (validación localhost-only obligatoria, abort si host ≠ localhost). Nunca arranca dev server (solo ping). Nunca usa credentials reales (lee `.env.test` solamente). Buffer corto en outputs (status code + 1ra línea body — no volcar bodies completos al chat). |
+| **Bootstrap** | Bump V4.19 → V4.20. `install-bootstrap.sh` registra `reusables/commands/auto-verify.md`. Manifest regenerado (48 archivos). |
+| **Backwards-compat** | Sin `Auto Verify Enabled: true` en el profile → command no se invoca, gate inactivo, comportamiento idéntico a V4.19. Habilitación es opt-in vía Phase 0c. |
+
 ## V4.19 — Gap analysis + risk classification dentro de menu Opción 1
 
 | Cambio | Impacto |

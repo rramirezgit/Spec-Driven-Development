@@ -148,6 +148,45 @@ Persistir según respuesta:
 > revisar las secciones más comunes que fallan, ajustar el template del equipo,
 > y subir a `strict` cuando el equipo ya internalizó el schema.
 
+### 1.0d-bis — Confirmar Auto-verify (V4.20)
+
+Si Phase 0b detectó `AUTO_VERIFY_CAPABLE == true`:
+
+```
+🧪 AUTO-VERIFY DETECTADO
+
+Dev server:     npm run {dev|start|serve} (script encontrado)
+Puerto inferido: localhost:{DEV_PORT}
+Health endpoint: {HEALTH_ENDPOINT o "no detectado — usa /"}
+Playwright:     {PLAYWRIGHT_INSTALLED ? "sí (para L2 futuro)" : "no"}
+.env.test:      {ENV_TEST_EXISTS ? "presente" : "ausente"}
+
+¿Habilitar /auto-verify después de implementar?
+
+  /auto-verify corre smokes HTTP contra el endpoint que cambió en el ticket
+  (T1/T2 del clasificador) ANTES de la verificación humana. Si pasan, el dev
+  ve el resultado y confirma. Si fallan, se muestran los blockers.
+  
+  NUNCA toca prod/staging (solo localhost). NUNCA arranca el dev server.
+  Si el server está down, reporta "inconclusive" y deja al user decidir.
+```
+
+**AskUserQuestion** (single_select):
+- `"Sí, habilitar (modo informativo)"` — default. Smoke corre, pero NO bloquea EVIDENCIA. Útil para introducirlo gradualmente.
+- `"Sí, habilitar (modo enforced)"` — el resultado bloquea: si `failed`, no se puede avanzar a EVIDENCIA hasta resolver blockers.
+- `"No, deshabilitar"` — se comporta como pre-V4.20.
+
+Persistir según respuesta:
+- Modo informativo → `Auto Verify Enabled: true` + `Auto Verify Enforced: false`.
+- Modo enforced → `Auto Verify Enabled: true` + `Auto Verify Enforced: true`.
+- No → no escribir las keys (ausencia = deshabilitado).
+
+Independiente del modo (si enabled=true), agregar al perfil:
+- `Auto Verify Dev Port: {DEV_PORT}`
+- `Auto Verify Health Endpoint: {HEALTH_ENDPOINT}` (si detectado)
+
+> **Si AUTO_VERIFY_CAPABLE == false**: saltar este paso. No mostrar nada.
+
 ### 1.0d — Confirmar integración con Docusaurus (V4.16)
 
 Si Phase 0b detectó `DOCUSAURUS_DETECTED == true`:
@@ -426,6 +465,12 @@ Crear `.ai-internal/project-profile.md` con TODOS los datos reales del PROYECTO_
 # Docusaurus Root: {DOCUSAURUS_ROOT}
 # Docusaurus Docs Path: {DOCUSAURUS_DOCS_PATH}
 {Si no detectado o usuario rechazó: omitir las 3 líneas anteriores — la ausencia = deshabilitado.}
+{Si Phase 0b detectó capability de auto-verify Y el user habilitó en 1.0d-bis:}
+# Auto Verify Enabled: true
+# Auto Verify Enforced: {true | false}
+# Auto Verify Dev Port: {DEV_PORT}
+# Auto Verify Health Endpoint: {HEALTH_ENDPOINT}
+{Si user rechazó: omitir las líneas. Ausencia = deshabilitado.}
 
 {Si tipo == monorepo-fullstack Y MULTI_TARGET_MODE == false, agregar sección de subprojects clásica (1 frontend + 1 backend):}
 
@@ -542,6 +587,14 @@ DOCUSAURUS_ENABLED=$(grep "^# Docusaurus Enabled:" .ai-internal/project-profile.
 DOCUSAURUS_ROOT_VAR=$(grep "^# Docusaurus Root:" .ai-internal/project-profile.md | sed 's/^# Docusaurus Root: //')
 DOCUSAURUS_DOCS_PATH_VAR=$(grep "^# Docusaurus Docs Path:" .ai-internal/project-profile.md | sed 's/^# Docusaurus Docs Path: //')
 
+# V4.20: Auto-verify config
+AUTO_VERIFY_ENABLED=$(grep "^# Auto Verify Enabled:" .ai-internal/project-profile.md | sed 's/^# Auto Verify Enabled: //')
+[ -z "$AUTO_VERIFY_ENABLED" ] && AUTO_VERIFY_ENABLED="false"
+AUTO_VERIFY_ENFORCED=$(grep "^# Auto Verify Enforced:" .ai-internal/project-profile.md | sed 's/^# Auto Verify Enforced: //')
+[ -z "$AUTO_VERIFY_ENFORCED" ] && AUTO_VERIFY_ENFORCED="false"
+AUTO_VERIFY_DEV_PORT=$(grep "^# Auto Verify Dev Port:" .ai-internal/project-profile.md | sed 's/^# Auto Verify Dev Port: //')
+AUTO_VERIFY_HEALTH_ENDPOINT=$(grep "^# Auto Verify Health Endpoint:" .ai-internal/project-profile.md | sed 's/^# Auto Verify Health Endpoint: //')
+
 cat > .ai-internal/project-vars.sh << VARSEOF
 # Auto-generated from project-profile.md — do not edit manually
 # Used by phase-2 templates for sed replacement
@@ -566,6 +619,10 @@ SDD_DOCUSAURUS_ENABLED="$DOCUSAURUS_ENABLED"
 SDD_DOCUSAURUS_ROOT="$DOCUSAURUS_ROOT_VAR"
 SDD_DOCUSAURUS_DOCS_PATH="$DOCUSAURUS_DOCS_PATH_VAR"
 SDD_DOR_ENFORCEMENT="$DOR_ENFORCEMENT"
+SDD_AUTO_VERIFY_ENABLED="$AUTO_VERIFY_ENABLED"
+SDD_AUTO_VERIFY_ENFORCED="$AUTO_VERIFY_ENFORCED"
+SDD_AUTO_VERIFY_DEV_PORT="$AUTO_VERIFY_DEV_PORT"
+SDD_AUTO_VERIFY_HEALTH_ENDPOINT="$AUTO_VERIFY_HEALTH_ENDPOINT"
 VARSEOF
 
 # Si multi-target, agregar bloque iterativo: una variable por subproject

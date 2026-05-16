@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { ProjectConfig, SubprojectConfig, DocusaurusConfig } from "./types.js";
+import type { ProjectConfig, SubprojectConfig, DocusaurusConfig, AutoVerifyConfig } from "./types.js";
 
 // Resolve project root from the compiled JS location:
 // dist/config.js → dist/ → mcp-server/ → .ai-internal/ → PROJECT_ROOT
@@ -144,6 +144,30 @@ export function parseProfile(content: string): ProjectConfig {
     };
   }
 
+  // V4.20: Auto-verify config. Solo populado si phase 0b detectó capability
+  // y el user habilitó en phase 0c. Ausente = inactive.
+  let autoVerify: AutoVerifyConfig | undefined;
+  const avEnabledRaw = get(
+    "Auto Verify Enabled",
+    "auto_verify_enabled",
+    "AutoVerifyEnabled",
+  );
+  if (avEnabledRaw && avEnabledRaw.toLowerCase().trim() === "true") {
+    const portRaw = get("Auto Verify Dev Port", "auto_verify_dev_port", "AutoVerifyDevPort");
+    const devPort = portRaw ? parseInt(portRaw, 10) : undefined;
+    const healthEndpoint =
+      get("Auto Verify Health Endpoint", "auto_verify_health_endpoint", "AutoVerifyHealthEndpoint") ||
+      undefined;
+    const enforcedRaw = get("Auto Verify Enforced", "auto_verify_enforced", "AutoVerifyEnforced");
+    const enforced = enforcedRaw.toLowerCase().trim() === "true";
+    autoVerify = {
+      enabled: true,
+      devPort: devPort && !isNaN(devPort) ? devPort : undefined,
+      healthEndpoint,
+      enforced,
+    };
+  }
+
   // Parse subprojects when relevant: multi-target OR classic monorepo-fullstack
   let subprojects: SubprojectConfig[] | undefined;
   if (multiTargetMode || tipo === "monorepo-fullstack") {
@@ -172,6 +196,7 @@ export function parseProfile(content: string): ProjectConfig {
     commitStyle,
     docusaurus,
     dorEnforcement,
+    autoVerify,
   };
 }
 

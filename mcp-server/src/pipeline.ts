@@ -22,6 +22,9 @@ import type {
   ChangeDecision,
   RiskClassification,
   RiskLevel,
+  AutoVerifyResult,
+  AutoVerifyStatus,
+  AutoVerifyTestCase,
 } from "./types.js";
 import { loadProjectConfig } from "./config.js";
 
@@ -210,6 +213,37 @@ export async function advance(
           "y llamá sdd_confirm_implementation cuando confirme.",
       };
     }
+
+    // Gate V4.20: auto-verify enforced mode requires a result.
+    // Acceptable: passed, inconclusive (degrade gracefully), skipped.
+    // Failed → blocks. Result missing → blocks with guidance.
+    const config = await loadProjectConfig();
+    if (config?.autoVerify?.enabled && config.autoVerify.enforced) {
+      const av = data.autoVerifyResult;
+      if (!av) {
+        return {
+          ok: false,
+          from,
+          to,
+          error:
+            "⛔ Auto-verify enforced: no hay resultado registrado para el ticket activo. " +
+            "Ejecutá /auto-verify y llamá sdd_register_auto_verification. " +
+            "Si el dev server no está corriendo, /auto-verify reportará 'inconclusive' " +
+            "lo cual SÍ permite avanzar (degrade gracefully).",
+        };
+      }
+      if (av.status === "failed") {
+        return {
+          ok: false,
+          from,
+          to,
+          error:
+            `⛔ Auto-verify falló: ${av.reason}. ` +
+            `Blockers: ${av.blockers.join("; ") || "(ver cases)"}. ` +
+            "Corregí los issues y re-ejecutá /auto-verify antes de generar evidencia.",
+        };
+      }
+    }
   }
 
   // Gate: EVIDENCIA → COMMIT requires evidence file registered
@@ -356,6 +390,7 @@ export async function advance(
     data.changeDecisions = [];
     data.changeRisk = null;
     data.ticketRisks = {};
+    data.autoVerifyResult = null;
     await clearDiffCacheForTicket(previousTicket);
   }
 
@@ -371,6 +406,7 @@ export async function advance(
     data.targetSubproject = null;
     data.docsDecision = null;
     data.dorValidation = null;
+    data.autoVerifyResult = null;
     await clearDiffCacheForTicket(previousTicket);
   }
 
@@ -835,6 +871,134 @@ async function clearDiffCacheForTicket(ticketId: string | null | undefined): Pro
   const metaPath = join(CACHE_DIR, `diff-${ticketId}.meta.json`);
   await unlink(diffPath).catch(() => {});
   await unlink(metaPath).catch(() => {});
+}
+
+// ─── Auto-verify registration (V4.20) ───────────────────────────────────────
+
+export interface RegisterAutoVerifyResult {
+  ok: boolean;
+  result?: AutoVerifyResult;
+  error?: string;
+}
+
+const MAX_AV_CASES = 50;
+const MAX_AV_DETAIL_LEN = 200;
+const MAX_AV_REASON_LEN = 280;
+
+export async function registerAutoVerification(
+  status: AutoVerifyStatus,
+  reason: string,
+  cases: Array<{
+    trigger: string;
+    description: string;
+    outcome: "passed" | "failed" | "inconclusive";
+    detail?: string;
+  }>,
+  blockers: string[],
+): Promise<RegisterAutoVerifyResult> {
+  const data = await loadState();
+
+  // Only valid during IMPLEMENTACION (after dev finished writing code).
+  if (data.state !== PipelineState.IMPLEMENTACION) {
+    return {
+      ok: false,
+      error: `Solo se puede registrar auto-verify en estado IMPLEMENTACION. Estado actual: ${data.state}.`,
+    };
+  }
+
+  const trimmedReason = (reason ?? "").trim();
+  if (!trimmedReason) {
+    return {
+      ok: false,
+      error: "⛔ La razón global es obligatoria. Ej: 'todos los smokes pasaron', 'dev server no respondió'.",
+    };
+  }
+  if (trimmedReason.length > MAX_AV_REASON_LEN) {
+    return {
+      ok: false,
+      error: `⛔ La razón excede ${MAX_AV_REASON_LEN} caracteres. Resumila.`,
+    };
+  }
+
+  if (cases.length > MAX_AV_CASES) {
+    return {
+      ok: false,
+      error: `⛔ Demasiados casos (${cases.length}). Máximo ${MAX_AV_CASES} — un ticket no debería tener más smokes que eso.`,
+    };
+  }
+
+  // Sanity: failed → debe haber al menos un caso failed o al menos un blocker
+  if (status === "failed") {
+    const anyFailed = cases.some((c) => c.outcome === "failed");
+    if (!anyFailed && blockers.length === 0) {
+      return {
+        ok: false,
+        error:
+          "⛔ status='failed' requiere al menos un case con outcome='failed' " +
+          "o al menos un blocker listado. Si no hay falla concreta, usá " +
+          "'inconclusive' con razón.",
+      };
+    }
+  }
+
+  // Sanity: passed → no debe haber failed cases
+  if (status === "passed") {
+    const anyFailed = cases.some((c) => c.outcome === "failed");
+    if (anyFailed) {
+      return {
+        ok: false,
+        error:
+          "⛔ status='passed' es inconsistente: hay cases con outcome='failed'. " +
+          "Usá 'failed' como status global.",
+      };
+    }
+  }
+
+  const cleanedCases: AutoVerifyTestCase[] = [];
+  for (const c of cases) {
+    const trig = (c.trigger ?? "").trim();
+    const desc = (c.description ?? "").trim();
+    if (!trig || !desc) {
+      return {
+        ok: false,
+        error: "⛔ Cada case requiere trigger y description no vacíos.",
+      };
+    }
+    let detail = (c.detail ?? "").trim();
+    if (detail.length > MAX_AV_DETAIL_LEN) {
+      detail = detail.slice(0, MAX_AV_DETAIL_LEN) + "…";
+    }
+    cleanedCases.push({
+      trigger: trig,
+      description: desc,
+      outcome: c.outcome,
+      detail: detail || undefined,
+    });
+  }
+
+  const cleanedBlockers = (blockers ?? [])
+    .map((b) => b.trim())
+    .filter(Boolean)
+    .slice(0, 20);
+
+  const result: AutoVerifyResult = {
+    status,
+    reason: trimmedReason,
+    cases: cleanedCases,
+    blockers: cleanedBlockers,
+    timestamp: new Date().toISOString(),
+  };
+  data.autoVerifyResult = result;
+  data.log.push({
+    timestamp: result.timestamp,
+    action: "REGISTER_AUTO_VERIFY",
+    detail:
+      `Ticket ${data.activeTicket}: ${status} — ${trimmedReason}. ` +
+      `Cases: ${cleanedCases.length} (${cleanedCases.filter((c) => c.outcome === "passed").length} ok / ${cleanedCases.filter((c) => c.outcome === "failed").length} fail / ${cleanedCases.filter((c) => c.outcome === "inconclusive").length} inc). ` +
+      `Blockers: ${cleanedBlockers.length}.`,
+  });
+  await saveState(data);
+  return { ok: true, result };
 }
 
 // ─── Change decisions + risk classification (V4.19) ─────────────────────────
@@ -1717,6 +1881,8 @@ export interface GetStateResult {
   changeRisk: RiskClassification | null;
   /** V4.19: per-ticket risk classifications, keyed by ticket ID. */
   ticketRisks: Record<string, RiskClassification>;
+  /** V4.20: auto-verify result for active ticket. null if not run. */
+  autoVerifyResult: AutoVerifyResult | null;
   /** Last N log entries. V4.17+ trims to 5 by default to save tokens.
    *  Call sdd_get_state with fullLog=true to retrieve the entire persisted log. */
   log: LogEntry[];
@@ -1763,6 +1929,7 @@ export async function getState(options?: { fullLog?: boolean }): Promise<GetStat
     changeDecisions: data.changeDecisions ?? [],
     changeRisk: data.changeRisk ?? null,
     ticketRisks: data.ticketRisks ?? {},
+    autoVerifyResult: data.autoVerifyResult ?? null,
     log,
     logTotal: totalLog,
   };

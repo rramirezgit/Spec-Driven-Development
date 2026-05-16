@@ -22,6 +22,7 @@ import {
   classifyRisk,
   registerChangeDecisions,
   registerRisk,
+  registerAutoVerification,
 } from "./pipeline.js";
 import type { MergeType } from "./types.js";
 import {
@@ -423,7 +424,65 @@ server.tool(
   },
 );
 
-// ─── Tool 15: sdd_validate_ticket_dor (V4.18 — Definition of Ready) ────────
+// ─── Tool 15: sdd_register_auto_verification (V4.20) ────────────────────────
+
+server.tool(
+  "sdd_register_auto_verification",
+  "Persiste el resultado de /auto-verify (smoke tests post-implementación). " +
+    "Solo válido en estado IMPLEMENTACION. " +
+    "Status: 'passed' (todos los cases ok), 'failed' (al menos un case falló — bloquea EVIDENCIA si autoVerify.enforced), " +
+    "'inconclusive' (no se pudo testear, ej. dev server caído — NO bloquea, degrade gracefully), " +
+    "'skipped' (diff no tiene triggers testeables, ej. solo refactor interno). " +
+    "Validaciones: razón obligatoria; passed=no failed cases; failed=al menos un failed case o blocker; " +
+    "max 50 cases por ticket; detail por case truncado a 200 chars.",
+  {
+    status: z
+      .enum(["passed", "failed", "inconclusive", "skipped"])
+      .describe("Outcome global de la verificación"),
+    reason: z
+      .string()
+      .min(1)
+      .max(280)
+      .describe(
+        "Razón del status. Ej passed: 'todos los smokes ok'. Ej failed: 'POST /sessions retornó 500'. " +
+          "Ej inconclusive: 'dev server :3000 no responde'. Ej skipped: 'solo refactor interno, sin triggers'.",
+      ),
+    cases: z
+      .array(
+        z.object({
+          trigger: z.string().describe("Trigger del clasificador (T1, T2, T7, etc.)"),
+          description: z.string().describe("Qué se testeó (corto, ej: 'POST /sessions con payload válido')"),
+          outcome: z.enum(["passed", "failed", "inconclusive"]).describe("Outcome individual"),
+          detail: z
+            .string()
+            .max(200)
+            .optional()
+            .describe("Detalle conciso: status code, error message, observación. Truncado a 200 chars."),
+        }),
+      )
+      .max(50)
+      .default([])
+      .describe("Cases individuales corridos. Vacío si status=skipped o inconclusive temprano."),
+    blockers: z
+      .array(z.string())
+      .max(20)
+      .default([])
+      .describe("Issues que requieren acción del dev antes de avanzar (ej: 'auth header missing en endpoint X')."),
+  },
+  async ({ status, reason, cases, blockers }) => {
+    const result = await registerAutoVerification(status, reason, cases ?? [], blockers ?? []);
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify(result, null, 2),
+        },
+      ],
+    };
+  },
+);
+
+// ─── Tool 16: sdd_validate_ticket_dor (V4.18 — Definition of Ready) ────────
 
 server.tool(
   "sdd_validate_ticket_dor",
@@ -497,7 +556,7 @@ server.tool(
   },
 );
 
-// ─── Tool 17: sdd_register_docs_decision (V4.16 — Docusaurus gate) ──────────
+// ─── Tool 18: sdd_register_docs_decision (V4.16 — Docusaurus gate) ──────────
 
 server.tool(
   "sdd_register_docs_decision",
@@ -545,7 +604,7 @@ server.tool(
   },
 );
 
-// ─── Tool 18: sdd_confirm_next ───────────────────────────────────────────────
+// ─── Tool 19: sdd_confirm_next ───────────────────────────────────────────────
 
 server.tool(
   "sdd_confirm_next",
@@ -568,7 +627,7 @@ server.tool(
   },
 );
 
-// ─── Tool 19: sdd_transition_ticket (+ alias sdd_transition_jira) ────────────
+// ─── Tool 20: sdd_transition_ticket (+ alias sdd_transition_jira) ────────────
 
 const VALID_STATES_FOR_TICKET_TRANSITION = [
   PipelineState.COMMIT,
@@ -620,7 +679,7 @@ server.tool(
   transitionTicketHandler,
 );
 
-// ─── Tool 20: sdd_comment_ticket (+ alias sdd_comment_jira) ─────────────────
+// ─── Tool 21: sdd_comment_ticket (+ alias sdd_comment_jira) ─────────────────
 
 const VALID_STATES_FOR_TICKET_COMMENT = [
   PipelineState.COMMIT,
