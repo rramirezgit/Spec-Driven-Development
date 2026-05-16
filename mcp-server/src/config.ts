@@ -109,6 +109,22 @@ export function parseProfile(content: string): ProjectConfig {
   const commitStyle: "standard" | "conventional" =
     commitStyleNormalized === "conventional" ? "conventional" : "standard";
 
+  // V4.18: Definition of Ready enforcement mode. Default = "off" for backward-compat
+  // (proyectos pre-V4.18 sin la key no reciben el gate). Phase 0c default = "warn"
+  // para bootstraps nuevos.
+  const dorEnforcementRaw = get(
+    "DoR Enforcement",
+    "dor_enforcement",
+    "DorEnforcement",
+  );
+  const dorNormalized = dorEnforcementRaw.toLowerCase().trim();
+  const dorEnforcement: "off" | "warn" | "strict" =
+    dorNormalized === "strict"
+      ? "strict"
+      : dorNormalized === "warn"
+        ? "warn"
+        : "off";
+
   // V4.16: Docusaurus integration. Only populated if phase 0b detected docusaurus.config.*
   // and the user confirmed in phase 0c. Default = absent (no docs gate, full backward-compat).
   let docusaurus: DocusaurusConfig | undefined;
@@ -155,6 +171,7 @@ export function parseProfile(content: string): ProjectConfig {
     subprojectSlugs,
     commitStyle,
     docusaurus,
+    dorEnforcement,
   };
 }
 

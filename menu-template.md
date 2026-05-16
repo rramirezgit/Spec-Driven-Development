@@ -258,7 +258,25 @@ Secuencia obligatoria:
    - Si no hay sprint (Kanban) → `sdd_confirm_sprint(kanban=true)`
    - Si Scrum sin sprint activo → BLOQUEAR, informar al usuario
    > **Si tracker=notion**: saltar verificación de sprint. Llamar directamente `sdd_confirm_sprint(kanban=true)`.
-3. Solo entonces: `sdd_set_active_ticket(ID)` + (si multi-target, elegir target service ↓) + leer `/plan-{tipo_o_slug}-ticket` + `sdd_advance(PLAN)`
+3. Solo entonces: `sdd_set_active_ticket(ID)` + (si multi-target, elegir target service ↓)
+
+**⛔ DoR GATE (V4.18 — enforced por el MCP server en modo `strict`)**:
+Si `project-profile.md` tiene `DoR Enforcement: strict`, `sdd_advance(PLAN)` fallará
+hasta que el ticket pase el validador V4.18 (8 secciones obligatorias).
+Si está en modo `warn`, el validador igual corre pero solo muestra warnings.
+Si está en `off`, se saltea silenciosamente.
+
+Secuencia obligatoria (en cualquier modo distinto de `off`):
+1. Fetch el body del ticket activo desde el tracker (`getJiraIssue` / `API-retrieve-a-page` con body completo).
+2. Llamar `sdd_validate_ticket_dor({ticketId, body: <body>})`.
+3. Si `validation.status === "failed"` y mode=strict → ejecutar `/enrich-ticket {ID}`
+   para que complete las secciones faltantes; revalidar antes de avanzar.
+4. Si `validation.status === "warned"` → mostrar warnings al usuario; preguntar si
+   procede igual o quiere refinar. En `strict`, warnings no bloquean (solo errors).
+5. Si el ticket es hotfix legítimo: `sdd_validate_ticket_dor({skip: true, skipReason: "..."})`
+   con razón ≥10 chars. Solo aplicable a branches `hotfix/*` o issuetype=Hotfix.
+
+4. Después de DoR (si aplica): leer `/plan-{tipo_o_slug}-ticket` + `sdd_advance(PLAN)`
 
 **⛔ GATE DE TARGET SUBPROJECT (solo si MULTI_TARGET_MODE == true)**:
 Si el proyecto está en modo multi-target (`__SDD_MULTI_TARGET_MODE__ == true`), antes de planificar:

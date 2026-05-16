@@ -10,7 +10,16 @@ import {
   STATE_DESCRIPTIONS,
   defaultPipelineData,
 } from "./types.js";
-import type { PipelineData, LogEntry, TicketEntry, MergeType, DocsDecision, DocsDecisionStatus } from "./types.js";
+import type {
+  PipelineData,
+  LogEntry,
+  TicketEntry,
+  MergeType,
+  DocsDecision,
+  DocsDecisionStatus,
+  DorValidation,
+  DorStatus,
+} from "./types.js";
 import { loadProjectConfig } from "./config.js";
 
 const MAX_LOG_ENTRIES = 100;
@@ -117,6 +126,31 @@ export async function advance(
       to,
       error: "No se puede avanzar a PLAN sin un ticket activo. Usá sdd_set_active_ticket primero.",
     };
+  }
+
+  // Gate V4.18: PLAN requires DoR validation in strict mode.
+  // In "warn" mode the validation is informative (no block).
+  // In "off" mode the gate is inactive.
+  if (to === PipelineState.PLAN) {
+    const config = await loadProjectConfig();
+    const dorMode = config?.dorEnforcement ?? "off";
+    if (dorMode === "strict") {
+      const v = data.dorValidation;
+      const matchesActive = v && v.ticketId === data.activeTicket;
+      const acceptable = matchesActive && (v.status === "passed" || v.status === "skipped");
+      if (!acceptable) {
+        return {
+          ok: false,
+          from,
+          to,
+          error:
+            "⛔ DoR strict: no se puede avanzar a PLAN sin validación de Definition of Ready " +
+            `para el ticket ${data.activeTicket}. ` +
+            "Llamá sdd_validate_ticket_dor con el body actualizado del ticket. " +
+            "Si el ticket es un hotfix legítimo, usá skip=true + skipReason='...' (≥10 chars).",
+        };
+      }
+    }
   }
 
   // Gate: IMPLEMENTACION requires activeTicket (can't implement without a ticket)
@@ -314,6 +348,7 @@ export async function advance(
     data.evidenceFilePath = null;
     data.targetSubproject = null;
     data.docsDecision = null;
+    data.dorValidation = null;
     await clearDiffCacheForTicket(previousTicket);
   }
 
@@ -328,6 +363,7 @@ export async function advance(
     data.evidenceFilePath = null;
     data.targetSubproject = null;
     data.docsDecision = null;
+    data.dorValidation = null;
     await clearDiffCacheForTicket(previousTicket);
   }
 
@@ -794,6 +830,309 @@ async function clearDiffCacheForTicket(ticketId: string | null | undefined): Pro
   await unlink(metaPath).catch(() => {});
 }
 
+// ─── Definition of Ready validator (V4.18) ──────────────────────────────────
+
+/**
+ * Validates a ticket body against the V4.18 schema. Pure function — does NOT
+ * read state or touch disk. The caller (an agent that fetched the ticket from
+ * Jira/Notion) passes the markdown body; the validator returns structured
+ * errors + warnings.
+ *
+ * Design intent:
+ *  - "errors" block PLAN transition when dorEnforcement="strict".
+ *  - "warnings" are advisory; never block.
+ *  - The detector is LENIENT on section headers (matches H1-H4 or bold) and
+ *    accepts both Spanish and English titles. Same for content.
+ *  - The vague-words list is intentionally short to avoid false positives.
+ */
+export interface SectionPresence {
+  present: boolean;
+  count?: number;
+  vagueMatches?: string[];
+}
+
+export interface DorValidationDetail {
+  ok: boolean;
+  errors: string[];
+  warnings: string[];
+  sections: {
+    objetivo: SectionPresence;
+    contextoTecnico: SectionPresence;
+    criteriosAceptacion: SectionPresence;
+    fueraDeScope: SectionPresence;
+    dependencias: SectionPresence;
+    riesgos: SectionPresence;
+    testCases: SectionPresence;
+    definitionOfDone: SectionPresence;
+  };
+}
+
+/** Section title regex — matches headers (H1-H4) or bold-line patterns. */
+const SECTION_PATTERNS: Record<keyof DorValidationDetail["sections"], RegExp> = {
+  objetivo:
+    /(?:^|\n)\s*(?:#{1,4}\s*|\*\*)(?:Objetivo|Goal|Objective)\b/i,
+  contextoTecnico:
+    /(?:^|\n)\s*(?:#{1,4}\s*|\*\*)(?:Contexto\s+t[ée]cnico|Technical\s+context|Detalle\s+t[ée]cnico)\b/i,
+  criteriosAceptacion:
+    /(?:^|\n)\s*(?:#{1,4}\s*|\*\*)(?:Criterios?\s+de\s+aceptaci[óo]n|Acceptance\s+criteria)\b/i,
+  fueraDeScope:
+    /(?:^|\n)\s*(?:#{1,4}\s*|\*\*)(?:Fuera\s+de(?:l)?\s+scope|Fuera\s+de\s+alcance|Out\s+of\s+scope|Non\s*-?\s*goals)\b/i,
+  dependencias:
+    /(?:^|\n)\s*(?:#{1,4}\s*|\*\*)(?:Dependencias?|Dependencies)\b/i,
+  riesgos:
+    /(?:^|\n)\s*(?:#{1,4}\s*|\*\*)(?:Riesgos?|Consideraciones?|Risks?|Considerations?)\b/i,
+  testCases:
+    /(?:^|\n)\s*(?:#{1,4}\s*|\*\*)(?:Test\s+cases?|Casos\s+de\s+(?:test|prueba)|Tests?\s+declarados?)\b/i,
+  definitionOfDone:
+    /(?:^|\n)\s*(?:#{1,4}\s*|\*\*)(?:Definition\s+of\s+Done|DoD|Criterios?\s+de\s+finalizaci[óo]n)\b/i,
+};
+
+const SECTION_ORDER: (keyof DorValidationDetail["sections"])[] = [
+  "objetivo",
+  "contextoTecnico",
+  "criteriosAceptacion",
+  "fueraDeScope",
+  "dependencias",
+  "riesgos",
+  "testCases",
+  "definitionOfDone",
+];
+
+/** Vague words that disqualify acceptance criteria when they appear without
+ *  an accompanying metric. Kept short on purpose — false positives kill trust. */
+const VAGUE_PATTERNS: RegExp[] = [
+  /\bcorrectamente\b/i,
+  /\bapropiadamente\b/i,
+  /\bintuitiv[oa]\b/i,
+  /\buser[\s-]?friendly\b/i,
+  /\bworks?\s+correctly\b/i,
+  /\bproperly\b/i,
+  /\bintuitive(?:ly)?\b/i,
+  /\beasy[\s-]?to[\s-]?use\b/i,
+];
+
+/** Empty/placeholder phrases that disqualify an "Out of scope" section. */
+const EMPTY_OOS_PHRASES: RegExp[] = [
+  /^\s*-?\s*(?:nada|ninguno|ninguna|n\/a|na|none)\s*\.?\s*$/im,
+];
+
+/** Extracts the slice between a section header and the next H1-H4 / bold header. */
+function extractSection(body: string, headerRegex: RegExp): string | null {
+  const start = headerRegex.exec(body);
+  if (!start) return null;
+  const remainder = body.slice(start.index + start[0].length);
+  // Stop at the next section header (any H1-H4 or bold-line pattern)
+  const nextHeader = /\n\s*(?:#{1,4}\s+|\*\*[^\n]+\*\*\s*\n)/.exec(remainder);
+  return nextHeader ? remainder.slice(0, nextHeader.index) : remainder;
+}
+
+/** Counts bulleted/check-listed items (- foo, * foo, 1. foo, - [ ] foo). */
+function countListItems(section: string): number {
+  const lines = section.split("\n");
+  let count = 0;
+  for (const line of lines) {
+    if (/^\s*(?:[-*+]|\d+\.)\s+\S/.test(line)) count++;
+  }
+  return count;
+}
+
+export function validateTicketDor(body: string): DorValidationDetail {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+  const sections = {} as DorValidationDetail["sections"];
+
+  for (const key of SECTION_ORDER) {
+    const pattern = SECTION_PATTERNS[key];
+    const slice = extractSection(body, pattern);
+    sections[key] = { present: slice !== null };
+
+    if (slice === null) {
+      errors.push(`Sección obligatoria ausente: "${humanLabel(key)}".`);
+      continue;
+    }
+
+    const items = countListItems(slice);
+    sections[key].count = items;
+
+    // Per-section rules
+    if (key === "criteriosAceptacion") {
+      if (items < 2) {
+        errors.push(
+          `"Criterios de aceptación" debe tener al menos 2 items (encontrados: ${items}).`,
+        );
+      }
+      const vague: string[] = [];
+      for (const re of VAGUE_PATTERNS) {
+        const m = slice.match(re);
+        if (m) vague.push(m[0]);
+      }
+      sections[key].vagueMatches = vague;
+      if (vague.length > 0) {
+        warnings.push(
+          `Criterios contienen lenguaje vago sin métrica: [${vague.join(", ")}]. ` +
+            "Reformulá con condiciones observables/medibles.",
+        );
+      }
+    }
+
+    if (key === "fueraDeScope") {
+      if (items === 0) {
+        errors.push(
+          "\"Fuera de scope\" debe tener al menos 1 ítem explícito. " +
+            "Si nada queda fuera, el ticket probablemente es demasiado grande.",
+        );
+      } else {
+        const hasEmptyPhrase = EMPTY_OOS_PHRASES.some((re) => re.test(slice));
+        if (hasEmptyPhrase) {
+          errors.push(
+            "\"Fuera de scope\" contiene 'nada/ninguno/N/A'. " +
+              "Listá items explícitos o partí el ticket.",
+          );
+        }
+      }
+    }
+
+    if (key === "riesgos" && items === 0) {
+      warnings.push(
+        "\"Riesgos\" está vacío. Si genuinamente no hay riesgos, escribilo " +
+          "explícito (\"ningún riesgo identificado\") para que sea decisión y no omisión.",
+      );
+    }
+
+    if (key === "testCases" && items < 3) {
+      errors.push(
+        `"Test cases" debe declarar al menos 3 casos (golden + 2 edge). ` +
+          `Encontrados: ${items}.`,
+      );
+    }
+
+    if (key === "definitionOfDone" && items < 3) {
+      warnings.push(
+        `"Definition of Done" tiene ${items} ítems (recomendado ≥3). ` +
+          "Considerá: tests, docs, deploy/migrations, feature flag si aplica.",
+      );
+    }
+  }
+
+  return {
+    ok: errors.length === 0,
+    errors,
+    warnings,
+    sections,
+  };
+}
+
+function humanLabel(key: keyof DorValidationDetail["sections"]): string {
+  const labels: Record<keyof DorValidationDetail["sections"], string> = {
+    objetivo: "Objetivo",
+    contextoTecnico: "Contexto técnico",
+    criteriosAceptacion: "Criterios de aceptación",
+    fueraDeScope: "Fuera de scope",
+    dependencias: "Dependencias",
+    riesgos: "Riesgos",
+    testCases: "Test cases declarados",
+    definitionOfDone: "Definition of Done",
+  };
+  return labels[key];
+}
+
+// ─── DoR validation registration (V4.18) ────────────────────────────────────
+
+export interface RegisterDorValidationResult {
+  ok: boolean;
+  validation?: DorValidation;
+  detail?: DorValidationDetail;
+  mode: "off" | "warn" | "strict";
+  error?: string;
+}
+
+const MAX_DOR_BODY_LEN = 100_000; // 100 KB cap on body input
+
+export async function validateAndRegisterDor(
+  ticketId: string,
+  body: string,
+  options?: { skip?: boolean; skipReason?: string },
+): Promise<RegisterDorValidationResult> {
+  const data = await loadState();
+  const config = await loadProjectConfig();
+  const mode = config?.dorEnforcement ?? "off";
+
+  if (!isSafeTicketId(ticketId)) {
+    return {
+      ok: false,
+      mode,
+      error: `Ticket ID inválido: "${ticketId}". Solo letras, números, guion y guion-bajo.`,
+    };
+  }
+
+  // Allow ticket-level skip (e.g., hotfix branches). Persists with reason.
+  if (options?.skip) {
+    const reason = (options.skipReason ?? "").trim();
+    if (!reason || reason.length < 10) {
+      return {
+        ok: false,
+        mode,
+        error:
+          "⛔ Bypass de DoR requiere razón explícita (≥10 chars). " +
+          "Ej: 'hotfix de producción — security incident #1234'.",
+      };
+    }
+    const validation: DorValidation = {
+      ticketId,
+      status: "skipped",
+      mode,
+      errorCount: 0,
+      warningCount: 0,
+      timestamp: new Date().toISOString(),
+      skipReason: reason,
+    };
+    data.dorValidation = validation;
+    data.log.push({
+      timestamp: validation.timestamp,
+      action: "DOR_SKIPPED",
+      detail: `Ticket ${ticketId}: bypass — ${reason}`,
+    });
+    await saveState(data);
+    return { ok: true, validation, mode };
+  }
+
+  if (body.length > MAX_DOR_BODY_LEN) {
+    return {
+      ok: false,
+      mode,
+      error: `Body del ticket excede ${MAX_DOR_BODY_LEN} caracteres. Resumilo antes de validar.`,
+    };
+  }
+
+  const detail = validateTicketDor(body);
+  let status: DorStatus;
+  if (detail.errors.length > 0) {
+    status = "failed";
+  } else if (detail.warnings.length > 0) {
+    status = "warned";
+  } else {
+    status = "passed";
+  }
+
+  const validation: DorValidation = {
+    ticketId,
+    status,
+    mode,
+    errorCount: detail.errors.length,
+    warningCount: detail.warnings.length,
+    timestamp: new Date().toISOString(),
+  };
+  data.dorValidation = validation;
+  data.log.push({
+    timestamp: validation.timestamp,
+    action: "DOR_VALIDATED",
+    detail: `Ticket ${ticketId}: ${status} (mode=${mode}, errors=${detail.errors.length}, warnings=${detail.warnings.length})`,
+  });
+  await saveState(data);
+
+  return { ok: true, validation, detail, mode };
+}
+
 // ─── Docs decision registration (V4.16) ─────────────────────────────────────
 
 export interface RegisterDocsDecisionResult {
@@ -1090,6 +1429,8 @@ export interface GetStateResult {
   evidenceFilePath: string | null;
   targetSubproject: string | null;
   docsDecision: DocsDecision | null;
+  /** V4.18: DoR validation snapshot for the active ticket. null if not validated yet. */
+  dorValidation: DorValidation | null;
   /** Last N log entries. V4.17+ trims to 5 by default to save tokens.
    *  Call sdd_get_state with fullLog=true to retrieve the entire persisted log. */
   log: LogEntry[];
@@ -1132,6 +1473,7 @@ export async function getState(options?: { fullLog?: boolean }): Promise<GetStat
     evidenceFilePath: data.evidenceFilePath ?? null,
     targetSubproject: data.targetSubproject ?? null,
     docsDecision: data.docsDecision ?? null,
+    dorValidation: data.dorValidation ?? null,
     log,
     logTotal: totalLog,
   };

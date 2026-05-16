@@ -6,6 +6,22 @@ está al tope.
 
 ---
 
+## V4.18 — Definition of Ready (schema obligatorio + gate de validación)
+
+| Cambio | Impacto |
+|--------|---------|
+| **Template Story de 8 secciones obligatorias** | `create-tickets-template.md` y `create-tickets-template-notion.md` (sincronizados byte-por-byte) extienden el template con: `Objetivo`, `Contexto técnico`, `Criterios de aceptación` (formato Dado/Cuando/Entonces, ≥2), `Fuera de scope` (≥1 ítem, prohibido "nada"/"ninguno"), `Dependencias`, `Riesgos`, `Test cases declarados` (≥3: golden + 2 edge), `Definition of Done` (≥3 items). Sub-tasks tienen template más liviano — heredan del Story padre. |
+| **MCP server — validador puro `validateTicketDor`** | Pure function en `pipeline.ts` que recibe el body markdown del ticket y retorna `{ok, errors[], warnings[], sections{}}`. Detecta cada sección con regex tolerante (H1-H4 o **bold**, español o inglés). Reglas por sección: AC mínimo 2 + scanner de lenguaje vago (correctamente, apropiadamente, intuitivo, user-friendly, works correctly, properly, intuitive, easy-to-use); OOS rechaza "nada/ninguno/N/A"; Test cases mínimo 3; DoD ≥3 advierte (warning, no error). |
+| **MCP server — nuevo tool `sdd_validate_ticket_dor`** | Acepta `{ticketId, body, skip?, skipReason?}`. Persiste el resultado en `pipeline-state.json` como `data.dorValidation = {ticketId, status: "passed"\|"warned"\|"failed"\|"skipped", mode, errorCount, warningCount, timestamp, skipReason?}`. Body máximo 100 KB. Skip requiere razón ≥10 chars. |
+| **MCP server — gate `sdd_advance(PLAN)` en modo strict** | En `dorEnforcement: "strict"`, la transición a PLAN rechaza si `dorValidation` no es `passed` o `skipped` para el ticket activo. En modo `warn` el validador igual corre pero NO bloquea. En `off` (default backward-compat) el gate está inactivo. |
+| **`ProjectConfig.dorEnforcement`** | Nuevo campo opcional parseado de la key `DoR Enforcement` del profile (case-insensitive). Default = `off` si la key está ausente (proyectos pre-V4.18 no se rompen). Phase 0c default para bootstraps nuevos = `warn`. |
+| **`enrich-ticket-template.md` reescrito** | Ahora corre `sdd_validate_ticket_dor` como primer paso, identifica gaps, enriquece **sin inventar** (TODO explícito si no hay datos del codebase), pre-confirma con el usuario antes de actualizar el tracker, revalida después. Manejo explícito de hotfix con bypass. Preserva el original como `[Original]`. |
+| **Phase 0c — pregunta de DoR mode** | Nuevo paso `1.0d-pre` con AskUserQuestion: Warn (recomendado para empezar) / Strict / Off. Persiste `DoR Enforcement` en `project-profile.md` + exporta `SDD_DOR_ENFORCEMENT` a `project-vars.sh`. |
+| **menu-template — DoR gate antes de PLAN** | Sección "TICKETS → seleccionar UN ticket" documenta el flujo: sprint gate → multi-target gate → DoR gate (V4.18) → `sdd_advance(PLAN)`. Si modo `strict` y ticket falla, ofrece `/enrich-ticket` antes de re-validar. |
+| **Sub-tasks exentas** | El validador V4.18 NO aplica a sub-tasks. Solo Stories/Tasks/Features. Las sub-tasks heredan el contexto del padre. |
+| **Tests** | +18 tests cubren: golden path, secciones ausentes, AC count + lenguaje vago, OOS empty/"nada", Test cases count, DoD warning, soporte español + inglés. Total: 71 tests pasando (53 previos + 18 nuevos). |
+| **Backwards-compat estricta** | Proyectos pre-V4.18 sin `DoR Enforcement` en el profile → modo `off` → ningún gate adicional → comportamiento exacto de V4.17. Tickets antiguos sin las 8 secciones siguen siendo planificables si el modo es `off` o `warn`. Strict mode es opt-in explícito vía bootstrap. |
+
 ## V4.17 — Optimización de tokens (cache de diff, log trim, agents JSON)
 
 | Cambio | Impacto |

@@ -18,6 +18,7 @@ import {
   setTargetSubproject,
   registerDocsDecision,
   cacheDiff,
+  validateAndRegisterDor,
 } from "./pipeline.js";
 import type { MergeType } from "./types.js";
 import {
@@ -313,7 +314,57 @@ server.tool(
   },
 );
 
-// ─── Tool 12: sdd_cache_diff (V4.17 — token-saving) ─────────────────────────
+// ─── Tool 12: sdd_validate_ticket_dor (V4.18 — Definition of Ready) ────────
+
+server.tool(
+  "sdd_validate_ticket_dor",
+  "Valida un ticket contra el schema V4.18 (Definition of Ready). " +
+    "Recibe el `body` markdown del ticket (fetched del tracker vía MCP por el agent). " +
+    "Verifica que tenga las 8 secciones obligatorias: Objetivo, Contexto técnico, " +
+    "Criterios de aceptación (≥2, sin lenguaje vago), Fuera de scope (≥1 ítem, no 'nada'), " +
+    "Dependencias, Riesgos, Test cases (≥3), Definition of Done. " +
+    "Retorna `{ok, validation, detail, mode}` donde `detail` lista errores/warnings " +
+    "por sección y `validation` queda persistido en pipeline-state.json. " +
+    "Modo strict en project-profile.md bloquea sdd_advance(PLAN) si validation.status no es 'passed' o 'skipped'. " +
+    "Modo warn deja avanzar pero muestra warnings al usuario. " +
+    "Para hotfix legítimos: pasar `skip=true` con `skipReason` (≥10 chars).",
+  {
+    ticketId: z.string().describe("ID del ticket activo (debe coincidir con state.activeTicket)"),
+    body: z
+      .string()
+      .max(100_000)
+      .describe(
+        "Markdown completo del ticket fetched del tracker. " +
+          "Si body está vacío o el ticket no se pudo fetchear, no llamar este tool — " +
+          "registrar el error y dejar que el dev corrija el ticket en el tracker.",
+      ),
+    skip: z
+      .boolean()
+      .optional()
+      .default(false)
+      .describe("true = bypass del validador (solo hotfix). Requiere skipReason."),
+    skipReason: z
+      .string()
+      .optional()
+      .describe("Razón del bypass (mínimo 10 chars). Ej: 'hotfix de producción — incident #1234'."),
+  },
+  async ({ ticketId, body, skip, skipReason }) => {
+    const result = await validateAndRegisterDor(ticketId, body, {
+      skip: skip ?? false,
+      skipReason,
+    });
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify(result, null, 2),
+        },
+      ],
+    };
+  },
+);
+
+// ─── Tool 13: sdd_cache_diff (V4.17 — token-saving) ─────────────────────────
 
 server.tool(
   "sdd_cache_diff",
@@ -337,7 +388,7 @@ server.tool(
   },
 );
 
-// ─── Tool 13: sdd_register_docs_decision (V4.16 — Docusaurus gate) ──────────
+// ─── Tool 14: sdd_register_docs_decision (V4.16 — Docusaurus gate) ──────────
 
 server.tool(
   "sdd_register_docs_decision",
@@ -385,7 +436,7 @@ server.tool(
   },
 );
 
-// ─── Tool 14: sdd_confirm_next ───────────────────────────────────────────────
+// ─── Tool 15: sdd_confirm_next ───────────────────────────────────────────────
 
 server.tool(
   "sdd_confirm_next",
@@ -408,7 +459,7 @@ server.tool(
   },
 );
 
-// ─── Tool 15: sdd_transition_ticket (+ alias sdd_transition_jira) ────────────
+// ─── Tool 16: sdd_transition_ticket (+ alias sdd_transition_jira) ────────────
 
 const VALID_STATES_FOR_TICKET_TRANSITION = [
   PipelineState.COMMIT,
@@ -460,7 +511,7 @@ server.tool(
   transitionTicketHandler,
 );
 
-// ─── Tool 16: sdd_comment_ticket (+ alias sdd_comment_jira) ─────────────────
+// ─── Tool 17: sdd_comment_ticket (+ alias sdd_comment_jira) ─────────────────
 
 const VALID_STATES_FOR_TICKET_COMMENT = [
   PipelineState.COMMIT,

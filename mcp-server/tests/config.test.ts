@@ -121,6 +121,49 @@ describe("parseProfile — docusaurus (V4.16)", () => {
   });
 });
 
+describe("parseProfile — dorEnforcement (V4.18)", () => {
+  it("defaults to 'off' when key is absent (backward-compat)", () => {
+    const profile = `# Proyecto: demo
+# Tracker: jira`;
+    expect(parseProfile(profile).dorEnforcement).toBe("off");
+  });
+
+  it("parses 'warn' explicitly", () => {
+    const profile = `# Proyecto: demo
+# Tracker: jira
+# DoR Enforcement: warn`;
+    expect(parseProfile(profile).dorEnforcement).toBe("warn");
+  });
+
+  it("parses 'strict' explicitly", () => {
+    const profile = `# Proyecto: demo
+# Tracker: jira
+# DoR Enforcement: strict`;
+    expect(parseProfile(profile).dorEnforcement).toBe("strict");
+  });
+
+  it("parses 'off' explicitly", () => {
+    const profile = `# Proyecto: demo
+# Tracker: jira
+# DoR Enforcement: off`;
+    expect(parseProfile(profile).dorEnforcement).toBe("off");
+  });
+
+  it("falls back to 'off' for unknown values (no silent corruption)", () => {
+    const profile = `# Proyecto: demo
+# Tracker: jira
+# DoR Enforcement: yolo`;
+    expect(parseProfile(profile).dorEnforcement).toBe("off");
+  });
+
+  it("is case-insensitive", () => {
+    const profile = `# Proyecto: demo
+# Tracker: jira
+# DoR Enforcement: WARN`;
+    expect(parseProfile(profile).dorEnforcement).toBe("warn");
+  });
+});
+
 describe("parseProfile — backward compat preserved", () => {
   it("still parses Multi Target Mode and slugs alongside commitStyle", () => {
     const profile = `# Proyecto: adam360

@@ -60,7 +60,7 @@ FILES=(
 )
 
 echo ""
-echo "🔧 Spec-Driven Development — Bootstrap V4.17"
+echo "🔧 Spec-Driven Development — Bootstrap V4.18"
 echo "============================================="
 echo ""
 

@@ -55,6 +55,10 @@ export interface PipelineData {
   targetSubproject?: string | null;
   /** Docs decision for the active ticket (V4.16+). Required before COMMIT when docusaurus is enabled. */
   docsDecision?: DocsDecision | null;
+  /** V4.18: DoR validation snapshot for the active ticket.
+   *  In strict mode, sdd_advance(PLAN) requires status === "passed" or "skipped".
+   *  Cleared automatically on cycle reset (COMPLETADO→TICKETS, IDLE). */
+  dorValidation?: DorValidation | null;
 }
 
 export type DocsDecisionStatus = "updated" | "skipped";
@@ -65,6 +69,28 @@ export interface DocsDecision {
   reason: string;
   /** Files written/updated when status="updated". Empty when status="skipped". */
   files: string[];
+}
+
+/** V4.18 — Definition of Ready validation result.
+ *  `status`: outcome of the last validator run for the active ticket.
+ *    - "passed": all 8 required sections present + no errors.
+ *    - "warned": sections present but some warnings (vague AC, low counts).
+ *    - "failed": one or more required sections missing or empty.
+ *    - "skipped": dev explicitly bypassed (e.g., hotfix with --skip-dor).
+ *  `mode`: enforcement mode active when the validation ran (snapshot, so a
+ *    later mode change doesn't silently relax a registered gate). */
+export type DorStatus = "passed" | "warned" | "failed" | "skipped";
+
+export interface DorValidation {
+  ticketId: string;
+  status: DorStatus;
+  mode: "off" | "warn" | "strict";
+  errorCount: number;
+  warningCount: number;
+  /** ISO timestamp when validation ran. */
+  timestamp: string;
+  /** Optional bypass reason when status === "skipped". */
+  skipReason?: string;
 }
 
 export interface SubprojectConfig {
@@ -101,6 +127,11 @@ export interface ProjectConfig {
   commitStyle?: "standard" | "conventional";
   /** Docusaurus integration (V4.16+). Present when phase 0b detected docusaurus.config.* */
   docusaurus?: DocusaurusConfig;
+  /** Definition of Ready enforcement (V4.18+).
+   *  - "off": validator no se ejecuta (compat con proyectos pre-V4.18).
+   *  - "warn": validator corre, warnings se muestran pero NO bloquean PLAN.
+   *  - "strict": validator corre, errors bloquean sdd_advance(PLAN). */
+  dorEnforcement?: "off" | "warn" | "strict";
 }
 
 export interface DocusaurusConfig {
@@ -184,5 +215,6 @@ export function defaultPipelineData(): PipelineData {
     evidenceFilePath: null,
     targetSubproject: null,
     docsDecision: null,
+    dorValidation: null,
   };
 }

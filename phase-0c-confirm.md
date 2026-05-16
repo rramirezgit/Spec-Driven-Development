@@ -119,6 +119,35 @@ Si Phase 0b detectó archivos preexistentes en `.claude/` o un `CLAUDE.md` curad
 
 Mostrar este bloque **antes** de las preguntas de 1.2. No requiere AskUserQuestion — es informativo. El usuario verá esto y sabrá que SDD respeta su trabajo previo.
 
+### 1.0d-pre — Modo Definition of Ready (V4.18)
+
+> **Por qué**: cuando los tickets están mal definidos (AC vagos, sin out-of-scope,
+> sin test cases declarados), la planificación e implementación se inundan de
+> re-trabajo. V4.18 introduce un schema obligatorio de 8 secciones y un validador.
+> Antes de poder planificar un ticket, el validador puede bloquear si el ticket
+> no cumple el schema. Acá elegís el nivel de enforcement.
+
+**AskUserQuestion** (single_select):
+
+```
+📋 Definition of Ready — ¿cómo enforzar la calidad de tickets?
+
+1. Warn (recomendado para empezar) — el validador corre pero no bloquea PLAN;
+   muestra qué sección falta y deja al dev decidir.
+2. Strict — el MCP server BLOQUEA sdd_advance(PLAN) si el ticket no pasa el
+   schema. Apto para equipos ya disciplinados o post-validación con Warn.
+3. Off — el validador no corre (no recomendado salvo casos extremos).
+```
+
+Persistir según respuesta:
+- `Warn` → `DoR Enforcement: warn` en `project-profile.md` + `SDD_DOR_ENFORCEMENT=warn` en `project-vars.sh`.
+- `Strict` → `DoR Enforcement: strict`.
+- `Off` → `DoR Enforcement: off` (default si la línea está ausente — backward-compat).
+
+> **Migración recomendada**: arrancar en `warn` durante 1-2 sprints reales,
+> revisar las secciones más comunes que fallan, ajustar el template del equipo,
+> y subir a `strict` cuando el equipo ya internalizó el schema.
+
 ### 1.0d — Confirmar integración con Docusaurus (V4.16)
 
 Si Phase 0b detectó `DOCUSAURUS_DETECTED == true`:
@@ -387,6 +416,7 @@ Crear `.ai-internal/project-profile.md` con TODOS los datos reales del PROYECTO_
 # Es re-ejecución: {bool}
 # Archivos protegidos: {lista}
 # Commit Style: {conventional | standard}
+# DoR Enforcement: {warn | strict | off}
 # Existing CLAUDE MD Bytes: {entero — 0 si no existía CLAUDE.md previo}
 # Existing Claude Settings JSON: {true | false}
 # Nx Detected: {true | false}
@@ -494,6 +524,11 @@ SUBPROJECT_SLUGS=$(grep "^# Subproject Slugs:" .ai-internal/project-profile.md |
 # V4.14: nuevos campos de configuración preexistente y commit style
 COMMIT_STYLE=$(grep "^# Commit Style:" .ai-internal/project-profile.md | sed 's/^# Commit Style: //')
 [ -z "$COMMIT_STYLE" ] && COMMIT_STYLE="standard"
+
+# V4.18: DoR enforcement mode (off | warn | strict). Default = off para
+# proyectos pre-V4.18 que re-ejecuten bootstrap sin pasar por 1.0d-pre.
+DOR_ENFORCEMENT=$(grep "^# DoR Enforcement:" .ai-internal/project-profile.md | sed 's/^# DoR Enforcement: //')
+[ -z "$DOR_ENFORCEMENT" ] && DOR_ENFORCEMENT="off"
 EXISTING_CLAUDE_MD_BYTES=$(grep "^# Existing CLAUDE MD Bytes:" .ai-internal/project-profile.md | sed 's/^# Existing CLAUDE MD Bytes: //')
 [ -z "$EXISTING_CLAUDE_MD_BYTES" ] && EXISTING_CLAUDE_MD_BYTES="0"
 EXISTING_CLAUDE_SETTINGS=$(grep "^# Existing Claude Settings JSON:" .ai-internal/project-profile.md | sed 's/^# Existing Claude Settings JSON: //')
@@ -530,6 +565,7 @@ SDD_NX_DETECTED="$NX_DETECTED_VAR"
 SDD_DOCUSAURUS_ENABLED="$DOCUSAURUS_ENABLED"
 SDD_DOCUSAURUS_ROOT="$DOCUSAURUS_ROOT_VAR"
 SDD_DOCUSAURUS_DOCS_PATH="$DOCUSAURUS_DOCS_PATH_VAR"
+SDD_DOR_ENFORCEMENT="$DOR_ENFORCEMENT"
 VARSEOF
 
 # Si multi-target, agregar bloque iterativo: una variable por subproject

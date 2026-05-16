@@ -60,33 +60,72 @@ Del schema, identificar las propiedades disponibles (título, status, tipo, assi
 
 ## Step 4: Redactar en __SDD_IDIOMA_TICKETS__
 
+> **V4.18 — Definition of Ready**: cada Story debe tener las 8 secciones de
+> abajo. El MCP server valida con `sdd_validate_ticket_dor` antes de planificar:
+> en modo `strict` bloquea PLAN si falta alguna, en `warn` advierte. Las
+> Sub-tasks tienen template más liviano (heredan contexto del Story padre).
+
 ### Template Story:
 ```
 **Como** [tipo de usuario]
 **Quiero** [acción]
 **Para** [beneficio]
 
-**Criterios de aceptación:**
-- Dado que [contexto], cuando [acción], entonces [resultado]
+## Objetivo
+[1-2 frases en lenguaje de producto — qué problema resuelve para el usuario
+o sistema. Incluir métrica de impacto si está disponible (ej. "bajar drop-off
+del 40% al 25%"). NO técnico.]
 
-**Detalle técnico:**
-- Componentes/servicios: [lista]
-- Endpoints: [lista]
-- Archivos: [lista]
-- Validaciones: [lista]
+## Contexto técnico
+- Módulos/archivos involucrados: [lista REAL del codebase, no inventada]
+- Patrones a seguir: [referencias a código existente similar, por path]
+- Servicios externos: [SDKs, APIs externas, o "ninguno"]
 
-**Definition of Done:**
-- [ ] Código en PR
-- [ ] Tests pasando
-- [ ] Code review aprobado
+## Criterios de aceptación
+- [ ] Dado que [precondición], cuando [acción], entonces [resultado observable/medible]
+- [ ] Dado que [...], cuando [...], entonces [...]
+(mínimo 2. PROHIBIDAS palabras vagas sin métrica: "correctamente",
+ "apropiadamente", "intuitivo", "user-friendly". Usar condiciones
+ observables: status codes, shapes de response, tiempos con métrica, etc.)
+
+## Fuera de scope
+- [ítem 1 explícito que NO se hace en este ticket]
+- [ítem 2]
+(mínimo 1 ítem. PROHIBIDO "nada"/"ninguno"/"N/A" — si nada queda fuera,
+ el ticket es demasiado grande y debe partirse.)
+
+## Dependencias
+- Tickets bloqueantes: [IDs o "ninguno"]
+- Decisiones pendientes: ["ninguna" o lista de preguntas abiertas]
+- Servicios externos: [credentials, SDKs, accesos requeridos]
+
+## Riesgos
+- [perf, seguridad, datos sensibles, backwards-compat, migrations, race conditions]
+- O explícito "ningún riesgo identificado" (raro — el clasificador lo marca para review)
+
+## Test cases declarados
+- Golden path: [descripción del happy path + qué se espera]
+- Edge case 1: [qué entrada inusual + qué se espera]
+- Edge case 2: [otra entrada inusual + qué se espera]
+(mínimo 3. Estos son contratos directos para /auto-verify futuro.)
+
+## Definition of Done
+- [ ] Código mergeado a la rama de desarrollo
+- [ ] Tests declarados pasan
+- [ ] [requisito específico del ticket: doc actualizada, feature flag agregada,
+       migration corrida en staging, credentials configuradas, etc.]
 ```
 
 ### Template Sub-task:
 ```
-**Objetivo**: [qué hacer]
-**Archivo**: `[ruta]` — [create/modify] — [descripción]
-**Criterio**: [cómo saber que está listo]
+**Objetivo**: [qué hacer técnicamente]
+**Pertenece a**: [Story ID padre]
+**Archivo**: `[ruta real]` — [create/modify] — [descripción]
+**Criterio**: [cómo saber que está listo — observable]
 ```
+
+> **Sub-tasks no requieren DoR completo**: heredan Objetivo/Contexto/AC del Story padre.
+> El validador solo aplica a Stories (issuetype = Story | Task | Feature).
 
 ## Step 5: Mostrar resumen — esperar confirmación explícita
 
