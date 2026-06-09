@@ -1,6 +1,6 @@
 {
   "version": "4.21",
-  "generated_at": "2026-05-16T11:02:51Z",
+  "generated_at": "2026-05-19T16:08:46Z",
   "files": {
     "phase-0-detect.md": "dabe8db6e497f1122edbf74a67f3545484214e8dc762be33c509f97558ebd1f7",
     "phase-0a-mcps-tracker.md": "de93780de6b6ee06fbe3613f26278564b1d41e33a29a3a7f5d9c22d9e2409200",
@@ -8,7 +8,7 @@
     "phase-0c-confirm.md": "eef6ffeab0255de2e73ab6f0cea19bbea4a1acfa1ddecd92a914244c2e7bc1ea",
     "phase-1-reusables.md": "f33496e79ced32066252d62be647d8dd0dea7337ac58e52d729ff62f0dc190ee",
     "CHANGELOG.md": "0d98f17a74280982d71f0e752e06c6a315619ce59cafccbbef6487de823ca197",
-    "phase-2-adapted.md": "11f3bac8443f1d9edec34d6a43676cf8af91677607ac43f7b3b9fa80d4dcf507",
+    "phase-2-adapted.md": "2914783338e6e3d6e43e9f13addbe71d174df723295e443de0d5a6882bf4039e",
     "phase-3-finalize.md": "9e8c1a6dbf2e0656e5e0e59a8b962145b96c21363ccc756edef6f06722b9c479",
     "bootstrap.md": "b75fb93d75d2349b95e1ef14af1ab33f448047e83c2dbdf1ced818a15506f481",
     "mcp-server/package.json": "f9ce9bfb4bffe48dc50eab0e9b000838a8e3a6da12e2da43dd7c33debe302f23",
@@ -20,9 +20,9 @@
     "mcp-server/src/notion.ts": "5b80f7d0986247d3e412862e852ed90a0a5e873b615c72d68d88dabbaa829919",
     "mcp-server/src/tracker.ts": "b5102d14628b804f1187f123ec8006eec7d0e7c7de4ced4dc296bcd2c3215887",
     "mcp-server/src/index.ts": "fa9db4fe9e35ed205b8a10313976575f239563b060f2093a2099c9fd02941ac3",
-    "menu-template.md": "85acc6cb2bcf73594ef80b55527d05fbea1c2c367c37c2759dc2d181b6748b32",
+    "menu-template.md": "5fe254a73b3425870a94becdbfe1e333ba30468911bbc1bc350d196e226e6ece",
     "enrich-ticket-template.md": "49f04b413b644d5b40fcc4e58129f21b11ba2a4df5136cb33b0086d175b94983",
-    "plan-ticket-template.md": "ea07b8529de68f9bead94a3fe347e4a75a558d6e56147c614450af96da7ed2cf",
+    "plan-ticket-template.md": "84fdfdca6ec0f90b5bec37248072ad90482be6014daf1437a441999e81a8367f",
     "create-tickets-template.md": "81fc9a54e5e34558b47fdc9b15ef894a7a6c1b7404ed4effacd41549e3a6d1ca",
     "create-tickets-template-notion.md": "be4387b52c08de3e73fc30f43569bab1df715e3c43f16292598defb5224ec952",
     "doc-standards-template.mdc": "28f8f14d563f36289d3dd06ee00a4b6ac83353e0cb8a3ae9f44888deb93243d2",

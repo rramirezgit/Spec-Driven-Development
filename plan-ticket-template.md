@@ -31,10 +31,15 @@ Save to `ai-specs/changes/{ticket_id}.md`:
 
 ## Implementation Steps
 
-### Step 0: Create Branch
+### Step 0: Create Branch (from latest DEV_BRANCH)
 ```bash
+git fetch origin
+git checkout {DEV_BRANCH}
+git pull origin {DEV_BRANCH}
 git checkout -b feature/{ID}-{slug}
 ```
+> `{DEV_BRANCH}` se resuelve desde `.ai-internal/project-profile.md` (`Dev Branch`) o por auto-detección (`dev`/`develop`/`development`).
+> El `fetch + checkout + pull` previo es **obligatorio**: parte de la última versión integrada del equipo, no de un `DEV_BRANCH` local viejo.
 
 ### Step 1: {Area}
 **Files**: `{path}` (create/modify)

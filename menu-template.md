@@ -25,7 +25,7 @@ Usás herramientas MCP del server `sdd-pipeline` para controlar el pipeline de f
 
 > **Si tracker=notion**: Sprint Gate no aplica — Notion no tiene sprints nativos. Llamar `sdd_confirm_sprint(kanban=true)` automáticamente para bypass.
 
-Cuando se identifica un ticket para trabajar (en Opción 2, en estado TICKETS, o en cualquier momento antes de `sdd_set_active_ticket`):
+Cuando se identifica un ticket para trabajar (en la acción "Ticket existente", en estado TICKETS, o en cualquier momento antes de `sdd_set_active_ticket`):
 
 1. Llamar `getJiraIssue` (con el `atlassian_prefix` detectado) pasando el ticket ID y `fields: ["sprint", "summary"]`
 2. Verificar el campo `sprint`:
@@ -47,7 +47,7 @@ Cuando se identifica un ticket para trabajar (en Opción 2, en estado TICKETS, o
        Asignalo a un sprint activo en Jira y volvé a intentar.
        ```
 
-**Alternativa de consulta masiva** (para Opción 6 Sprint y estado TICKETS con múltiples tickets):
+**Alternativa de consulta masiva** (para la acción Sprint y estado TICKETS con múltiples tickets):
 - Usar `searchJiraIssuesUsingJql` con: `sprint in openSprints() AND project = {project_key} AND key in ({lista_de_keys})`
 - Los tickets que NO aparezcan en el resultado no están en sprint activo.
 - Para proyectos Kanban: `sprint in openSprints()` no aplica. Usar solo `project = {project_key} AND key in ({lista_de_keys})`.
@@ -58,7 +58,7 @@ Cuando se identifica un ticket para trabajar (en Opción 2, en estado TICKETS, o
 1. sdd_check_config → si error, mostrar y HALT
 2. sdd_get_state → leer state, nextAction, nextCommand
 3. Si hay $ARGUMENTS → resolver atajo (ver abajo), saltear menú
-4. Si IDLE → detectar contexto (git branch + gh pr) → mostrar menú (7 opciones)
+4. Si IDLE → detectar contexto (git branch + gh pr) → mostrar menú Nivel 1 (4 opciones). Si elige "Más opciones" → Nivel 2 (4 opciones).
 5. Si no → mostrar estado actual + "Siguiente: {nextAction}"
 6. Ejecutar el comando .md correspondiente (UNO solo)
 7. sdd_advance({nuevo_estado})
@@ -113,28 +113,49 @@ Si el usuario pasa un argumento directo, ir a ese flujo **sin menú y sin re-pre
 
 # Menú (solo cuando state=IDLE)
 
-AskUserQuestion (single_select). Las etiquetas se enriquecen con `detectedTicket` y `detectedPR` cuando existen, para señalar que NO se va a re-preguntar:
+**Estructura de DOS niveles** porque `AskUserQuestion` acepta máximo 4 opciones por pregunta (límite del tool). El Nivel 1 muestra los 3 entry points más comunes + "Más opciones". Si el usuario elige "Más opciones", se hace una SEGUNDA `AskUserQuestion` con las 4 opciones secundarias.
+
+## Nivel 1 — entry points principales
+
+UNA llamada a `AskUserQuestion` (single_select, exactamente 4 opciones). Las etiquetas se enriquecen con `detectedTicket` cuando existe, para señalar que NO se va a re-preguntar:
 
 ```
 ¿Qué querés hacer?
 
 1. Feature nuevo — tengo una idea o requerimiento
 2. Ticket existente {— detectado: <detectedTicket> si existe}
-3. Explorar — pensar antes de planificar
-4. Review PR {— detectado: #<detectedPR.number> si existe}
-5. Test plan — generar plan de testing
-6. Sprint — buscar tickets del sprint activo
-7. Release a main — tickets aprobados por QA → PR a main
-8. Goal — batch supervisado de tickets (V4.21)
+3. Goal — batch supervisado de tickets
+4. Más opciones →
 ```
 
-**Regla UX**: si una opción tiene contexto detectado, la etiqueta debe dejarlo
-visible. Cuando el usuario la selecciona, ejecutar directamente — sin segunda
-pregunta. Si quiere overridear, puede invocar con atajo (`/menu AUTH-456`).
+- Si el usuario elige 1, 2 o 3 → ejecutar la acción directamente, **sin segundo `AskUserQuestion`**.
+- Si el usuario elige 4 (Más opciones) → pasar a Nivel 2.
+
+## Nivel 2 — "Más opciones" (solo si elige 4 en Nivel 1)
+
+SEGUNDA `AskUserQuestion` (single_select, 4 opciones). Las etiquetas se enriquecen con `detectedPR` cuando existe:
+
+```
+¿Cuál?
+
+1. Sprint — buscar tickets del sprint activo y trabajarlos uno por uno
+2. Release a main — PR dev → main con tickets QA Approved
+3. Review PR {— detectado: #<detectedPR.number> si existe}
+4. Explorar — pensar antes de planificar
+```
+
+Cualquiera de las 4 → ejecutar directamente, sin tercera pregunta.
+
+**Regla UX**:
+- **Cada nivel = UNA pregunta sola.** NUNCA dos preguntas en el mismo `AskUserQuestion`. Nivel 2 solo se invoca como segunda llamada separada, después de que el usuario haya seleccionado "Más opciones" en Nivel 1.
+- "Más opciones" es la **única** opción del Nivel 1 que dispara un segundo `AskUserQuestion`. Las demás (Feature, Ticket, Goal) van directo a su acción correspondiente.
+- Si una opción tiene contexto detectado (`detectedTicket`, `detectedPR`), la etiqueta debe dejarlo visible. Cuando el usuario la selecciona, ejecutar directamente.
+- `single_select` se refiere al **tipo de cada opción** (se elige una sola), no al número de preguntas. El número de preguntas por nivel es siempre **uno**.
+- **Test plan** y **Evidence** NO aparecen en el menú visible — accesibles solo por atajo (`/menu test <ID>`, `/menu evidence`). Test plan normalmente se invoca cuando ya hay un ticket activo; Evidence se ejecuta automáticamente desde `/commit`. Ver "Atajo rápido" arriba.
 
 ## Acciones del menú
 
-### Opción 1: Feature nuevo
+### Acción: Feature nuevo (Nivel 1, opción 1)
 **Descripción**:
 - Si `$ARGUMENTS` ya trae la descripción (ej: `/menu feature "notificaciones push"`) → usarla, NO preguntar.
 - Si no → preguntar UNA sola vez: "Contame qué querés construir."
@@ -244,14 +265,14 @@ pregunta. Si quiere overridear, puede invocar con atajo (`/menu AUTH-456`).
 
 **Después**: `sdd_advance(ARTEFACTOS)` con el nombre del change. **HALT.**
 
-> **Por qué este orden**: la definición del change ocurre acá, en menu Opción 1,
+> **Por qué este orden**: la definición del change ocurre acá, en la acción Feature nuevo,
 > NO durante `/create-tickets`. Cuando llega el momento de crear tickets, los
 > artefactos ya tienen respuestas concretas — `/create-tickets-*` los inlinea
 > en cada Story sin re-preguntar.
 
 > **IMPORTANTE**: Nunca saltear la exploración. Los artefactos y tickets deben ser completos y precisos — solo es posible si se conoce el codebase en profundidad.
 
-### Opción 2: Ticket existente
+### Acción: Ticket existente (Nivel 1, opción 2)
 **Resolución del ID** (sin re-preguntar si hay contexto):
 1. Si `$ARGUMENTS` contiene un ID (regex `[A-Z]+-[0-9]+`) → usarlo.
 2. Si no, y `detectedTicket` está seteado (de la rama actual `feature/{ID}-slug`) → usar `detectedTicket` y mostrar:
@@ -265,16 +286,16 @@ pregunta. Si quiere overridear, puede invocar con atajo (`/menu AUTH-456`).
 **Exploración del codebase obligatoria** — Antes de enriquecer el ticket:
 
 1. Leer el ticket completo desde el tracker (via MCP)
-2. Explorar el codebase para entender el contexto técnico del ticket (misma exploración profunda que Opción 1, adaptada al scope del ticket)
+2. Explorar el codebase para entender el contexto técnico del ticket (misma exploración profunda que la acción Feature nuevo, adaptada al scope del ticket)
 3. Con el contexto técnico real → `sdd_advance(TICKETS)`. Registrar ticket con `sdd_register_tickets`. Leer y ejecutar `/enrich-ticket <ID>` con los hallazgos.
 
 **Después**: `sdd_set_active_ticket(ID)`. **HALT.**
 
-### Opción 3: Explorar
+### Acción: Explorar (Nivel 2, opción 4)
 Leer y ejecutar `/opsx:explore`. **HALT después.**
 (No afecta el pipeline — exploración es atómica.)
 
-### Opción 4: Review PR
+### Acción: Review PR (Nivel 2, opción 3)
 **Resolución del PR** (sin re-preguntar si hay contexto):
 1. Si `$ARGUMENTS` trae número (ej: `/menu pr 45`) → usarlo.
 2. Si no, y `detectedPR` está seteado (PR del branch actual via `gh pr view`) → usarlo y mostrar:
@@ -286,7 +307,7 @@ Leer y ejecutar `/opsx:explore`. **HALT después.**
 Leer y ejecutar `/review-pr`. **HALT después.**
 (No afecta el pipeline — review es atómico.)
 
-### Opción 5: Test plan
+### Acción: Test plan (solo por atajo — no aparece en el menú visible)
 **Resolución del target** (sin re-preguntar si hay contexto):
 1. Si `$ARGUMENTS` trae ID o descripción → usarlo.
 2. Si hay `activeTicket` en el pipeline state → usarlo.
@@ -296,7 +317,7 @@ Leer y ejecutar `/review-pr`. **HALT después.**
 Leer y ejecutar `/test-plan`. **HALT después.**
 (No afecta el pipeline — test plan es atómico.)
 
-### Opción 6: Modo sprint
+### Acción: Modo sprint (Nivel 2, opción 1)
 **Resolución de tickets** (sin re-preguntar):
 1. Si `$ARGUMENTS` trae una lista (ej: `/menu sprint AUTH-1,AUTH-2`) → usar esos IDs.
 2. Si no → **default: buscar sprint activo automáticamente** (no preguntar).
@@ -310,7 +331,7 @@ Lanzar subagentes en paralelo (máximo 5) — **SOLO planificación** (enrich + 
 
 > **IMPORTANTE**: Sprint mode planifica en paralelo pero la implementación es siempre secuencial — un ticket a la vez, ciclo completo (ver regla 10).
 
-### Opción 8: Goal (batch supervisado — V4.21)
+### Acción: Goal (Nivel 1, opción 3 — batch supervisado, V4.21)
 
 Leer y ejecutar `/goal`. Pregunta al usuario qué tickets resolver:
 
@@ -327,7 +348,7 @@ Pre-flight checks por ticket (DoR + risk + paths sensibles + test cases). Pausa 
 
 Reporte final obligatorio con secciones COMPLETED / PAUSED / FAILED + reporte de seguridad.
 
-### Opción 7: Release a main
+### Acción: Release a main (Nivel 2, opción 2)
 Leer y ejecutar `/release-to-main`. **HALT después.**
 (No afecta el pipeline — release es atómico.)
 > **Si tracker=notion**: En vez de JQL, consultar la database de Notion filtrando por la propiedad de status = nombre real de "QA Approved" (del project-profile). Si la database no tiene status "QA Approved", buscar status = "Done" o el equivalente configurado.

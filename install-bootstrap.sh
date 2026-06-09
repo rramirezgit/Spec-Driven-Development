@@ -150,11 +150,43 @@ mkdir -p .ai-internal/reusables/agents
 mkdir -p .ai-internal/hooks
 mkdir -p .claude/commands
 
-# Agregar .ai-internal/ a .gitignore
+# Agregar entradas SDD al .gitignore del proyecto host (bloque idempotente).
+# Si el bloque ya existe (delimitado por markers), se reemplaza completo —
+# así futuras versiones pueden agregar/quitar entradas sin dejar líneas viejas.
+SDD_GITIGNORE_BLOCK=$(cat <<'EOF'
+# >>> spec-driven-development (managed block — no editar a mano)
+# Estado per-dev + build + framework internals → NO se versionan.
+.ai-internal/*
+# ...pero la config compartida del proyecto SÍ se versiona (multi-dev):
+# perfil + vars, para que un dev clone y arranque sin re-bootstrapear.
+# Solo necesita compilar el MCP server (ver SETUP.md).
+!.ai-internal/project-profile.md
+!.ai-internal/project-vars.sh
+# Nota: .mcp.json también se versiona (carga el MCP server; path relativo
+# idéntico para todos). No se ignora acá a propósito.
+# Metadata del installer — sobreescrito en cada /bootstrap, no commitear
+.bootstrap-meta.json
+# Staging y backups transitorios del installer
+.bootstrap-staging.*/
+.bootstrap-backup/
+# <<< spec-driven-development
+EOF
+)
+
 if [ -f .gitignore ]; then
-  grep -q "^\.ai-internal/" .gitignore 2>/dev/null || echo ".ai-internal/" >> .gitignore
+  if grep -q "^# >>> spec-driven-development" .gitignore 2>/dev/null; then
+    # Borrar bloque existente (entre markers, inclusivo)
+    sed -i.bak '/^# >>> spec-driven-development/,/^# <<< spec-driven-development/d' .gitignore
+    rm -f .gitignore.bak
+    # Limpiar línea en blanco final que pueda quedar
+    sed -i.bak -e :a -e '/^$/{$d;N;ba' -e '}' .gitignore 2>/dev/null
+    rm -f .gitignore.bak
+  fi
+  # Append (asegurar newline previo si el archivo no termina con uno)
+  [ -s .gitignore ] && [ "$(tail -c 1 .gitignore)" != "" ] && echo "" >> .gitignore
+  echo "$SDD_GITIGNORE_BLOCK" >> .gitignore
 else
-  echo ".ai-internal/" > .gitignore
+  echo "$SDD_GITIGNORE_BLOCK" > .gitignore
 fi
 
 # ── Descargar (atomic: staging dir + commit al final) ──────────

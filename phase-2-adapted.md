@@ -344,8 +344,26 @@ git branch --show-current
 ```
 
 - Si ya estás en una rama `feature/{ID}-*` que coincide con el ticket → continuar
-- Si estás en `main`/`master`/`develop` u otra rama → crear rama nueva:
+- Si estás en `main`/`master`/`develop` u otra rama → crear rama nueva **partiendo de la última `DEV_BRANCH` remota**:
 
+**0.a — Resolver `DEV_BRANCH`** (mismo patrón que `/commit`):
+1. Leer `Dev Branch` de `.ai-internal/project-profile.md`.
+2. Si está vacío, auto-detectar:
+   ```bash
+   git branch -r --list 'origin/dev' 'origin/develop' 'origin/development' | sed 's|origin/||' | head -1 | xargs
+   ```
+3. Si no se encuentra, usar **AskUserQuestion** con las ramas remotas disponibles (excluyendo `main`/`master`).
+
+**0.b — Sincronizar `DEV_BRANCH` antes de crear la feature** (obligatorio):
+```bash
+git fetch origin
+git checkout {DEV_BRANCH}
+git pull origin {DEV_BRANCH}
+```
+
+> Esto evita partir de un `DEV_BRANCH` desactualizado cuando trabajás en equipo. Si saltás este paso y otros mergearon a `{DEV_BRANCH}` antes que vos, vas a tener conflictos innecesarios al cerrar el ticket.
+
+**0.c — Crear la rama feature**:
 ```bash
 git checkout -b feature/{ID}-{slug}
 ```
@@ -353,7 +371,9 @@ git checkout -b feature/{ID}-{slug}
 Donde `{slug}` es el título del ticket en kebab-case (máximo 40 chars, sin caracteres especiales).
 Ejemplo: `feature/PROJ-123-login-con-google`
 
-> **NUNCA implementar directamente en `main`/`master`/`develop`.** Cada ticket = una rama.
+> **NUNCA implementar directamente en `main`/`master`/`develop`.** Cada ticket = una rama corta partida del último `DEV_BRANCH` remoto.
+
+> **Hotfix**: si el ticket es un hotfix urgente que no puede esperar al próximo release, el flujo es distinto — partir de `main` (no de `DEV_BRANCH`) y nombrar la rama `hotfix/{ID}-{slug}`. El cierre del hotfix va por PR directo a `main` en `/commit`.
 
 ## 1. Load context
 - Read `CLAUDE.md`
