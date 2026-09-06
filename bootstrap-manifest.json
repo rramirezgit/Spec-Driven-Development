@@ -1,26 +1,26 @@
 {
-  "version": "4.21",
-  "generated_at": "2026-05-19T16:08:46Z",
+  "version": "4.22",
+  "generated_at": "2026-06-10T14:52:39Z",
   "files": {
     "phase-0-detect.md": "dabe8db6e497f1122edbf74a67f3545484214e8dc762be33c509f97558ebd1f7",
     "phase-0a-mcps-tracker.md": "de93780de6b6ee06fbe3613f26278564b1d41e33a29a3a7f5d9c22d9e2409200",
     "phase-0b-codebase.md": "a052954eccdb66c684fd9d75ca0e86e45277cf015cd644d217d940c6c0c75354",
     "phase-0c-confirm.md": "eef6ffeab0255de2e73ab6f0cea19bbea4a1acfa1ddecd92a914244c2e7bc1ea",
     "phase-1-reusables.md": "f33496e79ced32066252d62be647d8dd0dea7337ac58e52d729ff62f0dc190ee",
-    "CHANGELOG.md": "0d98f17a74280982d71f0e752e06c6a315619ce59cafccbbef6487de823ca197",
+    "CHANGELOG.md": "dd0689d12a0e5e1fbe47946f465d76321bcce7c2da5b0d6512d86886672ffcf5",
     "phase-2-adapted.md": "2914783338e6e3d6e43e9f13addbe71d174df723295e443de0d5a6882bf4039e",
     "phase-3-finalize.md": "9e8c1a6dbf2e0656e5e0e59a8b962145b96c21363ccc756edef6f06722b9c479",
-    "bootstrap.md": "b75fb93d75d2349b95e1ef14af1ab33f448047e83c2dbdf1ced818a15506f481",
+    "bootstrap.md": "512da4caa058e2548cb18a798a5c33e405c511f7be02bfaecfab79048590e0d9",
     "mcp-server/package.json": "f9ce9bfb4bffe48dc50eab0e9b000838a8e3a6da12e2da43dd7c33debe302f23",
     "mcp-server/tsconfig.json": "579bb660bad1636c30081102e48f4b56d22e3acd1afeaf8eee282d4a37b4e9d6",
     "mcp-server/src/types.ts": "71b01146be2773e935dff47e7c937e59319acfd5225e89e74ee810da9de6ba15",
     "mcp-server/src/config.ts": "162d850ca907b86842b2baaac29cd231e392a90c7269998bf95bd6900845dd95",
-    "mcp-server/src/pipeline.ts": "18f095d8ad6cf506333fec3dfbb85d85be0bb0562d770b46b3caf93a88c1d546",
+    "mcp-server/src/pipeline.ts": "ea83cdfe0647844654a7be9ff95badda50e1e8c99f4c0e2bff720a67faae14f4",
     "mcp-server/src/jira.ts": "b544f02eb108af723105faeb08bb63ce594b2b249e4506e71254571f9cfbef86",
     "mcp-server/src/notion.ts": "5b80f7d0986247d3e412862e852ed90a0a5e873b615c72d68d88dabbaa829919",
     "mcp-server/src/tracker.ts": "b5102d14628b804f1187f123ec8006eec7d0e7c7de4ced4dc296bcd2c3215887",
     "mcp-server/src/index.ts": "fa9db4fe9e35ed205b8a10313976575f239563b060f2093a2099c9fd02941ac3",
-    "menu-template.md": "5fe254a73b3425870a94becdbfe1e333ba30468911bbc1bc350d196e226e6ece",
+    "menu-template.md": "5f48c4d92a7bc9b2dfd5520caa4784decc32a25ca3ca386514495690ec11ef9a",
     "enrich-ticket-template.md": "49f04b413b644d5b40fcc4e58129f21b11ba2a4df5136cb33b0086d175b94983",
     "plan-ticket-template.md": "84fdfdca6ec0f90b5bec37248072ad90482be6014daf1437a441999e81a8367f",
     "create-tickets-template.md": "81fc9a54e5e34558b47fdc9b15ef894a7a6c1b7404ed4effacd41549e3a6d1ca",
@@ -50,6 +50,7 @@
     "reusables/agents/product-strategy-analyst.md": "8e7cb2dffb451da5968180bf23aeb02cf9ad4e4f591ee3d578305c2eb1c548ec",
     "hooks/pre-compact-marker.sh": "9e6f509406817e0a997e98af35896df73c163502f2b9b9b35b3dc9f64e7964af",
     "hooks/post-compact-reminder.sh": "51f9120096365156c5a0a5d75f3dfd19b0427dd9b42fefb1643b3e69e593a934",
-    "hooks/guard-dangerous-ops.sh": "69aab9205cb041818c7da0d3da1dd58bf0f8031e34dfdfaa770f771b8d4669e6"
+    "hooks/guard-dangerous-ops.sh": "69aab9205cb041818c7da0d3da1dd58bf0f8031e34dfdfaa770f771b8d4669e6",
+    "hooks/guard-pipeline-state.sh": "fc9873c731dfb39e16ed125cfcc73b37abe28bb256190cf4a9f3c549c6f2bf4f"
   }
 }

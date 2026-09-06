@@ -6,6 +6,24 @@ está al tope.
 
 ---
 
+## V4.22 — Write guard + gap analysis gate (enforcement real, no opt-in)
+
+> Contexto: se reportó un incidente donde `/menu` + documentación masiva de un proyecto
+> nuevo dentro de un monolito hizo que Claude salteara TODO el flujo (sin artefactos,
+> sin tickets, sin plan — implementó directo). Root cause: el state machine era opt-in —
+> solo valida cuando Claude llama las tools MCP. V4.22 agrega enforcement a nivel harness.
+
+| Cambio | Impacto |
+|--------|---------|
+| **Nuevo hook `guard-pipeline-state.sh`** | PreToolUse sobre `Edit\|Write\|MultiEdit\|NotebookEdit`. Bloquea (exit 2) escritura de código fuente cuando `pipeline-state.json` existe y el estado NO es IMPLEMENTACION. Esto sobrevive a dilución de contexto y compactions — el harness rechaza la escritura aunque Claude "olvide" el protocolo. |
+| **Allowlist del guard** | `.ai-internal/`, `.claude/`, `docs/`, `ai-specs/`, `openspec/`, `.bootstrap-meta.json`, `.mcp.json`, `CLAUDE.md`, y cualquier `*.md/*.mdc/*.mdx/*.txt` (material de planificación, nunca código). Escrituras fuera del proyecto no se tocan. |
+| **Fail-open deliberado** | Sin `jq`, sin state file, o state corrupto → permite (nunca brickea un proyecto). Kill switch del usuario: `touch .ai-internal/sdd-guard-off` (el menú instruye a Claude a NO crearlo él mismo — debe pedírselo al humano). |
+| **MCP server — gap analysis gate en `sdd_advance(PLAN)`** | Nueva validación: PLAN requiere `changeDecisions` no vacío. Flujo Feature nuevo → las decisiones del gap analysis (o la sentinel "Sin ambigüedades críticas detectadas"). Flujo Ticket existente → sentinel registrada durante el registro del ticket (menu-template actualizado). Extraído como `checkPlanDecisionsGate()` (pure function) + 5 tests. |
+| **menu-template** | Documenta el GAP ANALYSIS GATE en la sección TICKETS→PLAN, agrega la sentinel al flujo Ticket existente, y agrega nota de write guard en Guardrails (instrucción explícita de NO rodear el hook). |
+| **Fix versión bootstrap.md** | El header decía V4.14 (stale desde hace 8 versiones) y es la fuente de la que `install-bootstrap.sh` extrae `NEW_VERSION` para el trigger `version_changed` — los upgrades V4.15→V4.21 no disparaban el trigger. Ahora V4.22 y sincronizado. |
+| **Bootstrap** | `install-bootstrap.sh` registra `hooks/guard-pipeline-state.sh` + nuevo matcher PreToolUse en HOOKS_CONFIG. Manifest regenerado. |
+| **Backwards-compat** | Proyectos sin re-bootstrap: hook ausente → sin cambio de comportamiento. El gate de PLAN sí aplica al recompilar el MCP server; el error guía la llamada exacta para destrabarlo. Limitación conocida: el guard no intercepta escrituras vía Bash (`cat > file`) — cubre el camino principal (tools de edición), no es un sandbox. |
+
 ## V4.21 — /goal (batch supervisado de tickets con safeguards)
 
 | Cambio | Impacto |

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { canTransition, isSafeBranchName } from "../src/pipeline.js";
+import { canTransition, isSafeBranchName, checkPlanDecisionsGate } from "../src/pipeline.js";
 import { PipelineState, defaultPipelineData } from "../src/types.js";
 import type { LogEntry } from "../src/types.js";
 
@@ -247,6 +247,55 @@ describe("getState log trimming (V4.17 — token-saving)", () => {
   it("handles an empty log gracefully", () => {
     const trimmed: LogEntry[] = [].slice(-TAIL);
     expect(trimmed).toEqual([]);
+  });
+});
+
+describe("checkPlanDecisionsGate — V4.22 gap analysis gate", () => {
+  it("blocks PLAN when changeDecisions is empty (the reported bug path)", () => {
+    const d = defaultPipelineData();
+    d.state = PipelineState.TICKETS;
+    d.activeTicket = "AUTH-1";
+    const error = checkPlanDecisionsGate(d);
+    expect(error).not.toBeNull();
+    expect(error).toContain("Gap analysis gate");
+    expect(error).toContain("sdd_register_change_decisions");
+  });
+
+  it("blocks PLAN when changeDecisions is undefined (legacy state files)", () => {
+    const d = defaultPipelineData();
+    d.changeDecisions = undefined;
+    expect(checkPlanDecisionsGate(d)).not.toBeNull();
+  });
+
+  it("allows PLAN with real gap-analysis decisions registered", () => {
+    const d = defaultPipelineData();
+    d.changeDecisions = [
+      {
+        question: "¿El módulo nuevo usa el auth existente o crea uno propio?",
+        answer: "Usa auth/ existente",
+        timestamp: new Date().toISOString(),
+      },
+    ];
+    expect(checkPlanDecisionsGate(d)).toBeNull();
+  });
+
+  it("allows PLAN with the sentinel decision (existing-ticket flow / no ambiguities)", () => {
+    const d = defaultPipelineData();
+    d.changeDecisions = [
+      {
+        question: "Sin ambigüedades críticas detectadas",
+        answer: "ok",
+        timestamp: new Date().toISOString(),
+      },
+    ];
+    expect(checkPlanDecisionsGate(d)).toBeNull();
+  });
+
+  it("error message guides both legitimate flows (feature nuevo + ticket existente)", () => {
+    const error = checkPlanDecisionsGate(defaultPipelineData());
+    expect(error).toContain("Feature nuevo");
+    expect(error).toContain("Ticket existente");
+    expect(error).toContain("sentinel");
   });
 });
 

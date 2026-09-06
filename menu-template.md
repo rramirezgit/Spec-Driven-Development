@@ -287,7 +287,13 @@ Cualquiera de las 4 → ejecutar directamente, sin tercera pregunta.
 
 1. Leer el ticket completo desde el tracker (via MCP)
 2. Explorar el codebase para entender el contexto técnico del ticket (misma exploración profunda que la acción Feature nuevo, adaptada al scope del ticket)
-3. Con el contexto técnico real → `sdd_advance(TICKETS)`. Registrar ticket con `sdd_register_tickets`. Leer y ejecutar `/enrich-ticket <ID>` con los hallazgos.
+3. Con el contexto técnico real → `sdd_advance(TICKETS)`. Registrar ticket con `sdd_register_tickets`. Registrar la decisión sentinel del change (este flujo no pasa por el gap analysis de Feature nuevo, y `sdd_advance(PLAN)` la exige — V4.22):
+   ```
+   sdd_register_change_decisions({
+     decisions: [{ question: "Flujo ticket existente — sin gap analysis de change", answer: "ok" }]
+   })
+   ```
+   Si la exploración del ticket SÍ surfaceó ambigüedades críticas → preguntarlas con AskUserQuestion y registrar esas decisiones reales en vez de la sentinel. Leer y ejecutar `/enrich-ticket <ID>` con los hallazgos.
 
 **Después**: `sdd_set_active_ticket(ID)`. **HALT.**
 
@@ -387,6 +393,14 @@ Secuencia obligatoria:
    - Si Scrum sin sprint activo → BLOQUEAR, informar al usuario
    > **Si tracker=notion**: saltar verificación de sprint. Llamar directamente `sdd_confirm_sprint(kanban=true)`.
 3. Solo entonces: `sdd_set_active_ticket(ID)` + (si multi-target, elegir target service ↓)
+
+**⛔ GAP ANALYSIS GATE (V4.22 — enforced por el MCP server)**:
+`sdd_advance(PLAN)` fallará si no hay decisiones de change registradas con
+`sdd_register_change_decisions`. Las decisiones se registran en la acción
+Feature nuevo (paso 3 — gap analysis) o, en el flujo Ticket existente, como
+sentinel durante el registro del ticket. Si el gate bloquea: ejecutar el gap
+analysis pendiente (o registrar la sentinel si genuinamente no hay
+ambigüedades) — NUNCA inventar decisiones para pasar el gate.
 
 **⛔ DoR GATE (V4.18 — enforced por el MCP server en modo `strict`)**:
 Si `project-profile.md` tiene `DoR Enforcement: strict`, `sdd_advance(PLAN)` fallará
@@ -635,6 +649,14 @@ Alternativa: {qué puede hacer el usuario}
 | `sdd_comment_ticket` | Genera instrucciones para agregar comentario a ticket via MCP del tracker configurado (Jira o Notion). Claude ejecuta los pasos. |
 
 # Guardrails
+
+> **Write guard (V4.22 — enforcement a nivel harness, no instrucción)**: el hook
+> `guard-pipeline-state.sh` bloquea `Edit`/`Write` de código fuente cuando el
+> pipeline NO está en IMPLEMENTACION. Si un edit es rechazado por el guard:
+> NO intentes rodearlo (ni via Bash ni creando el archivo de bypass) — informá
+> al usuario, llamá `sdd_get_state` y retomá el flujo desde el paso que indica.
+> Archivos de planificación (markdown, `docs/`, `ai-specs/`, `openspec/`,
+> `.ai-internal/`) no están bloqueados en ningún estado.
 
 **PROHIBIDO:**
 - Ejecutar más de un comando por invocación de `/menu`

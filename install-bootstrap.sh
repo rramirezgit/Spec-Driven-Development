@@ -60,10 +60,11 @@ FILES=(
   "hooks/pre-compact-marker.sh|.ai-internal/hooks/pre-compact-marker.sh"
   "hooks/post-compact-reminder.sh|.ai-internal/hooks/post-compact-reminder.sh"
   "hooks/guard-dangerous-ops.sh|.ai-internal/hooks/guard-dangerous-ops.sh"
+  "hooks/guard-pipeline-state.sh|.ai-internal/hooks/guard-pipeline-state.sh"
 )
 
 echo ""
-echo "🔧 Spec-Driven Development — Bootstrap V4.21"
+echo "🔧 Spec-Driven Development — Bootstrap V4.22"
 echo "============================================="
 echo ""
 
@@ -417,6 +418,10 @@ HOOKS_CONFIG='{
       {
         "matcher": "mcp__.*[Aa]tlassian.*transition|mcp__.*[Aa]tlassian.*edit|mcp__.*[Nn]otion.*delete",
         "hooks": [{"type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.ai-internal/hooks/guard-dangerous-ops.sh"}]
+      },
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [{"type": "command", "command": "\"$CLAUDE_PROJECT_DIR\"/.ai-internal/hooks/guard-pipeline-state.sh"}]
       }
     ]
   }

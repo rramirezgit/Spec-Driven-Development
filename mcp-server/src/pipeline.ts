@@ -116,6 +116,31 @@ export interface AdvanceResult {
   error?: string;
 }
 
+/** Gate V4.22: PLAN requiere decisiones de change registradas (gap analysis).
+ *  Pure function — testeable sin FS. Devuelve el error de bloqueo o null.
+ *
+ *  Por qué: el gap analysis de /menu Opción 1 es donde se define el change.
+ *  Sin este gate, un flujo desviado (contexto diluido por documentación masiva,
+ *  atajo mal interpretado, post-compaction) podía llegar a PLAN sin que nadie
+ *  definiera el scope. Ambos flujos legítimos tienen cómo pasar: Feature nuevo
+ *  registra las decisiones del gap analysis (o la sentinel "Sin ambigüedades
+ *  críticas detectadas" si no hubo preguntas); Ticket existente registra la
+ *  sentinel durante el enrich. La llamada deliberada ES el gate: fuerza a
+ *  Claude a volver al protocolo antes de poder planificar. */
+export function checkPlanDecisionsGate(data: PipelineData): string | null {
+  if (!data.changeDecisions || data.changeDecisions.length === 0) {
+    return (
+      "⛔ Gap analysis gate: no hay decisiones de change registradas. " +
+      "Antes de avanzar a PLAN, llamá sdd_register_change_decisions: " +
+      "(1) Flujo Feature nuevo → registrá las decisiones del gap analysis de /menu Opción 1. " +
+      "(2) Flujo Ticket existente, o feature sin ambigüedades críticas → registrá la decisión sentinel " +
+      "{question: 'Sin ambigüedades críticas detectadas', answer: 'ok'}. " +
+      "Planificar sin definición del change produce re-trabajo — este gate fuerza esa definición."
+    );
+  }
+  return null;
+}
+
 export async function advance(
   to: PipelineState,
   change?: string,
@@ -136,6 +161,14 @@ export async function advance(
       to,
       error: "No se puede avanzar a PLAN sin un ticket activo. Usá sdd_set_active_ticket primero.",
     };
+  }
+
+  // Gate V4.22: PLAN requires registered change decisions (gap analysis).
+  if (to === PipelineState.PLAN) {
+    const gateError = checkPlanDecisionsGate(data);
+    if (gateError) {
+      return { ok: false, from, to, error: gateError };
+    }
   }
 
   // Gate V4.18: PLAN requires DoR validation in strict mode.
